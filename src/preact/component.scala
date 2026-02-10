@@ -55,7 +55,7 @@ abstract class ComponentBase[P <: Props](renderFn: js.Function1[P, VNode]):
   private val wrappedRenderFn: js.Function1[P, VNode] = (props: P) =>
     // println(s"[ComponentBase] Rendering component with ComponentVarContext")
     // Set dynamic context for this render - this affects Var() calls at runtime
-    preact.signals.withContext(ComponentVarContext):
+    trivalibs.preact.signals.withContext(ComponentVarContext):
       renderFn(props)
 
   def apply(ms: Modifier*): VNode =
@@ -99,7 +99,7 @@ private def componentImpl[P: Type](
     report.errorAndAbort(s"Type ${typeSymbol.name} has no fields")
 
   val childrenType = TypeRepr.of[Children]
-  val attrModSymbol = Symbol.requiredClass("preact.component.AttributeModifier")
+  val attrModSymbol = Symbol.requiredClass("trivalibs.preact.component.AttributeModifier")
 
   // Separate children field from other fields
   val (childrenFields, otherFields) = fields.partition: fieldSym =>
