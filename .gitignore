@@ -1,3 +1,6 @@
 .scala-build/
 .bsp/
 .metals/
+.vscode/
+.idea/
+.claude/
