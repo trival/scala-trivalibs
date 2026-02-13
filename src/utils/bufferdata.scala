@@ -1,8 +1,9 @@
 package trivalibs.bufferdata
 
 import scala.scalajs.js
-import scala.scalajs.js.typedarray.{ArrayBuffer, DataView, Uint8Array}
-import scala.scalajs.js.Dynamic.literal
+import scala.scalajs.js.typedarray.ArrayBuffer
+import scala.scalajs.js.typedarray.DataView
+import scala.scalajs.js.typedarray.Uint8Array
 
 // =============================================================================
 // Primitive Types as Scala 3 Enum with compile-time size information
@@ -353,7 +354,7 @@ object StructArray:
     * stride at runtime, adding minimal overhead.
     */
   given [Fields <: Tuple]
-      : Conversion[StructArray[Fields], Iterable[StructRef[Fields]]] with
+      => Conversion[StructArray[Fields], Iterable[StructRef[Fields]]]:
     def apply(arr: StructArray[Fields]): Iterable[StructRef[Fields]] =
       new Iterable[StructRef[Fields]]:
         def iterator: Iterator[StructRef[Fields]] =
@@ -540,4 +541,3 @@ object PrimitiveRef:
 
     /** Apply with value alias for set - allows p.pos.x(100.0f) syntax */
     inline def apply(value: ValueType[T]): Unit = set(value)
-

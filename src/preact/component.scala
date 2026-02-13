@@ -24,20 +24,16 @@ extension [Key <: String, Value](key: Key)
   inline def :=(value: Value) = AttributeModifier(key, value)
 
 class ChildModifier(val child: Child):
-  inline def apply(childrenArray: js.Array[Child]): Unit =
+  inline def apply(childrenArray: Arr[Child]): Unit =
     childrenArray.push(child.asInstanceOf[js.Any])
 
 inline def NullChild: ChildModifier = ChildModifier(())
 
 // Given conversions for children
-given Conversion[String, ChildModifier]:
-  inline def apply(str: String) = ChildModifier(str)
-given Conversion[Int, ChildModifier]:
-  inline def apply(num: Int) = ChildModifier(num)
-given Conversion[Double, ChildModifier]:
-  inline def apply(num: Double) = ChildModifier(num)
-given Conversion[VNode, ChildModifier]:
-  inline def apply(vnode: VNode) = ChildModifier(vnode)
+given Conversion[String, ChildModifier] = ChildModifier(_)
+given Conversion[Int, ChildModifier] = ChildModifier(_)
+given Conversion[Double, ChildModifier] = ChildModifier(_)
+given Conversion[VNode, ChildModifier] = ChildModifier(_)
 
 // === Component Factory ===
 
@@ -59,8 +55,8 @@ abstract class ComponentBase[P <: Props](renderFn: js.Function1[P, VNode]):
       renderFn(props)
 
   def apply(ms: Modifier*): VNode =
-    val attrs = js.Dynamic.literal()
-    val children = js.Array[Child]()
+    val attrs = Obj.literal()
+    val children = Arr[Child]()
     ms.foreach:
       case am: AttributeModifier[?, ?] =>
         am(attrs)
@@ -99,7 +95,8 @@ private def componentImpl[P: Type](
     report.errorAndAbort(s"Type ${typeSymbol.name} has no fields")
 
   val childrenType = TypeRepr.of[Children]
-  val attrModSymbol = Symbol.requiredClass("trivalibs.preact.component.AttributeModifier")
+  val attrModSymbol =
+    Symbol.requiredClass("trivalibs.preact.component.AttributeModifier")
 
   // Separate children field from other fields
   val (childrenFields, otherFields) = fields.partition: fieldSym =>

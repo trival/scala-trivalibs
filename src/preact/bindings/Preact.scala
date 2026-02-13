@@ -1,6 +1,7 @@
 package trivalibs.preact.bindings
 
 import org.scalajs.dom
+import trivalibs.utils.js.Arr
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
@@ -10,7 +11,7 @@ type VNode = js.Any
 
 // Child type (anything that can be a child)
 type Child = String | Int | Double | VNode | Unit
-type Children = js.Array[Child]
+type Children = Arr[Child]
 
 // Preact h() function facade
 @js.native
@@ -19,7 +20,7 @@ object h extends js.Object:
   def apply(
       tag: String | js.Any,
       props: js.UndefOr[js.Object],
-      children: js.UndefOr[js.Array[Child]]
+      children: js.UndefOr[Arr[Child]]
   ): VNode = js.native
 
 // Preact render() function facade
