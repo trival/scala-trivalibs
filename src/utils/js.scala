@@ -35,12 +35,6 @@ object Arr:
   /** Creates a new array with the given items. */
   inline def apply[A](items: A*): js.Array[A] = js.Array(items*)
 
-def test(): Unit =
-  val x = Obj.literal(a = 1, b = "hello")
-
-/** Helper to make tailwind recognize class names */
-inline def cls(str: String): String = str
-
 // Core extensions for for-comprehension support
 extension [A](promise: js.Promise[A])
   inline def map[B](f: A => B): js.Promise[B] =
