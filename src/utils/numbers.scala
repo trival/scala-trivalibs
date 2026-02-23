@@ -27,5 +27,5 @@ object NumExt:
       inline def clamp01 = clamp(0f, 1f)
       inline def sqrt = Math.sqrt(p).toFloat
       inline def pow(e: Float) = Math.pow(p, e).toFloat
-      inline def fit0111 = (p * 2.0 - 1.0).toFloat
-      inline def fit1101 = (p * 0.5 + 0.5).toFloat
+      inline def fit0111 = (p * 2.0f - 1.0f)
+      inline def fit1101 = (p * 0.5f + 0.5f)
