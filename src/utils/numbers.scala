@@ -1,21 +1,42 @@
 package trivalibs.utils.numbers
 
-extension (d: Double)
-  inline def fit0111 = d * 2.0 - 1.0
-  inline def fit1101 = d * 0.5 + 0.5
-  inline def clamp(min: Double, max: Double): Double =
-    if d < min then min
-    else if d > max then max
-    else d
-  inline def clamp01: Double =
-    d.clamp(0.0, 1.0)
+trait Number[P]:
+  given numeric: Numeric[P]
+  extension (p: P)
+    inline def clamp(min: P, max: P): P =
+      if numeric.lt(p, min) then min
+      else if numeric.gt(p, max) then max
+      else p
+    inline def clamp01: P = p.clamp(numeric.zero, numeric.one)
 
-extension (d: Float)
-  inline def fit0111 = d * 2.0 - 1.0
-  inline def fit1101 = d * 0.5 + 0.5
-  inline def clamp(min: Float, max: Float): Float =
-    if d < min then min
-    else if d > max then max
-    else d
-  inline def clamp01: Float =
-    d.clamp(0.0, 1.0)
+object Number:
+  given Number[Float]:
+    val numeric = summon[Numeric[Float]]
+  given Number[Double]:
+    val numeric = summon[Numeric[Double]]
+
+  given [P](using n: Number[P]): Numeric[P] = n.numeric
+
+trait Floating[P] extends Number[P]:
+  extension (p: P)
+    def sqrt: Double
+    def pow(exp: P): Double
+    def fit0111: P
+    def fit1101: P
+
+object Floating:
+  given Floating[Double]:
+    val numeric = summon[Numeric[Double]]
+    extension (p: Double)
+      inline def sqrt         = Math.sqrt(p)
+      inline def pow(e: Double) = Math.pow(p, e)
+      inline def fit0111      = p * 2.0 - 1.0
+      inline def fit1101      = p * 0.5 + 0.5
+
+  given Floating[Float]:
+    val numeric = summon[Numeric[Float]]
+    extension (p: Float)
+      inline def sqrt         = Math.sqrt(p)
+      inline def pow(e: Float)  = Math.pow(p, e)
+      inline def fit0111      = (p * 2.0 - 1.0).toFloat
+      inline def fit1101      = (p * 0.5 + 0.5).toFloat
