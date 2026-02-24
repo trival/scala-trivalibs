@@ -1,5 +1,10 @@
 package trivalibs.utils.numbers
 
+given Conversion[Float, Float] = identity
+given Conversion[Double, Double] = identity
+given Conversion[Float, Double] = identity
+given Conversion[Double, Float] = _.toFloat
+
 trait NumExt[P]:
   extension (p: P)
     def clamp(min: P, max: P): P
