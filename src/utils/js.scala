@@ -6,7 +6,7 @@ type JS = js.Object
 
 type Opt[T] = js.UndefOr[T]
 object Opt:
-  val Null = js.undefined
+  inline def Null = js.undefined
 
 inline def maybe[A](condition: Boolean, value: A): Opt[A] =
   if condition then value else Opt.Null
@@ -81,3 +81,5 @@ extension [A](promise: js.Promise[A | Null])
     promise.`then`[A]: value =>
       if value == null then default
       else value.asInstanceOf[A]
+
+inline def log(args: js.Any*) = js.Dynamic.global.console.log(args*)
