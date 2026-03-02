@@ -5,9 +5,11 @@ import scala.scalajs.js
 type JS = js.Object
 
 type Opt[T] = js.UndefOr[T]
+object Opt:
+  val Null = js.undefined
 
 inline def maybe[A](condition: Boolean, value: A): Opt[A] =
-  if condition then value else js.undefined
+  if condition then value else Opt.Null
 
 extension [A](opt: Opt[A])
   inline def getOr(default: => A): A =
@@ -17,6 +19,10 @@ extension [A](opt: Opt[A])
 
 object Obj:
   val literal = js.Dynamic.literal
+
+type Dict[A] = js.Dictionary[A]
+object Dict:
+  inline def apply[A](): Dict[A] = js.Dictionary[A]()
 
 type Arr[A] = js.Array[A]
 
