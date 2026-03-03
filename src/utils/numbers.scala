@@ -1,9 +1,41 @@
 package trivalibs.utils.numbers
 
-given Conversion[Float, Float] = identity
-given Conversion[Double, Double] = identity
-given Conversion[Float, Double] = identity
-given Conversion[Double, Float] = _.toFloat
+inline given Conversion[Float, Float] = identity
+inline given Conversion[Double, Double] = identity
+inline given Conversion[Float, Double] = identity
+inline given Conversion[Double, Float]:
+  inline def apply(x: Double): Float = x.toFloat
+
+trait NumOps[P]:
+  extension (p: P)
+    def +(other: P): P
+    def -(other: P): P
+    def *(other: P): P
+    def /(other: P): P
+    def unary_- : P
+  def zero: P
+  def one: P
+
+object NumOps:
+  given NumOps[Double]:
+    extension (p: Double)
+      inline def +(other: Double) = p + other
+      inline def -(other: Double) = p - other
+      inline def *(other: Double) = p * other
+      inline def /(other: Double) = p / other
+      inline def unary_- = -p
+    val zero = 0.0
+    val one = 1.0
+
+  given NumOps[Float]:
+    extension (p: Float)
+      inline def +(other: Float) = p + other
+      inline def -(other: Float) = p - other
+      inline def *(other: Float) = p * other
+      inline def /(other: Float) = p / other
+      inline def unary_- = -p
+    val zero = 0.0f
+    val one = 1.0f
 
 trait NumExt[P]:
   extension (p: P)
