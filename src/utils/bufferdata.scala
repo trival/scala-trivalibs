@@ -6,6 +6,12 @@ import scala.scalajs.js.typedarray.DataView
 import scala.scalajs.js.typedarray.Uint8Array
 
 // =============================================================================
+// BufferView - js.Object wrapper for DataView + offset, direct property access
+// =============================================================================
+
+class BufferView(val dv: DataView, var off: Int) extends js.Object
+
+// =============================================================================
 // Primitive Types as Scala 3 Enum with compile-time size information
 // =============================================================================
 
@@ -38,68 +44,76 @@ type I32 = PrimitiveType.I32.type
 // Primitive Views (Opaque Types) - ZERO COST
 // =============================================================================
 
-opaque type F32View = (DataView, Int)
+opaque type F32View = BufferView
 object F32View:
-  inline def apply(view: DataView, offset: Int): F32View = (view, offset)
+  inline def apply(view: DataView, offset: Int): F32View =
+    BufferView(view, offset)
   extension (v: F32View)
-    inline def get: Float = v._1.getFloat32(v._2, littleEndian = true)
+    inline def get: Float = v.dv.getFloat32(v.off, littleEndian = true)
     inline def set(value: Float): Unit =
-      v._1.setFloat32(v._2, value, littleEndian = true)
+      v.dv.setFloat32(v.off, value, littleEndian = true)
 
-opaque type F64View = (DataView, Int)
+opaque type F64View = BufferView
 object F64View:
-  inline def apply(view: DataView, offset: Int): F64View = (view, offset)
+  inline def apply(view: DataView, offset: Int): F64View =
+    BufferView(view, offset)
   extension (v: F64View)
-    inline def get: Double = v._1.getFloat64(v._2, littleEndian = true)
+    inline def get: Double = v.dv.getFloat64(v.off, littleEndian = true)
     inline def set(value: Double): Unit =
-      v._1.setFloat64(v._2, value, littleEndian = true)
+      v.dv.setFloat64(v.off, value, littleEndian = true)
 
-opaque type U8View = (DataView, Int)
+opaque type U8View = BufferView
 object U8View:
-  inline def apply(view: DataView, offset: Int): U8View = (view, offset)
+  inline def apply(view: DataView, offset: Int): U8View =
+    BufferView(view, offset)
   extension (v: U8View)
-    inline def get: Short = v._1.getUint8(v._2)
-    inline def set(value: Short): Unit = v._1.setUint8(v._2, value)
+    inline def get: Short = v.dv.getUint8(v.off)
+    inline def set(value: Short): Unit = v.dv.setUint8(v.off, value)
 
-opaque type U16View = (DataView, Int)
+opaque type U16View = BufferView
 object U16View:
-  inline def apply(view: DataView, offset: Int): U16View = (view, offset)
+  inline def apply(view: DataView, offset: Int): U16View =
+    BufferView(view, offset)
   extension (v: U16View)
-    inline def get: Int = v._1.getUint16(v._2, littleEndian = true)
+    inline def get: Int = v.dv.getUint16(v.off, littleEndian = true)
     inline def set(value: Int): Unit =
-      v._1.setUint16(v._2, value, littleEndian = true)
+      v.dv.setUint16(v.off, value, littleEndian = true)
 
-opaque type U32View = (DataView, Int)
+opaque type U32View = BufferView
 object U32View:
-  inline def apply(view: DataView, offset: Int): U32View = (view, offset)
+  inline def apply(view: DataView, offset: Int): U32View =
+    BufferView(view, offset)
   extension (v: U32View)
-    inline def get: Double = v._1.getUint32(v._2, littleEndian = true)
+    inline def get: Double = v.dv.getUint32(v.off, littleEndian = true)
     inline def set(value: Double): Unit =
-      v._1.setUint32(v._2, value, littleEndian = true)
+      v.dv.setUint32(v.off, value, littleEndian = true)
 
-opaque type I8View = (DataView, Int)
+opaque type I8View = BufferView
 object I8View:
-  inline def apply(view: DataView, offset: Int): I8View = (view, offset)
+  inline def apply(view: DataView, offset: Int): I8View =
+    BufferView(view, offset)
   extension (v: I8View)
-    inline def get: Byte = v._1.getInt8(v._2)
+    inline def get: Byte = v.dv.getInt8(v.off)
     inline def set(value: Byte): Unit =
-      v._1.setInt8(v._2, value)
+      v.dv.setInt8(v.off, value)
 
-opaque type I16View = (DataView, Int)
+opaque type I16View = BufferView
 object I16View:
-  inline def apply(view: DataView, offset: Int): I16View = (view, offset)
+  inline def apply(view: DataView, offset: Int): I16View =
+    BufferView(view, offset)
   extension (v: I16View)
-    inline def get: Short = v._1.getInt16(v._2, littleEndian = true)
+    inline def get: Short = v.dv.getInt16(v.off, littleEndian = true)
     inline def set(value: Short): Unit =
-      v._1.setInt16(v._2, value, littleEndian = true)
+      v.dv.setInt16(v.off, value, littleEndian = true)
 
-opaque type I32View = (DataView, Int)
+opaque type I32View = BufferView
 object I32View:
-  inline def apply(view: DataView, offset: Int): I32View = (view, offset)
+  inline def apply(view: DataView, offset: Int): I32View =
+    BufferView(view, offset)
   extension (v: I32View)
-    inline def get: Int = v._1.getInt32(v._2, littleEndian = true)
+    inline def get: Int = v.dv.getInt32(v.off, littleEndian = true)
     inline def set(value: Int): Unit =
-      v._1.setInt32(v._2, value, littleEndian = true)
+      v.dv.setInt32(v.off, value, littleEndian = true)
 
 // =============================================================================
 // Compile-Time Size and Offset Calculation (Match Types)
@@ -188,10 +202,24 @@ type FieldAccess[T] = T match
   * performance-critical code, use field-by-field assignment which generates
   * direct DataView calls.
   */
+private inline def getPrimitiveValue[T](
+    view: DataView,
+    offset: Int,
+): ValueType[T] =
+  inline erasedValue[T] match
+    case _: F32 => view.getFloat32(offset, littleEndian = true)
+    case _: F64 => view.getFloat64(offset, littleEndian = true)
+    case _: U8  => view.getUint8(offset)
+    case _: U16 => view.getUint16(offset, littleEndian = true)
+    case _: U32 => view.getUint32(offset, littleEndian = true)
+    case _: I8  => view.getInt8(offset)
+    case _: I16 => view.getInt16(offset, littleEndian = true)
+    case _: I32 => view.getInt32(offset, littleEndian = true)
+
 private inline def setPrimitiveValue[T](
     view: DataView,
     offset: Int,
-    value: Any
+    value: Any,
 ): Unit =
   inline erasedValue[T] match
     case _: F32 =>
@@ -282,32 +310,32 @@ private inline def setPrimitiveValue[T](
   *   - Interop with Scala collections: Pass directly to `Iterable[T]`
   *     parameters
   */
-opaque type StructArray[Fields <: Tuple] = (DataView, Int) // view, count
+opaque type StructArray[Fields <: Tuple] = BufferView // dv = view, off = count
 
 object StructArray:
   /** Allocate a new struct array with compile-time known stride */
   inline def allocate[Fields <: Tuple](count: Int): StructArray[Fields] =
     val stride = constValue[TupleSize[Fields]]
     val buffer = new ArrayBuffer(stride * count)
-    (new DataView(buffer), count)
+    BufferView(new DataView(buffer), count)
 
   /** Wrap an existing ArrayBuffer */
   inline def wrap[Fields <: Tuple](buffer: ArrayBuffer): StructArray[Fields] =
     val stride = constValue[TupleSize[Fields]]
     val count = if stride == 0 then 0 else buffer.byteLength / stride
-    (new DataView(buffer), count)
+    BufferView(new DataView(buffer), count)
 
   extension [Fields <: Tuple](arr: StructArray[Fields])
-    inline def length: Int = arr._2
+    inline def length: Int = arr.off
     inline def stride: Int = constValue[TupleSize[Fields]]
-    inline def dataView: DataView = arr._1
+    inline def dataView: DataView = arr.dv
     inline def arrayBuffer: ArrayBuffer =
-      arr._1.buffer.asInstanceOf[ArrayBuffer]
+      arr.dv.buffer.asInstanceOf[ArrayBuffer]
 
     /** Access element at index - no bounds check, relies on DataView for errors
       */
     inline def apply(index: Int): StructRef[Fields] =
-      (arr._1, index * constValue[TupleSize[Fields]])
+      StructRef[Fields](arr.dv, index * constValue[TupleSize[Fields]])
 
     /** Returns a Range of valid indices for this array. Enables idiomatic
       * index-based iteration for maximum performance.
@@ -328,11 +356,11 @@ object StructArray:
     */
   final class StructArrayIterator[Fields <: Tuple](
       arr: StructArray[Fields],
-      stride: Int = -1
+      stride: Int = -1,
   ) extends Iterator[StructRef[Fields]]:
     private var index = 0
-    private val len = arr._2
-    private val view = arr._1
+    private val len = arr.off
+    private val view = arr.dv
     private val actualStride =
       if stride >= 0 then stride
       else if len == 0 then 0
@@ -343,7 +371,7 @@ object StructArray:
     inline def next(): StructRef[Fields] =
       val current = index
       index += 1
-      (view, current * actualStride)
+      StructRef[Fields](view, current * actualStride)
 
   /** Implicit conversion to Iterable enables all collection operations (map,
     * flatMap, withFilter, etc.) without explicit method definitions. This
@@ -372,7 +400,7 @@ final class StructLayout[Fields <: Tuple]:
   inline def apply(): StructRef[Fields] = allocate(1)(0)
   inline def fromBuffer(
       buffer: ArrayBuffer,
-      offset: Int = 0
+      offset: Int = 0,
   ): StructRef[Fields] =
     StructRef[Fields](new DataView(buffer), offset)
 
@@ -384,21 +412,21 @@ inline def struct[Fields <: Tuple]: StructLayout[Fields] =
 // Typed StructRef - ZERO COST: just (DataView, offset), layout is phantom type
 // =============================================================================
 
-opaque type StructRef[Fields <: Tuple] = (DataView, Int) // view, offset
+opaque type StructRef[Fields <: Tuple] = BufferView
 
 object StructRef:
   inline def apply[Fields <: Tuple](
       view: DataView,
-      offset: Int
+      offset: Int,
   ): StructRef[Fields] =
-    (view, offset)
+    BufferView(view, offset)
 
   /** Recursively set all fields from a value tuple */
   private inline def setFields[Fields <: Tuple](
       view: DataView,
       baseOffset: Int,
       values: Any,
-      valueIndex: Int
+      valueIndex: Int,
   ): Unit =
     inline erasedValue[Fields] match
       case _: EmptyTuple => () // Base case: no more fields
@@ -423,39 +451,99 @@ object StructRef:
         setFields[tail](view, tailOffset, values, valueIndex + 1)
 
   extension [Fields <: Tuple](s: StructRef[Fields])
-    inline def dataView: DataView = s._1
-    inline def offset: Int = s._2
+    inline def dataView: DataView = s.dv
+    inline def offset: Int = s.off
 
     /** Field access by index - compile-time bounds check via Tuple.Elem.
       * Returns StructRef for nested tuples, PrimitiveRef for primitives. Index
       * must be a literal constant; out-of-bounds causes compile error.
       */
     transparent inline def apply(
-        n: Int
+        n: Int,
     ): FieldAccess[Tuple.Elem[Fields, n.type]] =
       inline erasedValue[Tuple.Elem[Fields, n.type]] match
         case _: (h *: t) =>
           StructRef[Tuple.Elem[Fields, n.type] & Tuple](
-            s._1,
-            s._2 + constValue[FieldOffset[Fields, n.type]]
+            s.dv,
+            s.off + constValue[FieldOffset[Fields, n.type]],
           )
         case _ =>
           PrimitiveRef[Tuple.Elem[Fields, n.type]](
-            s._1,
-            s._2 + constValue[FieldOffset[Fields, n.type]]
+            s.dv,
+            s.off + constValue[FieldOffset[Fields, n.type]],
           )
+
+    /** Zero-alloc field get - reads primitive field N directly from the
+      * DataView without creating an intermediate PrimitiveRef. Use instead of
+      * apply(n)() in hot paths.
+      */
+    inline def getAt(
+        n: Int,
+    ): ValueType[Tuple.Elem[Fields, n.type]] =
+      getPrimitiveValue[Tuple.Elem[Fields, n.type]](
+        s.dv,
+        s.off + constValue[FieldOffset[Fields, n.type]],
+      )
+
+    /** Zero-alloc field set - writes primitive field N directly to the DataView
+      * without creating an intermediate PrimitiveRef. Use instead of
+      * apply(n)(value) in hot paths.
+      */
+    inline def setAt(
+        n: Int,
+    )(value: ValueType[Tuple.Elem[Fields, n.type]]): Unit =
+      setPrimitiveValue[Tuple.Elem[Fields, n.type]](
+        s.dv,
+        s.off + constValue[FieldOffset[Fields, n.type]],
+        value,
+      )
+
+    /** Zero-alloc nested struct field set - writes a tuple value to a nested
+      * tuple field N directly via setFields, without creating intermediate
+      * StructRef or PrimitiveRef objects. Use instead of apply(n) := values for
+      * nested struct fields.
+      */
+    inline def setTupleAt(
+        n: Int,
+    )(values: ValueTuple[Tuple.Elem[Fields, n.type] & Tuple]): Unit =
+      setFields[Tuple.Elem[Fields, n.type] & Tuple](
+        s.dv,
+        s.off + constValue[FieldOffset[Fields, n.type]],
+        values,
+        0,
+      )
+
+    // --- Numbered aliases for setTupleAt ---
+    inline def set0(values: ValueTuple[Tuple.Elem[Fields, 0] & Tuple]): Unit =
+      setTupleAt(0)(values)
+    inline def set1(values: ValueTuple[Tuple.Elem[Fields, 1] & Tuple]): Unit =
+      setTupleAt(1)(values)
+    inline def set2(values: ValueTuple[Tuple.Elem[Fields, 2] & Tuple]): Unit =
+      setTupleAt(2)(values)
+    inline def set3(values: ValueTuple[Tuple.Elem[Fields, 3] & Tuple]): Unit =
+      setTupleAt(3)(values)
+    inline def set4(values: ValueTuple[Tuple.Elem[Fields, 4] & Tuple]): Unit =
+      setTupleAt(4)(values)
+    inline def set5(values: ValueTuple[Tuple.Elem[Fields, 5] & Tuple]): Unit =
+      setTupleAt(5)(values)
+    inline def set6(values: ValueTuple[Tuple.Elem[Fields, 6] & Tuple]): Unit =
+      setTupleAt(6)(values)
+    inline def set7(values: ValueTuple[Tuple.Elem[Fields, 7] & Tuple]): Unit =
+      setTupleAt(7)(values)
+    inline def set8(values: ValueTuple[Tuple.Elem[Fields, 8] & Tuple]): Unit =
+      setTupleAt(8)(values)
 
     /** Copy data from another struct of the same layout */
     inline def copyFrom(other: StructRef[Fields]): Unit =
       val stride = constValue[TupleSize[Fields]]
-      val src = new Uint8Array(other._1.buffer, other._2, stride)
-      val dst = new Uint8Array(s._1.buffer, s._2, stride)
+      val src = new Uint8Array(other.dv.buffer, other.off, stride)
+      val dst = new Uint8Array(s.dv.buffer, s.off, stride)
       dst.set(src)
 
     /** Extract a slice buffer containing just this struct's bytes */
     inline def sliceBuffer: ArrayBuffer =
       val stride = constValue[TupleSize[Fields]]
-      s._1.buffer.slice(s._2, s._2 + stride)
+      s.dv.buffer.slice(s.off, s.off + stride)
 
     /** Set all fields at once from a value tuple.
       *
@@ -487,7 +575,7 @@ object StructRef:
       * }}}
       */
     inline def set(values: ValueTuple[Fields]): Unit =
-      setFields[Fields](s._1, s._2, values, 0)
+      setFields[Fields](s.dv, s.off, values, 0)
 
     /** Assignment operator alias for set. Provides cleaner syntax with fewer
       * parentheses:
@@ -507,31 +595,31 @@ object StructRef:
 // Typed PrimitiveRef - ZERO COST reference to a primitive leaf field
 // =============================================================================
 
-opaque type PrimitiveRef[T] = (DataView, Int) // view, absoluteOffset
+opaque type PrimitiveRef[T] = BufferView
 
 object PrimitiveRef:
   inline def apply[T](view: DataView, offset: Int): PrimitiveRef[T] =
-    (view, offset)
+    BufferView(view, offset)
 
   extension [T](f: PrimitiveRef[T])
-    inline def view: DataView = f._1
-    inline def offset: Int = f._2
+    inline def view: DataView = f.dv
+    inline def offset: Int = f.off
 
     /** Get the value - type is determined by T */
     inline def get: ValueType[T] =
       inline erasedValue[T] match
-        case _: F32 => f._1.getFloat32(f._2, littleEndian = true)
-        case _: F64 => f._1.getFloat64(f._2, littleEndian = true)
-        case _: U8  => f._1.getUint8(f._2)
-        case _: U16 => f._1.getUint16(f._2, littleEndian = true)
-        case _: U32 => f._1.getUint32(f._2, littleEndian = true)
-        case _: I8  => f._1.getInt8(f._2)
-        case _: I16 => f._1.getInt16(f._2, littleEndian = true)
-        case _: I32 => f._1.getInt32(f._2, littleEndian = true)
+        case _: F32 => f.dv.getFloat32(f.off, littleEndian = true)
+        case _: F64 => f.dv.getFloat64(f.off, littleEndian = true)
+        case _: U8  => f.dv.getUint8(f.off)
+        case _: U16 => f.dv.getUint16(f.off, littleEndian = true)
+        case _: U32 => f.dv.getUint32(f.off, littleEndian = true)
+        case _: I8  => f.dv.getInt8(f.off)
+        case _: I16 => f.dv.getInt16(f.off, littleEndian = true)
+        case _: I32 => f.dv.getInt32(f.off, littleEndian = true)
 
     /** Set the value - type is determined by T */
     inline def set(value: ValueType[T]): Unit =
-      setPrimitiveValue[T](f._1, f._2, value)
+      setPrimitiveValue[T](f.dv, f.off, value)
 
     /** Assignment operator alias for set */
     inline def :=(value: ValueType[T]): Unit = set(value)

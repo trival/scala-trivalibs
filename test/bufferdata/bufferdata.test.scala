@@ -562,21 +562,21 @@ class BufferDataTest extends FunSuite:
   private def assertEqualsFloat(
       actual: Float,
       expected: Float,
-      delta: Float
+      delta: Float,
   ): Unit =
     assert(
       math.abs(actual - expected) <= delta,
-      s"Expected ~$expected within $delta, got $actual"
+      s"Expected ~$expected within $delta, got $actual",
     )
 
   private def assertEqualsDouble(
       actual: Double,
       expected: Double,
-      delta: Double
+      delta: Double,
   ): Unit =
     assert(
       math.abs(actual - expected) <= delta,
-      s"Expected ~$expected within $delta, got $actual"
+      s"Expected ~$expected within $delta, got $actual",
     )
 
   // ==========================================================================
@@ -801,7 +801,7 @@ class BufferDataTest extends FunSuite:
 
     // Pass wrapped iterator to HittableList
     val hittables = new HittableList(
-      values.iterator.map(ref => new HittableWrapper(ref)).toSeq
+      values.iterator.map(ref => new HittableWrapper(ref)).toSeq,
     )
 
     assertEqualsFloat(hittables.sum, (0 until 5).map(_ * 10.0f).sum, 0.001f)
