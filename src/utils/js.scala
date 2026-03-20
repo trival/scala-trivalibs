@@ -60,6 +60,10 @@ extension [A](promise: js.Promise[A])
       if pf.isDefinedAt(err) then pf(err)
       else throw err.asInstanceOf[Throwable]
 
+  inline def foreach(f: A => Unit): Unit =
+    promise.`then`[Unit](f)
+    ()
+
   inline def tap(f: A => Unit): js.Promise[A] =
     promise.`then`[A]: a =>
       f(a)
