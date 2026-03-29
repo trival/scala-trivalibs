@@ -42,7 +42,7 @@ class MaybeOptTest extends FunSuite:
     assertEquals(o.get, "hello")
 
   test("Opt: Opt.Null is null"):
-    val o: Opt[String] = Opt.Null
+    val o: Opt[String] = null
     assertEquals(o.isNull, true)
     assertEquals(o.nonNull, false)
     assertEquals(o.getOr("fallback"), "fallback")
@@ -83,7 +83,7 @@ class MaybeOptTest extends FunSuite:
 
   test("Maybe.Not (undefined) vs Opt.Null (null) are distinct JS values"):
     val m: Maybe[String] = Maybe.Not
-    val o: Opt[String] = Opt.Null
+    val o: Opt[String] = null
 
     assertEquals(m.orElse("fallback"), "fallback")
     assertEquals(o.getOr("fallback"), "fallback")

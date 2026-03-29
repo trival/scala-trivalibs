@@ -22,8 +22,6 @@ extension [A](m: Maybe[A])
     m.asInstanceOf[A]
 
 type Opt[+A] = A | Null
-object Opt:
-  inline def Null: Opt[Nothing] = null
 
 extension [A](opt: Opt[A])
   @targetName("opt_isNull")
