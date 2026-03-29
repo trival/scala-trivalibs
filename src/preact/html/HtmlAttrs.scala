@@ -9,9 +9,10 @@ import trivalibs.utils.js.*
 object HtmlAttrs:
   // Special attributes (manually defined, not in scala-dom-types)
   type Key = AttributeModifier["key", String]
-  type Cls = AttributeModifier["cls", Opt[String]]
-  type Typ = AttributeModifier["type", String]  // `type` is a reserved word in Scala
-  type Rel = AttributeModifier["rel", String]   // Link relationship type
+  type Cls = AttributeModifier["cls", Maybe[String]]
+  type Typ =
+    AttributeModifier["type", String] // `type` is a reserved word in Scala
+  type Rel = AttributeModifier["rel", String] // Link relationship type
 
   // Generated reflected HTML attributes
   type Accept = AttributeModifier["accept", String]

@@ -38,7 +38,7 @@ given Conversion[VNode, ChildModifier] = ChildModifier(_)
 // === Component Factory ===
 
 trait Props extends JS:
-  val key: Opt[String] // Dummy prop to satisfy component macro
+  val key: Maybe[String] // Dummy prop to satisfy component macro
 
 /** Base class for components with auto-derived Modifier type. The Modifier type
   * is refined by the `component` macro based on the Props type.
@@ -83,7 +83,7 @@ transparent inline def component[P <: Props](inline renderFn: P => VNode): Any =
   ${ componentImpl[P]('renderFn) }
 
 private def componentImpl[P: Type](
-    renderFn: Expr[P => VNode]
+    renderFn: Expr[P => VNode],
 )(using Quotes): Expr[Any] =
   import quotes.reflect.*
 

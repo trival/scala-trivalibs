@@ -1,21 +1,40 @@
 package trivalibs.utils.js
 
+import scala.annotation.targetName
 import scala.scalajs.js
 
 type JS = js.Object
 
-type Opt[T] = js.UndefOr[T]
-object Opt:
-  inline def Null = js.undefined
+// === Maybe[T] — js.undefined-based optional (for "not provided" semantics) ===
 
-inline def maybe[A](condition: Boolean, value: A): Opt[A] =
-  if condition then value else Opt.Null
+type Maybe[T] = js.UndefOr[T]
+object Maybe:
+  inline def Not = js.undefined
+
+inline def maybe[A](condition: Boolean, value: A): Maybe[A] =
+  if condition then value else Maybe.Not
+
+extension [A](m: Maybe[A])
+  inline def orElse(default: => A): A =
+    if js.isUndefined(m.asInstanceOf[js.Any]) then default
+    else m.asInstanceOf[A]
+  inline def safe: A =
+    m.asInstanceOf[A]
+
+type Opt[+A] = A | Null
+object Opt:
+  inline def Null: Opt[Nothing] = null
 
 extension [A](opt: Opt[A])
+  @targetName("opt_isNull")
+  inline def isNull: Boolean = opt == null
+  @targetName("opt_nonNull")
+  inline def nonNull: Boolean = opt != null
+  @targetName("opt_getOr")
   inline def getOr(default: => A): A =
-    opt.getOrElse(default)
-  inline def safe: A =
-    opt.asInstanceOf[A]
+    if opt != null then opt.asInstanceOf[A] else default
+  @targetName("opt_get")
+  inline def get: A = opt.asInstanceOf[A]
 
 object Obj:
   val literal = js.Dynamic.literal
@@ -69,12 +88,8 @@ extension [A](promise: js.Promise[A])
       f(a)
       a
 
-// Nullable value handling (for `T | Null` results)
+// Nullable promise helpers — delegate to Opt extensions
 extension [A](promise: js.Promise[A | Null])
-  inline def toOption: js.Promise[Option[A]] =
-    promise.`then`[Option[A]]: value =>
-      if value == null then None
-      else Some(value.asInstanceOf[A])
 
   inline def orError(message: String): js.Promise[A] =
     promise.`then`[A]: value =>
@@ -83,7 +98,6 @@ extension [A](promise: js.Promise[A | Null])
 
   inline def orElse(default: => A): js.Promise[A] =
     promise.`then`[A]: value =>
-      if value == null then default
-      else value.asInstanceOf[A]
+      (value: Opt[A]).getOr(default)
 
 inline def log(args: js.Any*) = js.Dynamic.global.console.log(args*)
