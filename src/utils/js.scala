@@ -26,8 +26,8 @@ type Opt[+A] = A | Null
 extension [A](opt: Opt[A])
   @targetName("opt_isNull")
   inline def isNull: Boolean = opt == null
-  @targetName("opt_nonNull")
-  inline def nonNull: Boolean = opt != null
+  @targetName("opt_notNull")
+  inline def notNull: Boolean = opt != null
   @targetName("opt_getOr")
   inline def getOr(default: => A): A =
     if opt != null then opt.asInstanceOf[A] else default

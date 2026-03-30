@@ -37,14 +37,14 @@ class MaybeOptTest extends FunSuite:
   test("Opt: real value is non-null"):
     val o: Opt[String] = "hello"
     assertEquals(o.isNull, false)
-    assertEquals(o.nonNull, true)
+    assertEquals(o.notNull, true)
     assertEquals(o.getOr("fallback"), "hello")
     assertEquals(o.get, "hello")
 
   test("Opt: Opt.Null is null"):
     val o: Opt[String] = null
     assertEquals(o.isNull, true)
-    assertEquals(o.nonNull, false)
+    assertEquals(o.notNull, false)
     assertEquals(o.getOr("fallback"), "fallback")
 
   test("Opt: literal null is null"):
