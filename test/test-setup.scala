@@ -1,4 +1,4 @@
-//> using scala 3.8.2
+//> using scala 3.8.3
 //> using platform js
 //> using jsVersion 1.20.2
 
