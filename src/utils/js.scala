@@ -18,6 +18,9 @@ extension [A](m: Maybe[A])
   inline def orElse(default: => A): A =
     if js.isUndefined(m.asInstanceOf[js.Any]) then default
     else m.asInstanceOf[A]
+  inline def orMaybe(default: => Any): Maybe[A] =
+    if js.isUndefined(m.asInstanceOf[js.Any]) then default.asInstanceOf[Maybe[A]]
+    else m
   inline def safe: A =
     m.asInstanceOf[A]
 
