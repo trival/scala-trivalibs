@@ -76,6 +76,41 @@ trait NumExt[P]:
     inline def step(edge: P): P = gte(edge) // alias for gte
     def smoothstep(edge0: P, edge1: P): P
 
+// ---------------------------------------------------------------------------
+// IntExt — integer-domain ops (min, max, clamp, step predicates)
+// ---------------------------------------------------------------------------
+
+trait IntExt[P]:
+  extension (p: P)
+    def min(other: P): P
+    def max(other: P): P
+    def clamp(lo: P, hi: P): P
+    def gte(edge: P): P
+    def gt(edge: P): P
+    def lte(edge: P): P
+    def lt(edge: P): P
+    inline def step(edge: P): P = gte(edge)
+
+object IntExt:
+  given IntExt[Int]:
+    extension (p: Int)
+      inline def min(other: Int): Int = Math.min(p, other)
+      inline def max(other: Int): Int = Math.max(p, other)
+      inline def clamp(lo: Int, hi: Int): Int =
+        if p < lo then lo else if p > hi then hi else p
+      inline def gte(edge: Int): Int = if p >= edge then 1 else 0
+      inline def gt(edge: Int): Int = if p > edge then 1 else 0
+      inline def lte(edge: Int): Int = if p <= edge then 1 else 0
+      inline def lt(edge: Int): Int = if p < edge then 1 else 0
+
+extension (p: Int)
+  inline def abs: Int = Math.abs(p)
+  inline def sign: Int = Integer.signum(p)
+
+// ---------------------------------------------------------------------------
+// NumExt — float-domain ops (trig, sqrt, fract, fit, smoothstep, …)
+// ---------------------------------------------------------------------------
+
 object NumExt:
   given NumExt[Double]:
     extension (p: Double)
