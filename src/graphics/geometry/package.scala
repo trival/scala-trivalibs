@@ -1,0 +1,58 @@
+package trivalibs.graphics.geometry
+
+import trivalibs.graphics.math.*
+import trivalibs.graphics.math.cpu.Vec3
+import trivalibs.graphics.math.cpu.given
+import trivalibs.utils.js.*
+
+import scala.scalajs.js
+
+// position type class and givens
+
+trait Position[T]:
+  extension (t: T) def pos: Vec3
+
+given [V] => Vec3Base[V] => Position[V]:
+  extension (v: V) def pos: Vec3 = Vec3(v.x, v.y, v.z)
+
+// lerp type class and givens
+
+trait Lerp[T]:
+  extension (a: T) def lerp(b: T, t: Double): T
+
+given doubleLerp: Lerp[Double]:
+  extension (a: Double) def lerp(b: Double, t: Double): Double = a + (b - a) * t
+
+given vec3Lerp: [V] => Vec3Base[V] => Vec3ImmutableOps[V] => Lerp[V]:
+  extension (a: V) def lerp(b: V, t: Double): V = a.mix(b, t)
+
+given vec2Lerp: [V] => Vec2Base[V] => Vec2ImmutableOps[V] => Lerp[V]:
+  extension (a: V) def lerp(b: V, t: Double): V = a.mix(b, t)
+
+given vec4Lerp: [V] => Vec4Base[V] => Vec4ImmutableOps[V] => Lerp[V]:
+  extension (a: V) def lerp(b: V, t: Double): V = a.mix(b, t)
+
+// geometry types
+
+class Plane(val normal: Vec3, val d: Double):
+  def signedDist(p: Vec3): Double = normal.dot(p) - d
+  def flip: Plane = Plane(-normal, -d)
+
+// float equality helpers
+
+private inline val ROUNDING = 10000.0
+private inline val DELTA = 1.0 / ROUNDING
+
+def posKey(v: Vec3): String =
+  s"${(v.x * ROUNDING).toInt},${(v.y * ROUNDING).toInt},${(v.z * ROUNDING).toInt}"
+
+// math extensions
+
+extension (v: Vec3)
+  def approxEq(w: Vec3): Boolean =
+    (v.x * ROUNDING).toInt == (w.x * ROUNDING).toInt &&
+      (v.y * ROUNDING).toInt == (w.y * ROUNDING).toInt &&
+      (v.z * ROUNDING).toInt == (w.z * ROUNDING).toInt
+  def onPlane(p: Plane): Boolean = math.abs(p.signedDist(v)) < DELTA
+  def inFront(p: Plane): Boolean = p.signedDist(v) > DELTA
+  def behind(p: Plane): Boolean = p.signedDist(v) < -DELTA
