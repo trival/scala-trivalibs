@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scala WebGPU Examples</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a1a2e;
+      min-height: 100vh;
+      font-family: system-ui, sans-serif;
+      padding: 2rem;
+    }
+
+    h1 {
+      color: #eeeeff;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    .examples {
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .example-link {
+      display: block;
+      padding: 1.5rem;
+      background: #2a2a4e;
+      border: 2px solid #4a4a6a;
+      border-radius: 8px;
+      color: #aaaacc;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .example-link:hover {
+      background: #3a3a5e;
+      border-color: #6a6a8a;
+      color: #ccccee;
+    }
+
+    .example-link h2 {
+      color: #eeeeff;
+      margin-bottom: 0.5rem;
+      font-size: 1.25rem;
+    }
+
+    .example-link p {
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Scala WebGPU Examples</h1>
+  <div class="examples">
+    <a href="/simple_triangle/" class="example-link">
+      <h2>Simple Triangle</h2>
+      <p>Basic triangle using hardcoded vertex positions in the shader. Demonstrates WebGPU initialization and shader
+        generation.</p>
+    </a>
+    <a href="/buffer_triangle/" class="example-link">
+      <h2>Buffer Triangle</h2>
+      <p>Triangle with vertex data loaded from GPU buffers. Demonstrates vertex buffers and buffer layouts.</p>
+    </a>
+    <a href="/painter_triangle/" class="example-link">
+      <h2>Painter Triangle</h2>
+      <p>Triangle using the Painter abstraction. Demonstrates CanvasApp, Shade, Form, Shape, and painter.draw().</p>
+    </a>
+    <a href="/painter_typed_bindings/" class="example-link">
+      <h2>Typed Bindings</h2>
+      <p>Two triangles with type-safe named uniform bindings. Demonstrates compile-time validated bind() with Vec3,
+        Mat2, and Vec2 uniforms.</p>
+    </a>
+    <a href="/painter_dsl/" class="example-link">
+      <h2>Painter DSL</h2>
+      <p>Two triangles with shaders written in the Scala DSL. Demonstrates the Program builder with typed expression
+        accessors for vertex and fragment stages.</p>
+    </a>
+    <a href="/panel_triangle/" class="example-link">
+      <h2>Panel Triangle</h2>
+      <p>Triangle rendered to an intermediate Panel (render-to-texture), then blitted to canvas. Demonstrates paint()
+        and show().</p>
+    </a>
+    <a href="/panel_layer/" class="example-link">
+      <h2>Panel Layer</h2>
+      <p>Fullscreen animated plasma effect using a Layer shader. Demonstrates layerShade(), aspect-corrected UV, time
+        and resolution uniforms, and onResize().</p>
+    </a>
+    <a href="/panel_tex/" class="example-link">
+      <h2>Panel Tex</h2>
+      <p>Two intermediate panels rendered as textures onto shapes in a final canvas panel. Demonstrates panel-to-texture
+        sampling with nearest and linear samplers.</p>
+    </a>
+    <a href="/blur/" class="example-link">
+      <h2>Blur</h2>
+      <p>Triangle rendered to a panel with multi-pass Gaussian blur post-processing. Demonstrates ping-pong layer chain
+        with auto-injected source textures.</p>
+    </a>
+    <a href="/instances/" class="example-link">
+      <h2>Instances</h2>
+      <p>100 rotating triangles in 3D using shape instances. Demonstrates per-instance typed bindings, panel-level
+        runtime bindings for the shared camera matrix, and instance rendering.</p>
+    </a>
+    <a href="/deferred/" class="example-link">
+      <h2>Deferred</h2>
+      <p>Deferred lighting with multiple render targets (MRT). G-buffer panel writes albedo and normals to separate
+        textures, then a lighting layer composites them with an animated directional light.</p>
+    </a>
+    <a href="/mipmaps/" class="example-link">
+      <h2>Mipmaps</h2>
+      <p>Colorful scene rendered with automatic mipmap generation, displayed at 4 different mip levels.
+        Demonstrates mip-enabled panels, textureSampleLevel, and the sampler factory with FilterMode.</p>
+    </a>
+    <a href="/geometry3d_scene/" class="example-link">
+      <h2>Geometry 3D Scene</h2>
+      <p>3D scene with a wave terrain, boxes, and spheres with diffuse lighting. Demonstrates Grid, Box,
+        sphereMesh, indexed rendering, and depth-tested panels with vertex normals.</p>
+    </a>
+    <a href="/noise_tests/" class="example-link">
+      <h2>Noise Tests</h2>
+      <p>16 panels cycling through all noise and hash functions: simplex 2D/3D (seeded and unseeded), fBm, Worley,
+        psrdnoise tiling/rotating 2D/3D, and a 4×2 hash function grid. Click to cycle.</p>
+    </a>
+  </div>
+</body>
+
+</html>

@@ -4,3 +4,7 @@
 .vscode/
 .idea/
 .claude/
+node_modules
+examples/out/
+examples/**/main.min.js
+*.semanticdb
