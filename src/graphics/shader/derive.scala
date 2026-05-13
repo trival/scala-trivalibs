@@ -84,7 +84,7 @@ object derive:
         names.zip(types).zipWithIndex.map { case ((name, typ), idx) =>
           s"  @location($idx) $name: $typ,"
         }
-      s"struct $structName {\n${fields.mkString("\n")}\n}"
+      s"struct $structName {\n${fields.join("\n")}\n}"
 
   /** Generate a WGSL struct with @builtin annotations */
   inline def generateBuiltinStruct[T](structName: String): String =
@@ -100,7 +100,7 @@ object derive:
       val fields = builtins.map { case (name, builtin, typ) =>
         s"  @builtin($builtin) $name: $typ,"
       }
-      s"struct $structName {\n${fields.mkString("\n")}\n}"
+      s"struct $structName {\n${fields.join("\n")}\n}"
 
   /** Generate a combined struct with both @location and @builtin fields */
   inline def generateCombinedStruct[Locations, Builtins](
@@ -126,7 +126,7 @@ object derive:
     }
     val allFields = locationFields ++ builtinFields
     if allFields.isEmpty then ""
-    else s"struct $structName {\n${allFields.mkString("\n")}\n}"
+    else s"struct $structName {\n${allFields.join("\n")}\n}"
 
   // ===========================================================================
   // Uniform Generation
@@ -314,7 +314,7 @@ object derive:
         else
           s"@group($groupIdx) @binding($bindingIdx) var<uniform> $name: $typ;"
       }
-      .mkString("\n")
+      .join("\n")
 
   // ===========================================================================
   // Panel Type Helpers

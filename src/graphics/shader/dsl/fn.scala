@@ -97,10 +97,20 @@ object WgslFn:
       case _: AnyNamedTuple =>
         val names = paramNames[NamedTuple.Names[P & AnyNamedTuple]]
         val types = paramWgslTypes[NamedTuple.DropNames[P & AnyNamedTuple]]
-        names.zip(types).map((n, t) => s"$n: $t").mkString(", ")
+        val parts = Arr[String]()
+        var i = 0
+        while i < names.length do
+          parts.push(s"${names(i)}: ${types(i)}")
+          i += 1
+        parts.join(", ")
       case _: Tuple =>
         val types = paramWgslTypes[P & Tuple]
-        types.zipWithIndex.map((t, i) => s"p$i: $t").mkString(", ")
+        val parts = Arr[String]()
+        var i = 0
+        while i < types.length do
+          parts.push(s"p$i: ${types(i)}")
+          i += 1
+        parts.join(", ")
 
   private inline def paramNames[N <: Tuple]: Arr[String] =
     inline erasedValue[N] match

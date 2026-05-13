@@ -46,7 +46,7 @@ class Program[A, V, U, P, FO]:
       data.deps.foreach(fnRec)
       fnSrcs.push(data.src)
 
-  def helperFnsStr: String = fnSrcs.mkString("\n\n")
+  def helperFnsStr: String = fnSrcs.join("\n\n")
 
   /** Vertex shader with no typed locals. */
   inline def vert(body: VertexCtx[A, V, U, EmptyTuple, P] => Block): Unit =

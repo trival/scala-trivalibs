@@ -10,7 +10,7 @@ import trivalibs.utils.numbers.NumOps
 
 private def floatToWgsl(v: Double): String =
   val s = v.toString
-  if s.contains('.') || s.contains('E') || s.contains('e') then s
+  if s.indexOf('.') >= 0 || s.indexOf('E') >= 0 || s.indexOf('e') >= 0 then s
   else s + ".0"
 
 given Conversion[Double, FloatExpr] = v => FloatExpr(floatToWgsl(v))

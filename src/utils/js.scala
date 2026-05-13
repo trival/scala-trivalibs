@@ -58,8 +58,38 @@ object Arr:
   inline def from[A](iterable: js.Iterable[A]): js.Array[A] =
     js.Array.from(iterable)
 
-  /** Creates a new array with the given items. */
-  inline def apply[A](items: A*): js.Array[A] = js.Array(items*)
+  /** Creates a new empty array. */
+  inline def apply[A](): js.Array[A] = new js.Array[A]()
+
+  /** Creates a new array with the given items. Concrete-arity overloads avoid
+    * Scala varargs (which drag in `ScalaRunTime.wrapRefArray` /
+    * `toJSVarArgsImpl`) so `js.Array(...)` stays an intrinsified JS literal.
+    */
+  inline def apply[A](a: A): js.Array[A] = js.Array(a)
+  inline def apply[A](a: A, b: A): js.Array[A] = js.Array(a, b)
+  inline def apply[A](a: A, b: A, c: A): js.Array[A] = js.Array(a, b, c)
+  inline def apply[A](a: A, b: A, c: A, d: A): js.Array[A] = js.Array(a, b, c, d)
+  inline def apply[A](a: A, b: A, c: A, d: A, e: A): js.Array[A] =
+    js.Array(a, b, c, d, e)
+  inline def apply[A](a: A, b: A, c: A, d: A, e: A, f: A): js.Array[A] =
+    js.Array(a, b, c, d, e, f)
+  inline def apply[A](a: A, b: A, c: A, d: A, e: A, f: A, g: A): js.Array[A] =
+    js.Array(a, b, c, d, e, f, g)
+  inline def apply[A](
+      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A,
+  ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h)
+  inline def apply[A](
+      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A,
+  ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i)
+  inline def apply[A](
+      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A, j: A,
+  ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i, j)
+  inline def apply[A](
+      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A, j: A, k: A,
+  ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i, j, k)
+  inline def apply[A](
+      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A, j: A, k: A, l: A,
+  ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i, j, k, l)
 
 // Core extensions for for-comprehension support
 extension [A](promise: js.Promise[A])

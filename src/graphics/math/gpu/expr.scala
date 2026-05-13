@@ -1,5 +1,8 @@
 package trivalibs.graphics.math.gpu
 
+import scala.scalajs.js
+import trivalibs.utils.js.Arr
+
 // ---------------------------------------------------------------------------
 // Expression base class — wraps a WGSL string, toString = wgsl so string
 // interpolation works naturally.
@@ -311,7 +314,14 @@ object Block:
 // ---------------------------------------------------------------------------
 
 private def indentBlock(body: Block): String =
-  Block.unwrap(body).split('\n').map(line => s"  $line").mkString("\n")
+  val lines = Block.unwrap(body).asInstanceOf[js.Dynamic].split("\n")
+    .asInstanceOf[js.Array[String]]
+  val out = Arr[String]()
+  var i = 0
+  while i < lines.length do
+    out.push("  " + lines(i))
+    i += 1
+  out.join("\n")
 
 /** Branchless conditional. WGSL signature:
   * `select(falseValue, trueValue, cond)`.

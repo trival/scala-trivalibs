@@ -2,6 +2,7 @@ package trivalibs.utils.animation
 
 import trivalibs.utils.js.*
 import scala.scalajs.js
+import scala.scalajs.js.JSNumberOps.*
 
 class Animator(
     val frame: js.Function1[Double, Unit],
@@ -23,7 +24,7 @@ class Animator(
     if fpsElapsed >= 1000.0 then
       val fps = frameCount * 1000.0 / fpsElapsed
       if time - lastFpsLog >= 1000.0 then
-        log(f"${fps}%.1f FPS")
+        log(fps.toFixed(1) + " FPS")
         lastFpsLog = time
         if onFpsCallback.notNull then onFpsCallback(fps)
       frameCount = 0

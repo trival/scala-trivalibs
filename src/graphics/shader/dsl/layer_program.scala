@@ -40,7 +40,7 @@ class LayerProgram[U, P, FO]:
       data.deps.foreach(fnRec)
       fnSrcs.push(data.src)
 
-  def helperFnsStr: String = fnSrcs.mkString("\n\n")
+  def helperFnsStr: String = fnSrcs.join("\n\n")
 
   /** Fragment shader with no typed locals. `ctx.in.uv` provides screen UV
     * coords (0..1).

@@ -788,6 +788,119 @@ class Painter(
       paintPanel(panels(i))
       i += 1
 
+  // Concrete-arity overloads for the hot path — avoid the Scala varargs
+  // pipeline (`ScalaRunTime.wrapRefArray` → `Seq` → `toJSVarArgsImpl`) so a
+  // typical per-frame `paint(a, b, …)` call stays allocation-free.
+  inline def paint(a: Panel): Unit =
+    paintPanel(a)
+  inline def paint(a: Panel, b: Panel): Unit =
+    paintPanel(a)
+    paintPanel(b)
+  inline def paint(a: Panel, b: Panel, c: Panel): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+  inline def paint(a: Panel, b: Panel, c: Panel, d: Panel): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+  inline def paint(a: Panel, b: Panel, c: Panel, d: Panel, e: Panel): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+  inline def paint(
+      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel,
+  ): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+    paintPanel(f)
+  inline def paint(
+      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+  ): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+    paintPanel(f)
+    paintPanel(g)
+  inline def paint(
+      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+      h: Panel,
+  ): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+    paintPanel(f)
+    paintPanel(g)
+    paintPanel(h)
+  inline def paint(
+      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+      h: Panel, i: Panel,
+  ): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+    paintPanel(f)
+    paintPanel(g)
+    paintPanel(h)
+    paintPanel(i)
+  inline def paint(
+      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+      h: Panel, i: Panel, j: Panel,
+  ): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+    paintPanel(f)
+    paintPanel(g)
+    paintPanel(h)
+    paintPanel(i)
+    paintPanel(j)
+  inline def paint(
+      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+      h: Panel, i: Panel, j: Panel, k: Panel,
+  ): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+    paintPanel(f)
+    paintPanel(g)
+    paintPanel(h)
+    paintPanel(i)
+    paintPanel(j)
+    paintPanel(k)
+  inline def paint(
+      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+      h: Panel, i: Panel, j: Panel, k: Panel, l: Panel,
+  ): Unit =
+    paintPanel(a)
+    paintPanel(b)
+    paintPanel(c)
+    paintPanel(d)
+    paintPanel(e)
+    paintPanel(f)
+    paintPanel(g)
+    paintPanel(h)
+    paintPanel(i)
+    paintPanel(j)
+    paintPanel(k)
+    paintPanel(l)
+
   def show(panel: Panel): Unit =
     val encoder = device.createCommandEncoder()
     val swapChainView = context.getCurrentTexture().createView()

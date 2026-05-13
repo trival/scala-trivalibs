@@ -192,15 +192,24 @@ type FieldAccess[T] = T match
 // =============================================================================
 
 /** Shared helper: Set a primitive value at an offset (used by both PrimitiveRef
-  * and StructRef)
+  * and StructRef).
   *
-  * Note: The implementation attempts to minimize Scala.js runtime type checks
-  * by treating values generically. However, when called from tuple
-  * destructuring (productElement returns Any), Scala.js may still insert
-  * validation calls like $uF for Float. This is acceptable as the overhead is
-  * minimal compared to the ergonomic benefit of bulk tuple setting. For
-  * performance-critical code, use field-by-field assignment which generates
-  * direct DataView calls.
+  * These setters sit on hot rendering paths, so we hand the boxed `Any`
+  * straight to the native DataView API and rely on JS-side coercion. Every
+  * JS number is internally a 64-bit float, so `setFloat32` / `setUint16` /
+  * etc. silently narrow on write — no Scala-side conversion needed in
+  * `jsMode full` (the default), where `asInstanceOf` is erased.
+  *
+  * Caveat — `jsMode fast`: under strict checks, casting a `Double` from a
+  * tuple destructure to `Float` calls `$uF`, which verifies
+  * `Math.fround(x) === x` and throws `ClassCastException` for values that
+  * aren't already lossless-Float32. Same applies to the integer narrowings
+  * (`$uB`/`$uS`/`$uI`) when a value originates as a wider numeric. We accept
+  * this trade-off: `full` mode is the deployment target, and `fast` mode is
+  * only used for build-size diagnostics. For performance-critical code on
+  * either mode, prefer field-by-field assignment via the typed view classes
+  * (`F32View.set`, `U16View.set`, …) which generate direct DataView calls
+  * with no boxing.
   */
 private inline def getPrimitiveValue[T](
     view: DataView,

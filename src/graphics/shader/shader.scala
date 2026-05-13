@@ -70,7 +70,7 @@ case class ShaderDef[
       vertexBody: String,
       fragmentBody: String
   ): String =
-    val parts = Arr(
+    val all = Arr(
       vertexInputStruct,
       vertexOutputStruct,
       fragmentOutputStruct,
@@ -78,9 +78,13 @@ case class ShaderDef[
       helperFns,
       buildVertexMain(vertexBody),
       buildFragmentMain(fragmentBody)
-    ).filter(_.nonEmpty)
-
-    parts.mkString("\n\n")
+    )
+    val parts = Arr[String]()
+    var i = 0
+    while i < all.length do
+      if all(i).length > 0 then parts.push(all(i))
+      i += 1
+    parts.join("\n\n")
 
   private def buildVertexMain(body: String): String =
     s"""@vertex
