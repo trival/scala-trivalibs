@@ -1,17 +1,17 @@
 package trivalibs.graphics.painter
 
+import org.scalajs.dom.HTMLCanvasElement
+import trivalibs.bufferdata.StructArray
 import trivalibs.graphics.buffers.*
 import trivalibs.graphics.geometry.BufferedGeometry
 import trivalibs.graphics.math.*
 import trivalibs.graphics.math.cpu.*
 import trivalibs.graphics.math.cpu.Vec2
+import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.*
 import trivalibs.graphics.shader.dsl.LayerProgram
 import trivalibs.graphics.shader.dsl.Program
-import org.scalajs.dom.HTMLCanvasElement
-import trivalibs.bufferdata.StructArray
 import trivalibs.utils.js.*
-import trivalibs.graphics.painter.*
 
 import scala.compiletime.erasedValue
 import scala.scalajs.js
@@ -820,6 +820,10 @@ class Painter(
     pass.end()
 
     queue.submit(Arr(encoder.finish()))
+
+  def paintAndShow(p: Panel): Unit =
+    paint(p)
+    show(p)
 
   // =========================================================================
   // Blit pipeline — created lazily on first show()
