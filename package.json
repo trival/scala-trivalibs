@@ -7,7 +7,7 @@
 		"examples:watch": "scala-cli --power package src examples project.scala --js -o examples/out -f -w",
 		"examples:dev": "bun --bun serve.ts",
 		"test": "scala-cli test src test project.scala",
-		"publish:local": "scala-cli --power publish local src project.scala --organization me.trival --name trivalibs --project-version 0.1.0-SNAPSHOT"
+		"publish:local": "scala-cli --power publish local src project.scala --organization xyz.trival --name trivalibs --project-version 0.1.0-SNAPSHOT"
 	},
 	"devDependencies": {
 		"@types/bun": "latest"

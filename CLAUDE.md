@@ -29,9 +29,9 @@ unrelated sources and can hang). Never use sbt.
 (lib + tests + examples) as a single scala-cli project. Opening `trivalibs/`
 directly in VS Code / Metals gives a fully type-checked view of everything.
 
-Downstream consumers exclude this file (`//> using exclude
-trivalibs/project.scala`) so their own `project.scala` is the only config Metals
-sees when the consumer repo is the workspace root.
+Downstream consumers exclude this file
+(`//> using exclude trivalibs/project.scala`) so their own `project.scala` is
+the only config Metals sees when the consumer repo is the workspace root.
 
 ## Tests
 
@@ -135,8 +135,12 @@ minimal JS:
 - **No `scala.collection.*`**: Use `Arr` (`js.Array`), `Dict` (`js.Dictionary`),
   or manual loops. `Dict[V]` works as a string-keyed cache (plain JS object).
   For integer-indexed sparse data, use `Arr[T | Null]`.
-- **No `Option`**: Use `Opt[T]` (`js.UndefOr[T]`) with `Opt.Null` as the empty
-  value. Check with `.isEmpty` / `.safe` / `.getOr`.
+- **No `Option`**: Two substitutes in `utils/js.scala`, pick by semantics:
+  - `Opt[T]` (`T | Null`) — nullable value. Empty is `null`. Check with
+    `.isNull` / `.notNull`, unwrap with `.getOr(default)` / `.get`.
+  - `Maybe[T]` (`js.UndefOr[T]`) — "not provided" semantics. Empty is
+    `Maybe.Not`. Unwrap with `.orElse(default)` / `.safe`, chain with
+    `.orMaybe(...)`. Build conditionally with `maybe(condition, value)`.
 - **No `case class` for keys**: Build string keys manually with `s"..."` for
   cache lookups in `Dict`.
 - **`.map/.filter/.sortBy` must delegate to JS**: Use `inline` extension methods
@@ -149,7 +153,7 @@ minimal JS:
   names, we can resolve to js.Object extension.
 - **`js.Dynamic` / `Obj.literal`** fine internally; user-facing API typed.
 - **Trivalibs helpers everywhere**: `Arr`, `Dict`, `Obj.literal`, `Opt`,
-  `Opt.Null`, `maybe()`.
+  `Maybe`, `maybe()`.
 
 ### Library code vs. example code
 

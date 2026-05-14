@@ -1,7 +1,8 @@
 package trivalibs.graphics.geometry
 
 import trivalibs.graphics.math.*
-import trivalibs.graphics.math.cpu.{Vec2, Vec3}
+import trivalibs.graphics.math.cpu.Vec2
+import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.given
 import trivalibs.utils.js.*
 
@@ -39,10 +40,10 @@ opaque type Quad[T] <: Arr[T] = Arr[T]
 opaque type QuadCorner = Int
 
 object QuadCorner:
-  val TopLeft:     QuadCorner = 0
-  val BottomLeft:  QuadCorner = 1
+  val TopLeft: QuadCorner = 0
+  val BottomLeft: QuadCorner = 1
   val BottomRight: QuadCorner = 2
-  val TopRight:    QuadCorner = 3
+  val TopRight: QuadCorner = 3
 
 object Quad:
   def apply[T](tl: T, bl: T, br: T, tr: T): Quad[T] = Arr(tl, bl, br, tr)

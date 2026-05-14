@@ -23,19 +23,49 @@ Tuples, by contrast, are pure values — they compose and transform freely in
 functional style, and their `ImmutableOps` let you chain operations without
 worrying about aliasing or mutation.
 
+## CPU / GPU split
+
+The math types live in three layers, mirrored by the directory layout:
+
+- `math/` (root) — the **generic** traits `Vec*BaseG[Num, Vec]` /
+  `Vec*ImmutableOpsG[Num, Vec]`. These are the purely abstract shared contract:
+  the same operation set, parameterized over the numeric type `Num` and the
+  container type `Vec`. They have no implementations of their own.
+- `math/cpu/` — the **CPU** layer. `Vec*Base[Vec]` extends
+  `Vec*BaseG[Double, Vec]`, fixing the numeric type to `Double`, and adds
+  concrete Double implementations plus CPU-only traits (`Vec*Mutable`,
+  `Vec*ImmutableOps`, `Vec*MutableOps`). Concrete types: the mutable class
+  (`Vec2`), the tuple (`Vec2Tuple`), and the buffer types (`Vec2Buffer`,
+  `Vec2dBuffer`).
+- `math/gpu/` — the **GPU** layer. Opaque expression types (`Vec2Expr`,
+  `FloatExpr`, …) wrap WGSL source strings; they implement
+  `Vec*BaseG[FloatExpr, Vec2Expr]` and `Vec*ImmutableOpsG[FloatExpr, Vec2Expr]`,
+  so the same operation names build WGSL instead of computing values. This
+  package also re-exports the CPU class names (`Vec2`, `Mat4`, …) for use in
+  shader contract definitions.
+
+The key point: the generic `*G` traits are what make a single algorithm work
+across both CPU values and GPU expressions. The CPU side specializes `Num` to
+`Double`; the GPU side specializes `Num` to `FloatExpr`.
+
 ## Type hierarchy
 
-Each vector/matrix type is supported by a set of traits:
+On the CPU side, each vector/matrix type is supported by a set of traits:
 
-- `Vec*Base` / `Mat*Base` — read-only field accessors (`x`, `y`, `m00`, …) plus
-  scalar helpers that return no new instance and cause no allocation (`dot`,
-  `length_squared`, `length` for vectors; `determinant` for matrices)
+- `Vec*BaseG` / `Mat*BaseG` — generic read-only contract (the abstract shared
+  layer)
+- `Vec*Base` / `Mat*Base` — extends `*BaseG[Double, …]`; read-only field
+  accessors (`x`, `y`, `m00`, …) plus scalar helpers that return no new instance
+  and cause no allocation (`dot`, `length_squared`, `length` for vectors;
+  `determinant` for matrices)
 - `Vec*Mutable` / `Mat*Mutable` — extends Base, adds field setters (`x_=`,
   `m00_=`, …)
-- `Vec*ImmutableOps` / `Mat*ImmutableOps` — operations that return a new
-  instance via `create`
+- `Vec*ImmutableOpsG` / `Mat*ImmutableOpsG` — generic contract for operations
+  that return a new instance via `create`
+- `Vec*ImmutableOps` / `Mat*ImmutableOps` — the `Double` CPU implementation of
+  the immutable ops
 - `Vec*MutableOps` / `Mat*MutableOps` — operations that write into an existing
-  target
+  target (CPU-only)
 
 ## Immutable vs mutable operation naming
 
@@ -103,19 +133,25 @@ m.rotateTo(out, angle)    // writes into out, returns out
 
 ## Type naming
 
-| Category                | Naming                     | Example                                             |
-| ----------------------- | -------------------------- | --------------------------------------------------- |
-| Default (Double) vector | `Vec2`, `Vec3`, `Vec4`     | `class Vec2(var x: Double, var y: Double)`          |
-| Float vector            | `Vec2f`, `Vec3f`, `Vec4f`  | `class Vec2f(var x: Float, var y: Float)`           |
-| Default tuple (Double)  | `Vec2Tuple`, `Vec3Tuple`   | `type Vec2Tuple = (Double, Double)`                 |
-| Float tuple             | `Vec2fTuple`, `Vec3fTuple` | `type Vec2fTuple = (Float, Float)`                  |
-| F32 GPU buffer          | `Vec2Buffer`, `Mat4Buffer` | `type Vec2Buffer = (F32, F32)`                      |
-| F64 CPU buffer          | `Vec2dBuffer`              | `type Vec2dBuffer = (F64, F64)`                     |
-| Matrix (Double)         | `Mat2`, `Mat3`, `Mat4`     | `class Mat2(var m00: Double, …)`                    |
-| Matrix tuple            | `Mat2Tuple`, `Mat4Tuple`   | `type Mat2Tuple = (Double, Double, Double, Double)` |
+JS has only one native number type (`Double`), and WebGPU buffers are `f32` — so
+CPU-side math is uniformly `Double`, and `Float` appears only inside GPU buffer
+storage types.
 
-Matrices have no Float variants yet — use `Mat*Buffer` (F32) exclusively for GPU
-upload.
+| Category               | Naming                     | Example                                             |
+| ---------------------- | -------------------------- | --------------------------------------------------- |
+| Mutable class (Double) | `Vec2`, `Vec3`, `Vec4`     | `class Vec2(var x: Double, var y: Double)`          |
+| Tuple (Double)         | `Vec2Tuple`, `Vec3Tuple`   | `type Vec2Tuple = (Double, Double)`                 |
+| F32 GPU buffer         | `Vec2Buffer`, `Mat4Buffer` | `type Vec2Buffer = (F32, F32)`                      |
+| F64 CPU buffer         | `Vec2dBuffer`              | `type Vec2dBuffer = (F64, F64)`                     |
+| Matrix class (Double)  | `Mat2`, `Mat3`, `Mat4`     | `class Mat2(var m00: Double, …)`                    |
+| Matrix tuple           | `Mat2Tuple`, `Mat4Tuple`   | `type Mat2Tuple = (Double, Double, Double, Double)` |
+| GPU expression         | `Vec2Expr`, `Mat4Expr`     | `opaque type Vec2Expr <: Expr = Expr`               |
+
+The GPU expression types (`Vec2Expr`, `Vec3Expr`, …, `FloatExpr`, `Mat*Expr`)
+live in `math/gpu/`. They are opaque wrappers around WGSL source strings, with
+`Let*` / `Var* `/ `Const*` subtypes for local declarations. Their operations
+implement the generic `*G` traits with `Num = FloatExpr`, so writing `a + b` on
+two `Vec2Expr`s emits `(a + b)` as WGSL.
 
 ## Buffer types
 
@@ -125,11 +161,13 @@ but are not used for GPU upload.
 
 ## WGSL mapping
 
-Both `Vec2` (Double) and `Vec2f` (Float) map to `vec2<f32>` in WGSL, using
-`Vec2Buffer` (F32) for the actual GPU data. WGSL does not support `f64`.
+`Vec2` maps to `vec2<f32>` in WGSL, using `Vec2Buffer` (F32) for the actual GPU
+data. WGSL does not support `f64`. There is a single `Vec2` type — `Double` on
+the CPU, `f32` on the GPU — sharing one operation contract via the generic `*G`
+traits; the numeric representation differs per context but the API does not.
 
 ## Trait type parameter order
 
-Always `[Num, Mat]` or `[Num, Vec]` — numeric type first, container type second.
-Use `Fractional` (not `Numeric`) as the constraint since all math types are
-floating-point.
+The generic `*G` traits are parameterized `[Num, Mat]` or `[Num, Vec]` — numeric
+type first, container type second. The CPU layer instantiates `Num = Double`;
+the GPU layer instantiates `Num = FloatExpr`.
