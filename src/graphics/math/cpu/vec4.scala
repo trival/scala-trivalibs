@@ -75,7 +75,15 @@ object Vec4 extends Vec4ImmutableOps[Vec4]:
   inline def create(x: Double, y: Double, z: Double, w: Double) =
     new Vec4(x, y, z, w)
   given Vec4ImmutableOps[Vec4] = Vec4
+
+  def apply(x: Double, y: Double, z: Double, w: Double): Vec4 =
+    new Vec4(x, y, z, w)
+  def apply(scalar: Double): Vec4 = new Vec4(scalar, scalar, scalar, scalar)
+  def apply(xyz: Vec3, w: Double): Vec4 = new Vec4(xyz.x, xyz.y, xyz.z, w)
+  def apply(xy: Vec2, z: Double, w: Double): Vec4 = new Vec4(xy.x, xy.y, z, w)
+
   def zero: Vec4 = new Vec4(0.0, 0.0, 0.0, 0.0)
+  def one: Vec4 = new Vec4(1.0, 1.0, 1.0, 1.0)
   def X: Vec4 = new Vec4(1.0, 0.0, 0.0, 0.0)
   def Y: Vec4 = new Vec4(0.0, 1.0, 0.0, 0.0)
   def Z: Vec4 = new Vec4(0.0, 0.0, 1.0, 0.0)

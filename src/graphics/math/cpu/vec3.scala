@@ -63,7 +63,13 @@ class Vec3(var x: Double = 0.0, var y: Double = 0.0, var z: Double = 0.0)
 object Vec3 extends Vec3ImmutableOps[Vec3]:
   inline def create(x: Double, y: Double, z: Double) = new Vec3(x, y, z)
   given Vec3ImmutableOps[Vec3] = Vec3
+
+  def apply(x: Double, y: Double, z: Double): Vec3 = new Vec3(x, y, z)
+  def apply(scalar: Double): Vec3 = new Vec3(scalar, scalar, scalar)
+  def apply(xy: Vec2, z: Double): Vec3 = new Vec3(xy.x, xy.y, z)
+
   def zero: Vec3 = new Vec3(0.0, 0.0, 0.0)
+  def one: Vec3 = new Vec3(1.0, 1.0, 1.0)
   def X: Vec3 = new Vec3(1.0, 0.0, 0.0)
   def Y: Vec3 = new Vec3(0.0, 1.0, 0.0)
   def Z: Vec3 = new Vec3(0.0, 0.0, 1.0)

@@ -815,7 +815,12 @@ class Painter(
     paintPanel(d)
     paintPanel(e)
   inline def paint(
-      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel,
+      a: Panel,
+      b: Panel,
+      c: Panel,
+      d: Panel,
+      e: Panel,
+      f: Panel,
   ): Unit =
     paintPanel(a)
     paintPanel(b)
@@ -824,7 +829,13 @@ class Painter(
     paintPanel(e)
     paintPanel(f)
   inline def paint(
-      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+      a: Panel,
+      b: Panel,
+      c: Panel,
+      d: Panel,
+      e: Panel,
+      f: Panel,
+      g: Panel,
   ): Unit =
     paintPanel(a)
     paintPanel(b)
@@ -834,7 +845,13 @@ class Painter(
     paintPanel(f)
     paintPanel(g)
   inline def paint(
-      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
+      a: Panel,
+      b: Panel,
+      c: Panel,
+      d: Panel,
+      e: Panel,
+      f: Panel,
+      g: Panel,
       h: Panel,
   ): Unit =
     paintPanel(a)
@@ -846,8 +863,15 @@ class Painter(
     paintPanel(g)
     paintPanel(h)
   inline def paint(
-      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
-      h: Panel, i: Panel,
+      a: Panel,
+      b: Panel,
+      c: Panel,
+      d: Panel,
+      e: Panel,
+      f: Panel,
+      g: Panel,
+      h: Panel,
+      i: Panel,
   ): Unit =
     paintPanel(a)
     paintPanel(b)
@@ -859,8 +883,16 @@ class Painter(
     paintPanel(h)
     paintPanel(i)
   inline def paint(
-      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
-      h: Panel, i: Panel, j: Panel,
+      a: Panel,
+      b: Panel,
+      c: Panel,
+      d: Panel,
+      e: Panel,
+      f: Panel,
+      g: Panel,
+      h: Panel,
+      i: Panel,
+      j: Panel,
   ): Unit =
     paintPanel(a)
     paintPanel(b)
@@ -873,8 +905,17 @@ class Painter(
     paintPanel(i)
     paintPanel(j)
   inline def paint(
-      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
-      h: Panel, i: Panel, j: Panel, k: Panel,
+      a: Panel,
+      b: Panel,
+      c: Panel,
+      d: Panel,
+      e: Panel,
+      f: Panel,
+      g: Panel,
+      h: Panel,
+      i: Panel,
+      j: Panel,
+      k: Panel,
   ): Unit =
     paintPanel(a)
     paintPanel(b)
@@ -888,8 +929,18 @@ class Painter(
     paintPanel(j)
     paintPanel(k)
   inline def paint(
-      a: Panel, b: Panel, c: Panel, d: Panel, e: Panel, f: Panel, g: Panel,
-      h: Panel, i: Panel, j: Panel, k: Panel, l: Panel,
+      a: Panel,
+      b: Panel,
+      c: Panel,
+      d: Panel,
+      e: Panel,
+      f: Panel,
+      g: Panel,
+      h: Panel,
+      i: Panel,
+      j: Panel,
+      k: Panel,
+      l: Panel,
   ): Unit =
     paintPanel(a)
     paintPanel(b)
@@ -1475,5 +1526,4 @@ object Painter:
   def init(canvas: HTMLCanvasElement)(
       setup: Painter => Unit,
   ): js.Promise[Unit] =
-    init(canvas).map: painter =>
-      setup(painter)
+    init(canvas).map(setup)

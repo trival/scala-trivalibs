@@ -57,7 +57,12 @@ class Vec2(var x: Double = 0.0, var y: Double = 0.0)
 object Vec2 extends Vec2ImmutableOps[Vec2]:
   inline def create(x: Double, y: Double) = new Vec2(x, y)
   given Vec2ImmutableOps[Vec2] = Vec2
+
+  def apply(x: Double, y: Double): Vec2 = new Vec2(x, y)
+  def apply(scalar: Double): Vec2 = new Vec2(scalar, scalar)
+
   def zero: Vec2 = new Vec2(0.0, 0.0)
+  def one: Vec2 = new Vec2(1.0, 1.0)
   def X: Vec2 = new Vec2(1.0, 0.0)
   def Y: Vec2 = new Vec2(0.0, 1.0)
 
