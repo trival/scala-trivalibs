@@ -215,17 +215,17 @@ trait Bindable[U, P]:
       inline pair.value match
         case sampler: GPUSampler =>
           derive.checkSamplerFieldType[N, U]
-          val idx = shade.uniformIndices(pair.name)
+          val idx = shade.uniformIndices.at(pair.name)
           while bindings.length <= idx do bindings.push(null)
           bindings(idx) = sampler
         case bb: BufferBinding[?, ?] =>
           derive.checkUniformFieldType[N, V, U]
-          val idx = shade.uniformIndices(pair.name)
+          val idx = shade.uniformIndices.at(pair.name)
           while bindings.length <= idx do bindings.push(null)
           bindings(idx) = bb
         case rawValue =>
           derive.checkUniformFieldType[N, V, U]
-          val idx = shade.uniformIndices(pair.name)
+          val idx = shade.uniformIndices.at(pair.name)
           if idx < bindings.length && bindings(idx) != null then
             bindings(idx).asInstanceOf[BufferBinding[V, ?]].set(rawValue)
           else
@@ -237,11 +237,11 @@ trait Bindable[U, P]:
     else inline if derive.containsName[N, P] then
       inline pair.value match
         case pb: PanelBinding =>
-          val idx = shade.panelIndices(pair.name)
+          val idx = shade.panelIndices.at(pair.name)
           while panelBindings.length <= idx do panelBindings.push(null)
           panelBindings(idx) = pb
         case p: Panel =>
-          val idx = shade.panelIndices(pair.name)
+          val idx = shade.panelIndices.at(pair.name)
           while panelBindings.length <= idx do panelBindings.push(null)
           panelBindings(idx) = PanelBinding(p)
         case _ =>

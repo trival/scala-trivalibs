@@ -13,6 +13,6 @@ class Shade[U, P](
     val panelBindGroupLayout: Opt[GPUBindGroupLayout],
     val pipelineLayout: GPUPipelineLayout,
     val isLayer: Boolean,
-    val uniformIndices: js.Dictionary[Int],
-    val panelIndices: js.Dictionary[Int],
+    val uniformIndices: Dict[Int],
+    val panelIndices: Dict[Int],
 )

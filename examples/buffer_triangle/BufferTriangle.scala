@@ -11,6 +11,7 @@ import trivalibs.utils.numbers.NumExt.given
 import trivalibs.graphics.painter.*
 
 import scala.scalajs.js
+import scala.scalajs.js.JSNumberOps.*
 import scala.scalajs.js.annotation.*
 
 object BufferTriangle:
@@ -194,9 +195,12 @@ object BufferTriangle:
       if fpsElapsed >= 1000.0 then
         val fps = frameCount * 1000.0 / fpsElapsed
         val frameTime = fpsElapsed / frameCount
-        fpsEl.textContent = f"${fps}%.1f FPS (${frameTime}%.2f ms/frame)"
+        fpsEl.textContent =
+          s"${fps.toFixed(1)} FPS (${frameTime.toFixed(2)} ms/frame)"
         if time - lastFpsLog >= 1000.0 then
-          dom.console.log(f"${fps}%.1f FPS — ${frameTime}%.2f ms/frame")
+          dom.console.log(
+            s"${fps.toFixed(1)} FPS — ${frameTime.toFixed(2)} ms/frame",
+          )
           lastFpsLog = time
         frameCount = 0
         lastFpsTime = time

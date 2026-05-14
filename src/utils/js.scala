@@ -44,6 +44,19 @@ type Dict[A] = js.Dictionary[A]
 object Dict:
   inline def apply[A](): Dict[A] = js.Dictionary[A]()
 
+// Native dictionary access — `js.Dictionary`'s `apply` / `update` route
+// through `scala.scalajs.js.WrappedDictionary` (a Scala collection wrapper
+// that bloats the bundle). These compile to raw JS property access.
+extension [A](dict: Dict[A])
+  inline def at(key: String): A =
+    dict.asInstanceOf[js.Dynamic].selectDynamic(key).asInstanceOf[A]
+  inline def set(key: String, value: A): Unit =
+    dict.asInstanceOf[js.Dynamic].updateDynamic(key)(value.asInstanceOf[js.Any])
+  inline def has(key: String): Boolean =
+    js.DynamicImplicits.truthValue(
+      dict.asInstanceOf[js.Dynamic].hasOwnProperty(key),
+    )
+
 type Arr[A] = js.Array[A]
 
 object Arr:

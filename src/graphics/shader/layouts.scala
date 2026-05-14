@@ -86,7 +86,8 @@ object layouts:
     val stride = calculateStride(sizes)
 
     val attributes = Arr[js.Dynamic]()
-    for i <- 0 until formats.length do
+    var i = 0
+    while i < formats.length do
       attributes.push(
         Obj.literal(
           shaderLocation = i,
@@ -94,6 +95,7 @@ object layouts:
           format = formats(i)
         )
       )
+      i += 1
 
     Obj.literal(
       arrayStride = stride,

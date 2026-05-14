@@ -29,7 +29,7 @@ class Panel(val painter: Painter):
   var formats: Arr[String] = Arr()
   var shapes: Arr[AnyShape] = Arr()
   var layers: Arr[AnyLayer] = Arr()
-  var runtimeBindings: js.Dictionary[PanelBindingValue] = js.Dictionary()
+  var runtimeBindings: Dict[PanelBindingValue] = Dict[PanelBindingValue]()
 
   private var _textures: Arr[GPUTexture] = Arr()
   private var _textureViews: Arr[GPUTextureView] = Arr()
@@ -44,7 +44,7 @@ class Panel(val painter: Painter):
   private var _outputView: Opt[GPUTextureView] = null
   private var _width: Int = 0
   private var _height: Int = 0
-  private val _mipViews: js.Dictionary[GPUTextureView] = js.Dictionary()
+  private val _mipViews: Dict[GPUTextureView] = Dict[GPUTextureView]()
 
   def panelWidth: Int = _width
   def panelHeight: Int = _height
@@ -74,14 +74,12 @@ class Panel(val painter: Painter):
       if sv.notNull then sv.get else _textureViews(index)
     else
       val key = s"$index|$mipLevel"
-      val dict = _mipViews.asInstanceOf[js.Dynamic]
-      if js.DynamicImplicits.truthValue(dict.hasOwnProperty(key)) then
-        _mipViews(key)
+      if _mipViews.has(key) then _mipViews.at(key)
       else
         val view = _textures(index).createView(
           Obj.literal(baseMipLevel = mipLevel, mipLevelCount = 1),
         )
-        _mipViews(key) = view
+        _mipViews.set(key, view)
         view
 
   def renderViewAt(index: Int): GPUTextureView = _textureViews(index)
@@ -149,20 +147,19 @@ class Panel(val painter: Painter):
   ): Unit =
     inline pair.value match
       case sampler: GPUSampler =>
-        runtimeBindings(pair.name) = sampler
+        runtimeBindings.set(pair.name, sampler)
       case bb: BufferBinding[?, ?] =>
-        runtimeBindings(pair.name) = bb
+        runtimeBindings.set(pair.name, bb)
       case pb: PanelBinding =>
-        runtimeBindings(pair.name) = pb
+        runtimeBindings.set(pair.name, pb)
       case p: Panel =>
-        runtimeBindings(pair.name) = p
+        runtimeBindings.set(pair.name, p)
       case rawValue =>
-        val existing = runtimeBindings.asInstanceOf[js.Dynamic]
-        if js.DynamicImplicits.truthValue(
-            existing.hasOwnProperty(pair.name),
-          ) && runtimeBindings(pair.name).isInstanceOf[BufferBinding[?, ?]]
+        if runtimeBindings.has(pair.name)
+          && runtimeBindings.at(pair.name).isInstanceOf[BufferBinding[?, ?]]
         then
-          runtimeBindings(pair.name)
+          runtimeBindings
+            .at(pair.name)
             .asInstanceOf[BufferBinding[V, ?]]
             .set(rawValue)
         else
@@ -170,7 +167,7 @@ class Panel(val painter: Painter):
             case uv: UniformValue[V, f] =>
               val bb =
                 BufferBinding[V, f](painter.device, rawValue)(using uv)
-              runtimeBindings(pair.name) = bb
+              runtimeBindings.set(pair.name, bb)
 
   inline def bind[N1 <: String & Singleton, V1](
       e1: BindPair[N1, V1],

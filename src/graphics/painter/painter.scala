@@ -145,10 +145,13 @@ class Painter(
   ): Shade[U, EmptyTuple] =
     shadeFromWgsl[A, V, U, EmptyTuple](vertWgsl, fragWgsl, "")
 
-  private inline def buildIndices[T]: js.Dictionary[Int] =
+  private inline def buildIndices[T]: Dict[Int] =
     val names = derive.fieldNames[T]
-    val dict = js.Dictionary[Int]()
-    for i <- 0 until names.length do dict(names(i)) = i
+    val dict = Dict[Int]()
+    var i = 0
+    while i < names.length do
+      dict.asInstanceOf[js.Dynamic].updateDynamic(names(i))(i)
+      i += 1
     dict
 
   private inline def shadeFromWgsl[A, V, U, P](
@@ -992,13 +995,11 @@ class Painter(
       Obj.literal(magFilter = "linear", minFilter = "linear"),
     )
 
-  private val mipBlitPipelines: js.Dictionary[GPURenderPipeline] =
-    js.Dictionary()
+  private val mipBlitPipelines: Dict[GPURenderPipeline] =
+    Dict[GPURenderPipeline]()
 
   private def getMipBlitPipeline(format: String): GPURenderPipeline =
-    val dict = mipBlitPipelines.asInstanceOf[js.Dynamic]
-    if js.DynamicImplicits.truthValue(dict.hasOwnProperty(format)) then
-      mipBlitPipelines(format)
+    if mipBlitPipelines.has(format) then mipBlitPipelines.at(format)
     else
       val module = device.createShaderModule(Obj.literal(code = BLIT_WGSL))
       val pl = device.createPipelineLayout(
@@ -1016,7 +1017,7 @@ class Painter(
           primitive = Obj.literal(topology = "triangle-list"),
         ),
       )
-      mipBlitPipelines(format) = p
+      mipBlitPipelines.set(format, p)
       p
 
   private def generateMipmaps(panel: Panel): Unit =
@@ -1094,17 +1095,15 @@ class Painter(
     var i = 0
     while i < keys.length do
       val name = keys(i)
-      val value = dict(name)
-      val uniDyn = shade.uniformIndices.asInstanceOf[js.Dynamic]
-      val panDyn = shade.panelIndices.asInstanceOf[js.Dynamic]
-      if js.DynamicImplicits.truthValue(uniDyn.hasOwnProperty(name)) then
-        val idx = shade.uniformIndices(name)
+      val value = dict.at(name)
+      if shade.uniformIndices.has(name) then
+        val idx = shade.uniformIndices.at(name)
         if idx >= workBindings.length || workBindings(idx) == null then
           while workBindings.length <= idx do workBindings.push(null)
           workBindings(idx) =
             value.asInstanceOf[BufferBinding[?, ?] | GPUSampler]
-      else if js.DynamicImplicits.truthValue(panDyn.hasOwnProperty(name)) then
-        val idx = shade.panelIndices(name)
+      else if shade.panelIndices.has(name) then
+        val idx = shade.panelIndices.at(name)
         if idx >= workPanelBindings.length || workPanelBindings(idx).isNull then
           while workPanelBindings.length <= idx do workPanelBindings.push(null)
           val pb =
@@ -1359,10 +1358,7 @@ class Painter(
   ): GPURenderPipeline =
     val key =
       s"${shade.id}|${blendKeyStr(blendState)}|${formats.join(",")}|$depthTest|$multisample|${topology}|${cullMode}|${frontFace}"
-    if js.DynamicImplicits.truthValue(
-        pipelineCache.asInstanceOf[js.Dynamic].hasOwnProperty(key),
-      )
-    then pipelineCache(key)
+    if pipelineCache.has(key) then pipelineCache.at(key)
     else
       val targets = Arr[js.Dynamic]()
       var ti = 0
@@ -1408,7 +1404,7 @@ class Painter(
         )
       if multisample then desc.multisample = Obj.literal(count = 4)
       val p = device.createRenderPipeline(desc)
-      pipelineCache(key) = p
+      pipelineCache.set(key, p)
       p
 
   // =========================================================================

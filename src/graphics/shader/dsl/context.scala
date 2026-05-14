@@ -1,11 +1,10 @@
 package trivalibs.graphics.shader.dsl
 
 import trivalibs.graphics.math.gpu.*
-import trivalibs.utils.js.Dict
+import trivalibs.utils.js.*
 
 import scala.NamedTuple
 import scala.NamedTuple.AnyNamedTuple
-import scala.scalajs.js
 
 // ---------------------------------------------------------------------------
 // TypedPanelAccessor[P] — returns Texture2D for every panel field
@@ -67,11 +66,8 @@ class TypedLocalAccessor[F <: AnyNamedTuple](
   type Fields = F
 
   def selectDynamic(name: String): Any =
-    if js.DynamicImplicits.truthValue(
-        kinds.asInstanceOf[js.Dynamic].hasOwnProperty(name),
-      )
-    then
-      kinds(name) match
+    if kinds.has(name) then
+      kinds.at(name) match
         case "v" => VarExpr(name)
         case _   => ConstExpr(name)
     else LetExpr(name)
