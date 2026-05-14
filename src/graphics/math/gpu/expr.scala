@@ -1,0 +1,431 @@
+package trivalibs.graphics.math.gpu
+
+import scala.scalajs.js
+import trivalibs.utils.js.Arr
+
+// ---------------------------------------------------------------------------
+// Expression base class — wraps a WGSL string, toString = wgsl so string
+// interpolation works naturally.
+// ---------------------------------------------------------------------------
+
+class Expr(val wgsl: String):
+  override def toString: String = wgsl
+
+// ---------------------------------------------------------------------------
+// LetExpr — base class for local variable expressions.
+// Extends Expr so runtime values created by selectDynamic are compatible.
+// ---------------------------------------------------------------------------
+
+class LetExpr(val name: String) extends Expr(name):
+  def :=(value: Expr): Stmt = Stmt.let(name, value)
+
+class VarExpr(name: String) extends LetExpr(name):
+  private var declared = false
+  override def :=(value: Expr): Stmt =
+    if !declared then
+      declared = true
+      Stmt.varDecl(name, value)
+    else Stmt.varAssign(name, value)
+
+class ConstExpr(name: String) extends LetExpr(name):
+  override def :=(value: Expr): Stmt = Stmt.constDecl(name, value)
+
+// ---------------------------------------------------------------------------
+// All opaque types in one object so the compiler sees through them and can
+// validate bounds like `LocalVec2 <: Vec2Expr & LetExpr`.
+// Inside this object: Vec2Expr = Expr, and LetExpr <: Expr = Vec2Expr.
+// Outside: LocalVec2 <: Vec2Expr (gets all Vec2 ops) & LetExpr (gets :=).
+// ---------------------------------------------------------------------------
+
+object Expr:
+  def raw(s: String): Expr = new Expr(s)
+  def apply(s: String): Expr = new Expr(s)
+
+  opaque type FloatExpr <: Expr = Expr
+  object FloatExpr { def apply(s: String): FloatExpr = new Expr(s) }
+
+  opaque type Vec2Expr <: Expr = Expr
+  object Vec2Expr { def apply(s: String): Vec2Expr = new Expr(s) }
+
+  opaque type Vec3Expr <: Expr = Expr
+  object Vec3Expr { def apply(s: String): Vec3Expr = new Expr(s) }
+
+  opaque type Vec4Expr <: Expr = Expr
+  object Vec4Expr { def apply(s: String): Vec4Expr = new Expr(s) }
+
+  opaque type Mat2Expr <: Expr = Expr
+  object Mat2Expr { def apply(s: String): Mat2Expr = new Expr(s) }
+
+  opaque type Mat3Expr <: Expr = Expr
+  object Mat3Expr { def apply(s: String): Mat3Expr = new Expr(s) }
+
+  opaque type Mat4Expr <: Expr = Expr
+  object Mat4Expr { def apply(s: String): Mat4Expr = new Expr(s) }
+
+  opaque type BoolExpr <: Expr = Expr
+  object BoolExpr { def apply(s: String): BoolExpr = new Expr(s) }
+
+  // GPU resource expression types — opaque wrappers used in shader DSL
+  // for texture and sampler bindings. No CPU-side representation.
+
+  opaque type Texture2D <: Expr = Expr
+  object Texture2D { def apply(s: String): Texture2D = new Expr(s) }
+
+  opaque type Sampler <: Expr = Expr
+  object Sampler { def apply(s: String): Sampler = new Expr(s) }
+
+  // Local types — each <: its Expr type (for math ops) & LetExpr (for :=)
+  // At runtime all are LetExpr instances, so selectDynamic returning
+  // LetExpr(name) + asInstanceOf cast works safely.
+
+  opaque type LetFloat <: FloatExpr & LetExpr = LetExpr
+  object LetFloat { def apply(s: String): LetFloat = new LetExpr(s) }
+
+  opaque type LetVec2 <: Vec2Expr & LetExpr = LetExpr
+  object LetVec2 { def apply(s: String): LetVec2 = new LetExpr(s) }
+
+  opaque type LetVec3 <: Vec3Expr & LetExpr = LetExpr
+  object LetVec3 { def apply(s: String): LetVec3 = new LetExpr(s) }
+
+  opaque type LetVec4 <: Vec4Expr & LetExpr = LetExpr
+  object LetVec4 { def apply(s: String): LetVec4 = new LetExpr(s) }
+
+  opaque type LetMat2 <: Mat2Expr & LetExpr = LetExpr
+  object LetMat2 { def apply(s: String): LetMat2 = new LetExpr(s) }
+
+  opaque type LetMat3 <: Mat3Expr & LetExpr = LetExpr
+  object LetMat3 { def apply(s: String): LetMat3 = new LetExpr(s) }
+
+  opaque type LetMat4 <: Mat4Expr & LetExpr = LetExpr
+  object LetMat4 { def apply(s: String): LetMat4 = new LetExpr(s) }
+
+  opaque type LetBool <: BoolExpr & LetExpr = LetExpr
+  object LetBool { def apply(s: String): LetBool = new LetExpr(s) }
+
+  // Var types — mutable locals (var on first :=, reassignment after)
+  opaque type VarFloat <: FloatExpr & VarExpr = VarExpr
+  object VarFloat { def apply(s: String): VarFloat = new VarExpr(s) }
+
+  opaque type VarVec2 <: Vec2Expr & VarExpr = VarExpr
+  object VarVec2 { def apply(s: String): VarVec2 = new VarExpr(s) }
+
+  opaque type VarVec3 <: Vec3Expr & VarExpr = VarExpr
+  object VarVec3 { def apply(s: String): VarVec3 = new VarExpr(s) }
+
+  opaque type VarVec4 <: Vec4Expr & VarExpr = VarExpr
+  object VarVec4 { def apply(s: String): VarVec4 = new VarExpr(s) }
+
+  // Const types — WGSL compile-time constants
+  opaque type ConstFloat <: FloatExpr & ConstExpr = ConstExpr
+  object ConstFloat { def apply(s: String): ConstFloat = new ConstExpr(s) }
+
+  opaque type ConstVec2 <: Vec2Expr & ConstExpr = ConstExpr
+  object ConstVec2 { def apply(s: String): ConstVec2 = new ConstExpr(s) }
+
+  opaque type ConstVec3 <: Vec3Expr & ConstExpr = ConstExpr
+  object ConstVec3 { def apply(s: String): ConstVec3 = new ConstExpr(s) }
+
+  opaque type ConstVec4 <: Vec4Expr & ConstExpr = ConstExpr
+  object ConstVec4 { def apply(s: String): ConstVec4 = new ConstExpr(s) }
+
+  // ---------------------------------------------------------------------------
+  // Integer scalar expression types
+  // ---------------------------------------------------------------------------
+
+  opaque type IntExpr <: Expr = Expr
+  object IntExpr:
+    def apply(s: String): IntExpr = new Expr(s)
+    def apply(v: Int): IntExpr = new Expr(v.toString)
+
+  opaque type UIntExpr <: Expr = Expr
+  object UIntExpr:
+    def apply(s: String): UIntExpr = new Expr(s)
+    def apply(v: Int): UIntExpr = new Expr(s"${v}u")
+
+  // ---------------------------------------------------------------------------
+  // Integer vector expression types (GPU-only phantoms)
+  // ---------------------------------------------------------------------------
+
+  opaque type IVec2Expr <: Expr = Expr
+  object IVec2Expr { def apply(s: String): IVec2Expr = new Expr(s) }
+
+  opaque type IVec3Expr <: Expr = Expr
+  object IVec3Expr { def apply(s: String): IVec3Expr = new Expr(s) }
+
+  opaque type IVec4Expr <: Expr = Expr
+  object IVec4Expr { def apply(s: String): IVec4Expr = new Expr(s) }
+
+  opaque type UVec2Expr <: Expr = Expr
+  object UVec2Expr { def apply(s: String): UVec2Expr = new Expr(s) }
+
+  opaque type UVec3Expr <: Expr = Expr
+  object UVec3Expr { def apply(s: String): UVec3Expr = new Expr(s) }
+
+  opaque type UVec4Expr <: Expr = Expr
+  object UVec4Expr { def apply(s: String): UVec4Expr = new Expr(s) }
+
+  // ---------------------------------------------------------------------------
+  // Let/Var/Const variants for integer scalar types
+  // ---------------------------------------------------------------------------
+
+  opaque type LetInt <: IntExpr & LetExpr = LetExpr
+  object LetInt { def apply(s: String): LetInt = new LetExpr(s) }
+
+  opaque type VarInt <: IntExpr & VarExpr = VarExpr
+  object VarInt { def apply(s: String): VarInt = new VarExpr(s) }
+
+  opaque type ConstInt <: IntExpr & ConstExpr = ConstExpr
+  object ConstInt { def apply(s: String): ConstInt = new ConstExpr(s) }
+
+  opaque type LetUInt <: UIntExpr & LetExpr = LetExpr
+  object LetUInt { def apply(s: String): LetUInt = new LetExpr(s) }
+
+  opaque type VarUInt <: UIntExpr & VarExpr = VarExpr
+  object VarUInt { def apply(s: String): VarUInt = new VarExpr(s) }
+
+  opaque type ConstUInt <: UIntExpr & ConstExpr = ConstExpr
+  object ConstUInt { def apply(s: String): ConstUInt = new ConstExpr(s) }
+
+  // ---------------------------------------------------------------------------
+  // Let variants for integer vector types (Var/Const added as needed)
+  // ---------------------------------------------------------------------------
+
+  opaque type LetIVec2 <: IVec2Expr & LetExpr = LetExpr
+  object LetIVec2 { def apply(s: String): LetIVec2 = new LetExpr(s) }
+
+  opaque type LetIVec3 <: IVec3Expr & LetExpr = LetExpr
+  object LetIVec3 { def apply(s: String): LetIVec3 = new LetExpr(s) }
+
+  opaque type LetIVec4 <: IVec4Expr & LetExpr = LetExpr
+  object LetIVec4 { def apply(s: String): LetIVec4 = new LetExpr(s) }
+
+  opaque type LetUVec2 <: UVec2Expr & LetExpr = LetExpr
+  object LetUVec2 { def apply(s: String): LetUVec2 = new LetExpr(s) }
+
+  opaque type LetUVec3 <: UVec3Expr & LetExpr = LetExpr
+  object LetUVec3 { def apply(s: String): LetUVec3 = new LetExpr(s) }
+
+  opaque type LetUVec4 <: UVec4Expr & LetExpr = LetExpr
+  object LetUVec4 { def apply(s: String): LetUVec4 = new LetExpr(s) }
+
+extension (tex: Expr.Texture2D)
+  def sample(uv: Expr.Vec2Expr, sampler: Expr.Sampler): Expr.Vec4Expr =
+    Expr.Vec4Expr(s"textureSample(${tex.wgsl}, ${sampler.wgsl}, ${uv.wgsl})")
+  def apply(uv: Expr.Vec2Expr, sampler: Expr.Sampler): Expr.Vec4Expr =
+    Expr.Vec4Expr(s"textureSample(${tex.wgsl}, ${sampler.wgsl}, ${uv.wgsl})")
+  def sampleLevel(
+      uv: Expr.Vec2Expr,
+      sampler: Expr.Sampler,
+      level: Expr.FloatExpr,
+  ): Expr.Vec4Expr =
+    Expr.Vec4Expr(
+      s"textureSampleLevel(${tex.wgsl}, ${sampler.wgsl}, ${uv.wgsl}, ${level.wgsl})",
+    )
+  def numLevels: Expr.FloatExpr =
+    Expr.FloatExpr(s"f32(textureNumLevels(${tex.wgsl}))")
+
+export Expr.{
+  FloatExpr,
+  Vec2Expr,
+  Vec3Expr,
+  Vec4Expr,
+  Mat2Expr,
+  Mat3Expr,
+  Mat4Expr,
+  BoolExpr,
+  Texture2D,
+  Sampler,
+  IntExpr,
+  UIntExpr,
+  IVec2Expr,
+  IVec3Expr,
+  IVec4Expr,
+  UVec2Expr,
+  UVec3Expr,
+  UVec4Expr,
+  LetFloat,
+  LetVec2,
+  LetVec3,
+  LetVec4,
+  LetMat2,
+  LetMat3,
+  LetMat4,
+  LetBool,
+  VarFloat,
+  VarVec2,
+  VarVec3,
+  VarVec4,
+  ConstFloat,
+  ConstVec2,
+  ConstVec3,
+  ConstVec4,
+  LetInt,
+  VarInt,
+  ConstInt,
+  LetUInt,
+  VarUInt,
+  ConstUInt,
+  LetIVec2,
+  LetIVec3,
+  LetIVec4,
+  LetUVec2,
+  LetUVec3,
+  LetUVec4,
+}
+
+// ---------------------------------------------------------------------------
+// Stmt and Block opaque types
+// ---------------------------------------------------------------------------
+
+opaque type Stmt = String
+opaque type Block = String
+
+object Stmt:
+  inline def assign(target: String, value: Expr): Stmt =
+    s"  $target = ${value.wgsl};"
+  inline def let(name: String, value: Expr): Stmt =
+    s"  let $name = ${value.wgsl};"
+  inline def constDecl(name: String, value: Expr): Stmt =
+    s"  const $name = ${value.wgsl};"
+  inline def varDecl(name: String, value: Expr): Stmt =
+    s"  var $name = ${value.wgsl};"
+  inline def varDeclTyped(name: String, wgslType: String, value: Expr): Stmt =
+    s"  var $name: $wgslType = ${value.wgsl};"
+  inline def varAssign(name: String, value: Expr): Stmt =
+    s"  $name = ${value.wgsl};"
+  inline def raw(s: String): Stmt = s
+
+  def ifBlock(cond: BoolExpr, body: Block): Stmt =
+    s"  if (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
+  def ifElseBlock(cond: BoolExpr, thenBody: Block, elseBody: Block): Stmt =
+    s"  if (${cond.wgsl}) {\n${indentBlock(thenBody)}\n  } else {\n${indentBlock(elseBody)}\n  }"
+
+given Conversion[Stmt, Block] = s => s
+
+object Block:
+  def apply(stmts: Stmt*): Block = stmts.mkString("\n")
+  def empty: Block = ""
+  def unwrap(b: Block): String = b.asInstanceOf[String]
+
+// ---------------------------------------------------------------------------
+// Control flow — if / if-else statement constructors and helpers.
+// Re-indents nested blocks by adding two spaces to every line, so nesting
+// works recursively without explicit indentation tracking.
+// ---------------------------------------------------------------------------
+
+private def indentBlock(body: Block): String =
+  val lines = Block.unwrap(body).asInstanceOf[js.Dynamic].split("\n")
+    .asInstanceOf[js.Array[String]]
+  val out = Arr[String]()
+  var i = 0
+  while i < lines.length do
+    out.push("  " + lines(i))
+    i += 1
+  out.join("\n")
+
+/** Branchless conditional. WGSL signature:
+  * `select(falseValue, trueValue, cond)`.
+  */
+def select[T <: Expr](onFalse: T, onTrue: T, cond: BoolExpr): T =
+  Expr
+    .raw(s"select(${onFalse.wgsl}, ${onTrue.wgsl}, ${cond.wgsl})")
+    .asInstanceOf[T]
+
+/** Single-branch `if (cond) { ... }`. */
+def when(cond: BoolExpr, body: Block): Stmt = Stmt.ifBlock(cond, body)
+
+/** Two-branch `if (cond) { ... } else { ... }`. */
+def ifElse(cond: BoolExpr, thenBody: Block, elseBody: Block): Stmt =
+  Stmt.ifElseBlock(cond, thenBody, elseBody)
+
+/** Multi-branch `if / else if / ... [/ else]` chain. Start with `ifChain`,
+  * append `.elseIf(...)` for each additional branch, terminate with
+  * `.orElse(...)` for a final else, or use the chain directly as a `Stmt`
+  * for an open-ended chain.
+  */
+opaque type IfChain = String
+
+def ifChain(cond: BoolExpr, body: Block): IfChain =
+  s"  if (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
+
+extension (chain: IfChain)
+  def elseIf(cond: BoolExpr, body: Block): IfChain =
+    s"$chain else if (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
+  def elseDo(body: Block): Stmt =
+    s"$chain else {\n${indentBlock(body)}\n  }"
+
+given Conversion[IfChain, Stmt] = c => c
+given Conversion[IfChain, Block] = c => c
+
+extension (cond: BoolExpr)
+  /** Branchless conditional: `cond.select(onTrue, onFalse)`. */
+  @annotation.targetName("boolSelect")
+  def select[T <: Expr](onTrue: T, onFalse: T): T =
+    Expr
+      .raw(s"select(${onFalse.wgsl}, ${onTrue.wgsl}, ${cond.wgsl})")
+      .asInstanceOf[T]
+
+  /** `cond.thenDo(body)` — single-branch `if`. */
+  def thenDo(body: Block): Stmt = Stmt.ifBlock(cond, body)
+
+  /** `cond.thenElse(thenBody, elseBody)` — `if`/`else` chain. */
+  def thenElse(thenBody: Block, elseBody: Block): Stmt =
+    Stmt.ifElseBlock(cond, thenBody, elseBody)
+
+  @annotation.targetName("boolAnd")
+  def &&(other: BoolExpr): BoolExpr =
+    BoolExpr(s"(${cond.wgsl} && ${other.wgsl})")
+  @annotation.targetName("boolOr")
+  def ||(other: BoolExpr): BoolExpr =
+    BoolExpr(s"(${cond.wgsl} || ${other.wgsl})")
+  @annotation.targetName("boolNot")
+  def unary_! : BoolExpr = BoolExpr(s"!(${cond.wgsl})")
+
+// ---------------------------------------------------------------------------
+// Numeric comparison operators (return BoolExpr).
+// Symbolic comparisons live here together because Scala 3 disallows
+// overloaded top-level methods spread across files. Numeric step-based
+// helpers .gt/.lt/.gte/.lte stay with their respective numeric files.
+// ---------------------------------------------------------------------------
+
+extension (a: FloatExpr)
+  @annotation.targetName("floatLt")
+  def <(b: FloatExpr): BoolExpr = BoolExpr(s"(${a.wgsl} < ${b.wgsl})")
+  @annotation.targetName("floatLte")
+  def <=(b: FloatExpr): BoolExpr = BoolExpr(s"(${a.wgsl} <= ${b.wgsl})")
+  @annotation.targetName("floatGt")
+  def >(b: FloatExpr): BoolExpr = BoolExpr(s"(${a.wgsl} > ${b.wgsl})")
+  @annotation.targetName("floatGte")
+  def >=(b: FloatExpr): BoolExpr = BoolExpr(s"(${a.wgsl} >= ${b.wgsl})")
+  @annotation.targetName("floatEq")
+  def ===(b: FloatExpr): BoolExpr = BoolExpr(s"(${a.wgsl} == ${b.wgsl})")
+  @annotation.targetName("floatNe")
+  def !==(b: FloatExpr): BoolExpr = BoolExpr(s"(${a.wgsl} != ${b.wgsl})")
+
+extension (a: IntExpr)
+  @annotation.targetName("intLt")
+  def <(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} < ${b.wgsl})")
+  @annotation.targetName("intLte")
+  def <=(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} <= ${b.wgsl})")
+  @annotation.targetName("intGt")
+  def >(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} > ${b.wgsl})")
+  @annotation.targetName("intGte")
+  def >=(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} >= ${b.wgsl})")
+  @annotation.targetName("intEq")
+  def ===(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} == ${b.wgsl})")
+  @annotation.targetName("intNe")
+  def !==(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} != ${b.wgsl})")
+
+extension (a: UIntExpr)
+  @annotation.targetName("uintLt")
+  def <(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} < ${b.wgsl})")
+  @annotation.targetName("uintLte")
+  def <=(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} <= ${b.wgsl})")
+  @annotation.targetName("uintGt")
+  def >(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} > ${b.wgsl})")
+  @annotation.targetName("uintGte")
+  def >=(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} >= ${b.wgsl})")
+  @annotation.targetName("uintEq")
+  def ===(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} == ${b.wgsl})")
+  @annotation.targetName("uintNe")
+  def !==(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} != ${b.wgsl})")

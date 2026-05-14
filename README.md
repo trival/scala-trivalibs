@@ -1,67 +1,184 @@
 # Scala trivalibs
 
-A collection of libraries for web and graphics programming in Scala.js.
+A collection of libraries for **interactive graphics on the web**, written in
+Scala.js.
 
-Important: This is a very imperative style library targeting and using
-JavaScript APIs directly. We avoid using functional programming patterns and the
-Scala standard library as much as possible to minimize overhead and maximize
-performance.
+> **Beta** — the API is converging toward stabilization. The two halves of the
+> library, the **Painter** (GPU rendering) and the **Preact bindings**
+> (interactive DOM), are now roughly aligned and being polished together.
 
-We use Scala 3 because of its string metaprogramming and contextual abstraction
-features. We use its superb ability to create great tailored DSLs, while being
-able to write low-level code with minimal overhead.
+## Goal
 
-As data structures we use only JS objects, arrays, TypedArrays and js.UndefOr.
-We use Promises directly for async code instead of Scala's Future.
+One coherent, type-safe toolkit for building interactive graphics web apps in
+Scala.js: write your GPU rendering and your UI in the same language, with the
+same value types flowing between them. The long-term vision is a unified CPU/GPU
+programming model — Scala types and math working identically on both sides,
+replacing WGSL strings with a Scala shader DSL — wrapped in a reactive DOM layer
+so the rendered canvas and the UI around it are one app, not two.
 
-But we provide type-safe APIs on top of them, so you can write code in a more
-Scala-like way, using for comprehensions and concise syntax, without having to
-deal with the low-level details of JavaScript interop.
+## Philosophy
+
+This is a deliberately **imperative** library. It targets JavaScript APIs
+directly and avoids functional-programming patterns and the Scala standard
+library to keep runtime overhead and bundle size minimal. Data structures are JS
+objects, arrays, TypedArrays and `js.UndefOr`; async is plain Promises.
+
+Scala 3 earns its place through metaprogramming and contextual abstraction: we
+use it to build tailored, type-safe DSLs on top of the raw JS interop, so user
+code reads like ordinary Scala while compiling down to lean native JS.
+
+## The two halves
+
+### Painter — typed GPU rendering
+
+The Painter wraps WebGPU behind a typed API. Vertex attributes, varyings and
+uniforms are described as **named tuples**; the field names and types drive
+compile-time WGSL struct generation and WebGPU layout derivation. Shader bodies
+can be raw WGSL or written in the Scala shader DSL.
+
+```scala
+import trivalibs.graphics.buffers.*
+import trivalibs.graphics.math.cpu.{*, given}
+import trivalibs.graphics.painter.*
+import trivalibs.graphics.shader.dsl.{*, given}
+import trivalibs.graphics.shader.{*, given}
+import trivalibs.utils.animation.animate
+
+Painter.init(canvas): painter =>
+  type Attribs  = (position: Vec2, color: Vec3)
+  type Varyings = (color: Vec3)
+  type Uniforms = (
+      tintColor:   FragmentUniform[Vec3],
+      translation: VertexUniform[Vec2],
+  )
+
+  val shade = painter.shade[Attribs, Varyings, Uniforms]: program =>
+    program.vert: ctx =>
+      val pos = LetVec2("pos")
+      Block(
+        pos              := ctx.in.position + ctx.bindings.translation,
+        ctx.out.position := vec4(pos, 0.0, 1.0),
+        ctx.out.color    := ctx.in.color,
+      )
+    program.frag: ctx =>
+      ctx.out.color := vec4(ctx.in.color * ctx.bindings.tintColor, 1.0)
+
+  val vertices = allocateAttribs[Attribs](3)
+  vertices(0).set0(0.0, 0.3)
+  vertices(0).set1(1.0, 0.2, 0.2)
+  // ...
+
+  val form  = painter.form(vertices = vertices)
+  val shape = painter.shape(form, shade).bind("translation" := Vec2(0.0, 0.55))
+  val panel = painter.panel(clearColor = (0.08, 0.08, 0.12, 1.0), shapes = Arr(shape))
+
+  animate: tpf =>
+    shape.bind("tintColor" := Vec3(/* ... */))
+    painter.paint(panel)
+    painter.show(panel)
+```
+
+`Form` (geometry) + `Shade` (pipeline) compose into a `Shape`; shapes group into
+a `Panel`; `paint` renders, `show` presents. Bindings are typed by uniform name.
+See `examples/painter_triangle`, `examples/panel_triangle`, `examples/blur`,
+`examples/deferred` for the full range.
+
+### Preact bindings — reactive interactive DOM
+
+The Preact bindings provide a type-safe HTML DSL, signal-based reactivity
+(`Var`), and a `component` macro that derives a strongly typed modifier API from
+a `Props` type. This is the layer that wraps and drives the graphics canvases —
+UI controls, overlays, layout — so the interactive surface around the rendered
+output is built with the same language and value types.
+
+```scala
+import trivalibs.preact.html.HtmlTags.*
+import trivalibs.preact.component.*
+import trivalibs.preact.signals.Var
+
+trait CounterProps extends Props:
+  val key: Maybe[String]
+
+val Counter = component[CounterProps]: _ =>
+  val count = Var(0)
+  div(
+    button("onClick" := (() => count(count() + 1)), "increment"),
+    span(s"count: ${count()}"),
+  )
+
+// Usage: Counter() — modifier types are derived from CounterProps
+```
+
+`Var(initial)` creates a reactive variable; `v()` reads, `v(x)` / `v(f)` write.
+Signals automatically pick global vs. component context at runtime.
+
+## Contents
+
+- **graphics/** — the GPU rendering stack
+  - `math/` — Vec2–4, Mat2–4 (mutable / immutable / buffer representations)
+  - `shader/` — `ShaderDef`, WGSL generation, the Scala shader DSL, `shader/lib/`
+    function libraries (noise, color, blur, hashing, coords)
+  - `buffers/` — `BufferBinding`, typed vertex attributes
+  - `geometry/` — mesh, plane, grid, polygon, shape geometry
+  - `scene/` — transform, camera, scene graph
+  - `painter/` — the Painter abstraction + the painter-internal WebGPU facades
+- **preact/** — type-safe Preact bindings: HTML DSL, signals, `component` macro
+- **utils/** — `bufferdata.scala` (zero-cost typed binary buffers),
+  `numbers.scala` (numeric extensions), `js.scala` (JS interop helpers),
+  `animate.scala` (`requestAnimationFrame` lifecycle)
+- **examples/** — one runnable example per feature; idiomatic-usage docs that
+  ship with the library
 
 ## Usage
 
-This library is meant to be included as source code via git submodule:
+Include as source via git submodule:
 
 ```bash
 git submodule add <repo-url> trivalibs
 ```
 
-In your project's `project.scala`:
+In the consumer's `project.scala`:
 
 ```scala
+//> using exclude trivalibs/project.scala
 //> using exclude trivalibs/test/**
+//> using exclude trivalibs/examples/**
 //> using dep org.scala-js::scalajs-dom::2.8.1
 ```
 
-Or if you prefer explicit inclusion:
+Or with explicit inclusion instead of the exclude trick:
 
 ```scala
 //> using file trivalibs/src
 //> using dep org.scala-js::scalajs-dom::2.8.1
 ```
 
-## Contents
-
-- **preact/** - Type-safe Preact bindings with signals and HTML DSL
-- **utils/** - Utility libraries
-  - `bufferdata.scala` - Zero-cost typed binary data structures
-  - `numbers.scala` - Numeric extension methods
-  - `js.scala` - JavaScript interop helpers
-
 ## Development
+
+trivalibs can be opened directly as its own workspace — `project.scala` at the
+root is the single scala-cli config for lib + tests + examples.
 
 ### Prerequisites
 
-- [scala-cli](https://scala-cli.virtuslab.org/) installed
+- [scala-cli](https://scala-cli.virtuslab.org/)
+- [Bun](https://bun.sh) (for the examples dev server)
+- a WebGPU-capable browser
 
-### Running Tests
+### Scripts
 
 ```bash
-cd test
-scala-cli test .
+bun run check            # type-check the library in isolation
+bun run test             # run all tests
+bun run examples:build   # build all examples → examples/out/
+bun run examples:watch   # incremental examples build with file watching
+bun run examples:dev     # static dev server for the examples
+bun run publish:local    # publish a Scala artifact to ~/.ivy2/local
 ```
+
+Run `examples:watch` and `examples:dev` side-by-side to iterate on the library
+and its examples together.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file
 for details.
