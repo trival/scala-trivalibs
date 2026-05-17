@@ -1,0 +1,5607 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: **/*.rs, **/*.toml, **/*.wgsl, **/*.glsl
+- Files matching these patterns are excluded: trivalibs/**, run-watch/**
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.cargo/
+  config.toml
+shared/
+  src/
+    plate_geometry/
+      mod.rs
+    lib.rs
+  Cargo.toml
+shared-nostd/
+  src/
+    lib.rs
+    shapes.rs
+  Cargo.toml
+sketches/
+  rooms/
+    base/
+      shader/
+        src/
+          lib.rs
+        Cargo.toml
+      src/
+        main.rs
+      Cargo.toml
+    columns/
+      shader/
+        src/
+          lib.rs
+        Cargo.toml
+      src/
+        main.rs
+      Cargo.toml
+    grid_ceiling/
+      shader/
+        src/
+          lib.rs
+        Cargo.toml
+      src/
+        geom.rs
+        main.rs
+      Cargo.toml
+  strokes/
+    1/
+      old_code/
+        tile-fields/
+          crate/
+            src/
+              geom.rs
+              lib.rs
+              painting.rs
+              utils.rs
+            Cargo.toml
+      shader/
+        src/
+          lib.rs
+        Cargo.toml
+      src/
+        main.rs
+        painting.rs
+      Cargo.toml
+  template/
+    shader/
+      src/
+        lib.rs
+      Cargo.toml
+    src/
+      main.rs
+    Cargo.toml
+  tests/
+    ball/
+      shader/
+        src/
+          lib.rs
+        Cargo.toml
+      src/
+        geom.rs
+        main.rs
+      Cargo.toml
+    bloom/
+      shader/
+        src/
+          lib.rs
+        Cargo.toml
+      src/
+        main.rs
+      Cargo.toml
+    tex_layer/
+      shader/
+        src/
+          lib.rs
+        Cargo.toml
+      src/
+        main.rs
+      Cargo.toml
+  textures/
+    lines/
+      shader/
+        src/
+          shaders/
+            lines_1.rs
+            mod.rs
+          lib.rs
+        Cargo.toml
+      src/
+        main.rs
+      Cargo.toml
+    sketches/
+      shader/
+        src/
+          shaders/
+            mod.rs
+            moving_plates.rs
+            pool_tiles.rs
+          lib.rs
+        Cargo.toml
+      src/
+        main.rs
+      Cargo.toml
+    tests/
+      shader/
+        src/
+          book_of_shaders/
+            circle.rs
+            circles.rs
+            colors.rs
+            mod.rs
+            rect.rs
+            rounded_rect.rs
+            shaping_fns.rs
+          shaders/
+            circular_line.rs
+            fbm.rs
+            mod.rs
+            net.rs
+            noisy_line.rs
+            noisy_lines_1.rs
+            noisy_squares.rs
+            simplex_prefilled.rs
+            tiled_lines.rs
+          lib.rs
+          utils.rs
+        Cargo.toml
+      src/
+        main.rs
+      Cargo.toml
+Cargo.toml
+rust-toolchain.toml
+rustfmt.toml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="rustfmt.toml">
+hard_tabs = true
+tab_spaces = 2
+</file>
+
+<file path=".cargo/config.toml">
+[alias]
+dev = "run -p run-watch --"
+</file>
+
+<file path="shared/src/plate_geometry/mod.rs">
+
+</file>
+
+<file path="sketches/rooms/columns/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{Mat3A, Mat4, Vec2, Vec3, Vec4, vec3};
+use spirv_std::spirv;
+use trivalibs_nostd::vec_ext::VecExt;
+
+#[spirv(vertex)]
+pub fn ground_vert(
+	position: Vec3,
+	uv: Vec2,
+	normal: Vec3,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] m_mat: &Mat4,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] n_mat: &Mat3A,
+	#[spirv(uniform, descriptor_set = 0, binding = 2)] vp_mat: &Mat4,
+	#[spirv(position)] out_pos: &mut Vec4,
+	out_norm: &mut Vec3,
+	out_uv: &mut Vec2,
+) {
+	*out_pos = *vp_mat * *m_mat * position.extend(1.0);
+	*out_norm = *n_mat * normal;
+	*out_uv = uv;
+}
+
+#[spirv(fragment)]
+pub fn ground_frag(in_norm: Vec3, in_uv: Vec2, out: &mut Vec4) {
+	let uv = in_uv * 40.0;
+	let uv = uv.fract();
+
+	let col = if uv.x < 0.2 || uv.y < 0.2 {
+		in_norm.fit1101()
+	} else {
+		vec3(in_uv.x, in_uv.y, 0.5)
+	};
+
+	*out = col.powf(2.2).extend(1.0);
+}
+</file>
+
+<file path="sketches/rooms/columns/Cargo.toml">
+[package]
+name = "columns"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+bytemuck.workspace = true
+</file>
+
+<file path="sketches/rooms/grid_ceiling/shader/Cargo.toml">
+[package]
+name = "grid_ceiling_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# Dependencies for CPU and GPU code
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+</file>
+
+<file path="sketches/rooms/grid_ceiling/src/geom.rs">
+use trivalibs::{
+	prelude::*,
+	rendering::{
+		BufferedGeometry,
+		mesh_geometry::{
+			MeshBufferType, MeshGeometry, face_normal, face_props,
+			utils::{Vert3dUv, vert_pos_uv},
+		},
+		shapes::{cuboid::Cuboid, quad::Quad3D},
+	},
+};
+
+pub fn create_plane(width: f32, height: f32, normal: Vec3, center: Vec3) -> BufferedGeometry {
+	let plane: Quad3D<Vert3dUv> =
+		Quad3D::from_dimensions_center_f(width, height, normal, center, vert_pos_uv).into();
+
+	let mut geom = MeshGeometry::new();
+	geom.add_face_data(&plane.to_ccw_verts(), face_normal(plane.normal));
+
+	geom.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal)
+}
+
+pub struct GridProps {
+	pub grid_width: f32,
+	pub grid_height: f32,
+	pub count: usize,
+	pub strip_width: f32,
+	pub strip_height: f32,
+	pub center: Vec3,
+}
+
+pub struct GridData {
+	pub form: BufferedGeometry,
+	pub texture_size: (f32, f32),
+}
+
+pub fn create_grid_rows_form(props: GridProps) -> GridData {
+	let mut geom = MeshGeometry::new();
+
+	let step = props.grid_height / props.count as f32;
+
+	let h_half = props.grid_height / 2.0 - step;
+
+	let count = props.count - 1;
+	let v_full = count as f32 * (props.strip_height * 2.0 + props.strip_width);
+	let v_height = props.strip_height / v_full;
+	let v_bottom = props.strip_width / v_full;
+
+	let start_pos = props.center - vec3(0., 0., h_half);
+	let mut v_start = 0.;
+
+	for i in 0..count {
+		let bbox = Cuboid::box_at(
+			start_pos + i as f32 * vec3(0., 0., step),
+			props.grid_width,
+			props.strip_height,
+			props.strip_width,
+		);
+
+		let front =
+			bbox.front_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.x, uvw.y * v_height + v_start)));
+		geom.add_face_data(&front.to_ccw_verts(), face_props(front.normal, 0));
+		v_start += v_height;
+
+		let back =
+			bbox.back_face_f(|pos, uvw| vert_pos_uv(pos, vec2(1.0 - uvw.x, uvw.y * v_height + v_start)));
+		geom.add_face_data(&back.to_ccw_verts(), face_props(back.normal, 1));
+		v_start += v_height;
+
+		let bottom =
+			bbox.bottom_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.x, uvw.z * v_bottom + v_start)));
+		geom.add_face_data(&bottom.to_ccw_verts(), face_props(bottom.normal, 2));
+		v_start += v_bottom;
+	}
+
+	GridData {
+		form: geom.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal),
+		texture_size: (props.grid_width, v_full),
+	}
+}
+
+pub fn create_grid_columns_form(props: GridProps) -> GridData {
+	let mut geom = MeshGeometry::new();
+
+	let step = props.grid_width / props.count as f32;
+
+	let w_half = props.grid_width / 2.0 - step;
+
+	let count = props.count - 1;
+	let v_full = count as f32 * (props.strip_height * 2.0 + props.strip_width);
+	let v_height = props.strip_height / v_full;
+	let v_bottom = props.strip_width / v_full;
+
+	let start_pos = props.center - vec3(w_half, 0., 0.);
+	let mut v_start = 0.;
+
+	for i in 0..count {
+		let bbox = Cuboid::box_at(
+			start_pos + i as f32 * vec3(step, 0., 0.),
+			props.strip_width,
+			props.strip_height,
+			props.grid_height,
+		);
+
+		let left =
+			bbox.left_face_f(|pos, uvw| vert_pos_uv(pos, vec2(1.0 - uvw.z, uvw.y * v_height + v_start)));
+		geom.add_face_data(&left.to_ccw_verts(), face_props(left.normal, 0));
+		v_start += v_height;
+
+		let right =
+			bbox.right_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.z, uvw.y * v_height + v_start)));
+		geom.add_face_data(&right.to_ccw_verts(), face_props(right.normal, 1));
+		v_start += v_height;
+
+		let bottom =
+			bbox.bottom_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.z, uvw.x * v_bottom + v_start)));
+		geom.add_face_data(&bottom.to_ccw_verts(), face_props(bottom.normal, 2));
+		v_start += v_bottom;
+	}
+
+	GridData {
+		form: geom.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal),
+		texture_size: (props.grid_height, v_full),
+	}
+}
+</file>
+
+<file path="sketches/rooms/grid_ceiling/Cargo.toml">
+[package]
+name = "grid_ceiling"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+bytemuck.workspace = true
+</file>
+
+<file path="sketches/strokes/1/old_code/tile-fields/crate/src/lib.rs">
+use geom::{create_ground, create_wall};
+use painting::{
+	Painting, TileData, create_painting, get_painting_animated_layer, get_painting_static_layer,
+};
+use serde::Serialize;
+use std::f32::consts::PI;
+use std::vec;
+use tvs_libs::rendering::buffered_geometry::BufferedGeometry;
+use tvs_libs::rendering::camera::{CamProps, PerspectiveCamera};
+use tvs_libs::utils::rand_utils::rand_int;
+use tvs_libs::{prelude::*, setup_camera_interactions};
+use wasm_bindgen::prelude::*;
+
+pub mod geom;
+pub mod painting;
+pub mod utils;
+
+#[derive(AppState, Default)]
+struct State {
+	paintings: Vec<Painting>,
+	camera: PerspectiveCamera,
+}
+
+fn angle_radius_to_vec(angle: f32, radius: f32) -> Vec2 {
+	vec2(angle.cos(), angle.sin()) * radius
+}
+
+#[derive(Serialize)]
+struct PaintingData {
+	width: usize,
+	height: usize,
+	tiles: Vec<TileData>,
+	canvas_geometry: BufferedGeometry,
+	mat: Mat4,
+}
+
+#[derive(Serialize)]
+struct InitialData {
+	paintings: Vec<PaintingData>,
+	wall_geometry: BufferedGeometry,
+	ground_geometry: BufferedGeometry,
+	ceil_mat: Mat4,
+}
+
+#[wasm_bindgen]
+pub fn get_init_data(paintings_count: usize) -> JsValue {
+	let color_count = 3 + rand_int(4) as u8;
+	let ps = (0..paintings_count)
+		.map(|_| create_painting(rand_int(1200) + 1200, rand_int(1200) + 1200, color_count))
+		.collect::<Vec<_>>();
+
+	State::mutate(|s| {
+		let camera = PerspectiveCamera::create(CamProps {
+			translation: Some(vec3(0., 5., 0.)),
+			rot_horizontal: Some(PI / 2.),
+			..default()
+		});
+
+		s.paintings = ps.clone();
+		s.camera = camera;
+	});
+
+	let paintings = ps
+		.iter()
+		.enumerate()
+		.map(|(i, p)| {
+			let angle = i as f32 / paintings_count as f32 * 2. * PI;
+			let coords = angle_radius_to_vec(angle, 31.);
+			PaintingData {
+				width: p.width,
+				height: p.height,
+				tiles: get_painting_static_layer(p),
+				canvas_geometry: geom::create_canvas(p.width, p.height),
+				mat: Mat4::from_rotation_translation(
+					Quat::from_rotation_y(-angle - PI * 0.5),
+					vec3(coords.x, 0., coords.y),
+				),
+			}
+		})
+		.collect::<Vec<_>>();
+
+	serde_wasm_bindgen::to_value(&InitialData {
+		paintings,
+		wall_geometry: create_wall(),
+		ground_geometry: create_ground(),
+		ceil_mat: Mat4::from_rotation_translation(Quat::from_rotation_x(PI), Vec3::Y * 30.),
+	})
+	.unwrap()
+}
+
+#[wasm_bindgen]
+pub fn get_single_painting(width: usize, height: usize, color_count: u8) -> JsValue {
+	let p = create_painting(width, height, color_count);
+
+	State::mutate(|s| {
+		s.paintings = vec![p.clone()];
+	});
+
+	serde_wasm_bindgen::to_value(&PaintingData {
+		width: p.width,
+		height: p.height,
+		tiles: get_painting_static_layer(&p),
+		canvas_geometry: geom::create_canvas(p.width, p.height),
+		mat: Mat4::IDENTITY,
+	})
+	.unwrap()
+}
+
+#[wasm_bindgen]
+pub fn get_painting_animation(i: usize) -> JsValue {
+	let s = State::read();
+
+	let painting = get_painting_animated_layer(&s.paintings[i]);
+
+	serde_wasm_bindgen::to_value(&painting).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn get_painting_static(i: usize) -> JsValue {
+	let s = State::read();
+
+	let p = get_painting_static_layer(&s.paintings[i]);
+
+	serde_wasm_bindgen::to_value(&p).unwrap()
+}
+
+#[derive(Serialize)]
+struct FrameData {
+	camera: Mat4,
+	reflected_camera: Mat4,
+}
+
+#[wasm_bindgen]
+pub fn get_frame_data() -> JsValue {
+	let s = State::read();
+
+	serde_wasm_bindgen::to_value(&FrameData {
+		camera: s.camera.view_proj_mat(),
+		reflected_camera: s.camera.reflected_cam_ground().view_proj_mat(),
+	})
+	.unwrap()
+}
+
+#[wasm_bindgen]
+pub fn setup() {
+	utils::set_panic_hook();
+}
+
+setup_camera_interactions!(State, camera);
+</file>
+
+<file path="sketches/strokes/1/old_code/tile-fields/crate/src/painting.rs">
+use serde::Serialize;
+use tvs_libs::data_structures::neighbour_list::traits::WithNeighboursTransform;
+use tvs_libs::geometry::line_2d::Line;
+use tvs_libs::geometry::line_2d::buffered_geometry::{LineBufferedGeometryVec, LineGeometryProps};
+use tvs_libs::prelude::*;
+use tvs_libs::rendering::buffered_geometry::BufferedGeometry;
+use tvs_libs::utils::f32_utils::fit0111;
+use tvs_libs::utils::rand_utils::{Pick, rand_int};
+
+#[derive(Clone, Copy, Serialize)]
+struct Color {
+	hue: f32,
+	lightness: f32,
+}
+
+#[derive(Clone, Copy)]
+struct Tile {
+	top: f32,
+	left: f32,
+	width: f32,
+	height: f32,
+	color: Color,
+}
+
+fn subdivide_tile<F: Fn() -> Color>(
+	tile: Tile,
+	min_size: f32,
+	max_splits: usize,
+	split_variance: f32,
+	split_direction_variance: f32,
+	get_color: F,
+) -> Vec<Tile> {
+	if tile.width <= min_size || tile.height <= min_size {
+		return vec![tile];
+	}
+
+	let divide_horizontally =
+		tile.width / tile.height + fit0111(random()) * split_direction_variance > 1.;
+
+	let tile_length = if divide_horizontally {
+		tile.width
+	} else {
+		tile.height
+	};
+
+	let tile_count = usize::min(max_splits, (tile_length / min_size).floor() as usize);
+	if tile_count < 2 {
+		return vec![tile];
+	}
+
+	let mut tiles = vec![];
+
+	let mut split_ratios = vec![0.];
+	split_ratios.append(
+		&mut (1..tile_count)
+			.map(|i| (fit0111(random()) * 0.5 * split_variance + i as f32) / tile_count as f32)
+			.collect(),
+	);
+	split_ratios.push(1.);
+
+	for ps in split_ratios.windows(2) {
+		let l1 = ps[0];
+		let l2 = ps[1];
+		let start = l1 * tile_length;
+		let length = (l2 - l1) * tile_length;
+		let new_tile = if divide_horizontally {
+			Tile {
+				left: start + tile.left,
+				width: length,
+				top: tile.top,
+				height: tile.height,
+				color: get_color(),
+			}
+		} else {
+			Tile {
+				left: tile.left,
+				width: tile.width,
+				top: start + tile.top,
+				height: length,
+				color: get_color(),
+			}
+		};
+		tiles.push(new_tile);
+	}
+
+	tiles
+}
+
+#[derive(Clone)]
+pub struct Painting {
+	pub width: usize,
+	pub height: usize,
+	tiles: Vec<Tile>,
+	brush_size: f32,
+}
+
+fn random_split(v: Vec<f32>) -> Vec<f32> {
+	let idx = rand_int(v.len() - 1);
+	let item_i = v[idx];
+	let item_ii = v[idx + 1];
+
+	let mut res = vec![];
+	for i in 0..=idx {
+		res.push(v[i]);
+		res.push(item_i.lerp(item_ii, random::<f32>()));
+	}
+	for i in (idx + 1)..v.len() {
+		res.push(v[i]);
+	}
+
+	res
+}
+
+pub fn create_painting(width: usize, height: usize, color_count: u8) -> Painting {
+	let mut hues: Vec<f32> = vec![0., 1.];
+	for _ in 0..color_count - 1 {
+		hues = random_split(hues);
+	}
+	hues.pop();
+
+	let hue_shift = random::<f32>();
+	let colors = hues
+		.into_iter()
+		.map(|h| {
+			let hue = h + hue_shift;
+			Color {
+				hue: hue - hue.floor(),
+				lightness: (random::<f32>() + random::<f32>()) * 0.4 + 0.1,
+			}
+		})
+		.collect::<Vec<_>>();
+
+	let get_color = || colors.pick().clone();
+
+	let brush_size = height as f32 / 50.0;
+
+	let first_tile = Tile {
+		top: 0.,
+		left: 0.,
+		width: width as f32,
+		height: height as f32,
+		color: get_color(),
+	};
+
+	let mut tiles = vec![first_tile];
+
+	let subdivide_count = rand_int(5) + 1;
+
+	for _ in 0..subdivide_count {
+		let mut new_tiles = vec![];
+		for tile in tiles {
+			let max_splits = rand_int(3) + 2;
+			new_tiles.append(&mut subdivide_tile(
+				tile,
+				brush_size * 3.,
+				max_splits,
+				0.5,
+				0.5,
+				get_color,
+			));
+		}
+		tiles = new_tiles;
+	}
+
+	Painting {
+		brush_size,
+		tiles,
+		width,
+		height,
+	}
+}
+
+fn get_line_edges(tile: &Tile, brush_size: f32) -> (Vec<Vec2>, bool) {
+	let steps = ((tile.height * 1.3) / brush_size).floor().max(4.);
+	let step = tile.height / steps;
+
+	let mut is_left = random::<bool>();
+
+	let delta = || step * 0.2 * fit0111(random());
+
+	let mut points = Vec::new();
+
+	let point_w_offset = step * 0.06;
+
+	points.push(vec2(
+		if is_left {
+			tile.left - point_w_offset
+		} else {
+			tile.left + tile.width + point_w_offset
+		} + delta() * f32::max(tile.width / (brush_size * 3.), 2.),
+		tile.top + step * 1.25 + delta(),
+	));
+	is_left = !is_left;
+
+	for i in 1..(steps * 2. - 2.) as usize {
+		points.push(vec2(
+			if is_left {
+				tile.left - point_w_offset
+			} else {
+				tile.left + tile.width + point_w_offset
+			} + delta() * f32::max(tile.width / (brush_size * 3.), 2.),
+			tile.top + step * i as f32 * 0.49 + step * 0.75 + delta(),
+		));
+		is_left = !is_left;
+	}
+
+	points.push(vec2(
+		if is_left {
+			tile.left - point_w_offset
+		} else {
+			tile.left + tile.width + point_w_offset
+		} + delta() * f32::max(tile.width / (brush_size * 3.), 2.),
+		tile.top + step * (steps - 1.) + delta(),
+	));
+
+	(points, is_left)
+}
+
+fn make_curve(width: f32, brush_size: f32, p1: Vec2, p2: Vec2, reverse: bool) -> Vec<Vec2> {
+	let normal_scale_factor = (brush_size / 6.) * (width / brush_size).min(15.);
+	let line = p2 - p1;
+	let steps = ((line.length() / 35.).floor() as usize).max(8);
+	let normal = if reverse {
+		vec2(-line.y, line.x).normalize()
+	} else {
+		vec2(line.y, -line.x).normalize()
+	};
+	let p3 = p1 + line * 0.5 + normal * (random::<f32>() - 0.6) * normal_scale_factor;
+	let p4 = p1 + line * 0.5 + normal * (random::<f32>() - 0.6) * normal_scale_factor;
+	(0..=steps)
+		.map(|t| {
+			let t = t as f32 / steps as f32;
+			// let t = t as f32 / 10.; // This is a really cool bug!!!
+			Vec2::cubic_bezier(t, p1, p3, p4, p2)
+		})
+		.collect()
+}
+
+#[derive(Serialize)]
+pub struct TileData {
+	line_geometries: Vec<Vec<BufferedGeometry>>,
+	color: Color,
+}
+
+pub fn get_painting_animated_layer(painting: &Painting) -> Vec<TileData> {
+	let mut tiles = vec![];
+
+	for tile in painting.tiles.iter() {
+		let brush_size = painting
+			.brush_size
+			.max(tile.height / 10.)
+			.min(painting.brush_size * 3.);
+
+		let (points, mut is_left) = get_line_edges(tile, brush_size);
+
+		let mut total_length = 0.0;
+
+		let mut lines = vec![];
+
+		for ps in points.windows(2) {
+			let p1 = ps[0];
+			let p2 = ps[1];
+			let points = make_curve(tile.width, brush_size, p1, p2, is_left);
+			is_left = !is_left;
+
+			let mut l = Line::new_offset(brush_size, total_length);
+			let mut line_frames = vec![];
+
+			l.add(points[0]);
+			for i in 1..points.len() {
+				l.add(points[i]);
+				line_frames.push(l.clone());
+			}
+
+			let line_length = l.line_length();
+			total_length += line_length;
+
+			lines.push(line_frames);
+		}
+
+		let mut geoms = vec![];
+
+		lines
+			.iter()
+			.enumerate()
+			.with_neighbours()
+			.for_each(|(prev, (i, l), next)| {
+				let prev_direction = prev.map(|(_, p)| p[p.len() - 1].last().dir);
+				let next_direction = next.map(|(_, n)| n[0].first().dir);
+				let mut line_geoms = vec![];
+				let last = l.len() - 1;
+				for (j, frame) in l.iter().enumerate() {
+					line_geoms.push(frame.to_buffered_geometry_with(LineGeometryProps {
+						total_length: Some(total_length),
+						prev_direction,
+						next_direction: if j == last { next_direction } else { None },
+						swap_texture_orientation: i % 2 == 0,
+						..default()
+					}));
+				}
+				geoms.push(line_geoms)
+			});
+
+		tiles.push(TileData {
+			line_geometries: geoms,
+			color: tile.color,
+		});
+	}
+
+	tiles
+}
+
+pub fn get_painting_static_layer(painting: &Painting) -> Vec<TileData> {
+	let mut tiles = vec![];
+
+	for tile in painting.tiles.iter() {
+		let brush_size = painting
+			.brush_size
+			.max(tile.height / 10.)
+			.min(painting.brush_size * 3.);
+
+		let (points, mut is_left) = get_line_edges(tile, brush_size);
+
+		let mut total_length = 0.0;
+
+		let mut lines = vec![];
+
+		for ps in points.windows(2) {
+			let p1 = ps[0];
+			let p2 = ps[1];
+			let ps = make_curve(tile.width, brush_size, p1, p2, is_left);
+			is_left = !is_left;
+
+			let mut l = Line::new_offset(brush_size, total_length);
+
+			for i in 0..ps.len() {
+				l.add(ps[i]);
+			}
+
+			let line_length = l.line_length();
+			total_length += line_length;
+
+			lines.push(l);
+		}
+
+		tiles.push(TileData {
+			line_geometries: vec![lines.to_buffered_geometry_with(LineGeometryProps {
+				total_length: Some(total_length),
+				..default()
+			})],
+			color: tile.color,
+		});
+	}
+
+	tiles
+}
+</file>
+
+<file path="sketches/strokes/1/old_code/tile-fields/crate/src/utils.rs">
+pub fn set_panic_hook() {
+	// When the `console_error_panic_hook` feature is enabled, we can call the
+	// `set_panic_hook` function at least once during initialization, and then
+	// we will get better error messages if our code ever panics.
+	//
+	// For more details see
+	// https://github.com/rustwasm/console_error_panic_hook#readme
+	#[cfg(feature = "console_error_panic_hook")]
+	console_error_panic_hook::set_once();
+}
+</file>
+
+<file path="sketches/strokes/1/old_code/tile-fields/crate/Cargo.toml">
+[package]
+name = "tvs-sketch-tile-fields"
+version = "0.1.0"
+authors = ["Thomas Gorny <thomas.gorny@pm.me>"]
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+
+tvs-libs.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+serde-wasm-bindgen.workspace = true
+
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { workspace = true, optional = true }
+</file>
+
+<file path="sketches/template/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{Vec2, Vec4, vec4};
+use spirv_std::spirv;
+
+#[spirv(fragment)]
+pub fn main(coord: Vec2, out: &mut Vec4) {
+	*out = vec4(1.0, coord.x, coord.y, 1.0);
+}
+</file>
+
+<file path="sketches/tests/ball/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{Mat3A, Mat4, Vec2, Vec3, Vec4, vec4};
+use spirv_std::{Image, Sampler, spirv};
+
+#[spirv(vertex)]
+pub fn vertex(
+	position: Vec3,
+	uv: Vec2,
+	color: Vec3,
+	normal: Vec3,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] mvp_mat: &Mat4,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] normal_mat: &Mat3A,
+	// #[spirv(descriptor_set = 0, binding = 2)] light_dir: &Vec3,
+	#[spirv(position)] clip_pos: &mut Vec4,
+	out_uv: &mut Vec2,
+	out_color: &mut Vec3,
+	out_norm: &mut Vec3,
+) {
+	*out_uv = uv;
+	*out_color = color;
+	*out_norm = *normal_mat * normal;
+	*clip_pos = *mvp_mat * position.extend(1.0);
+}
+
+#[spirv(fragment)]
+pub fn fragment(
+	in_uv: Vec2,
+	in_color: Vec3,
+	in_norm: Vec3,
+	#[spirv(descriptor_set = 0, binding = 2)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	frag_color: &mut Vec4,
+) {
+	let col = tex.sample(*sampler, in_uv);
+	*frag_color = in_color.extend(1.0) * in_norm.extend(1.0).abs() * vec4(col.x, col.y, col.z, 1.0);
+}
+</file>
+
+<file path="sketches/tests/ball/shader/Cargo.toml">
+[package]
+name = "ball_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# Dependencies for CPU and GPU code
+[dependencies]
+spirv-std.workspace = true
+</file>
+
+<file path="sketches/tests/ball/Cargo.toml">
+[package]
+name = "ball"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+png.workspace = true
+bytemuck.workspace = true
+</file>
+
+<file path="sketches/tests/bloom/shader/Cargo.toml">
+[package]
+name = "bloom-shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+</file>
+
+<file path="sketches/tests/bloom/Cargo.toml">
+[package]
+name = "bloom"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+bytemuck.workspace = true
+</file>
+
+<file path="sketches/textures/lines/shader/src/shaders/lines_1.rs">
+use shared_nostd::aspect_preserving_uv;
+use spirv_std::glam::{UVec2, Vec2, Vec3, Vec4, vec2, vec3};
+use trivalibs_nostd::{
+	prelude::*,
+	random::{
+		hash::hash,
+		simplex::{simplex_noise_2d, simplex_noise_3d},
+	},
+};
+
+const LINE_COUNT: f32 = 20.0;
+
+pub fn shader(uv: Vec2, _size: UVec2, time: f32) -> Vec4 {
+	let line_segment = (uv.x * LINE_COUNT).floor();
+	let line_x = (uv.x * LINE_COUNT).frct().fit0111();
+
+	// Color generation closure
+	let color = |segment: f32| {
+		vec3(
+			hash((segment * 3.0 * LINE_COUNT) as u32),
+			hash((segment * 7.0 * LINE_COUNT) as u32),
+			hash((segment * 11.0 * LINE_COUNT) as u32),
+		)
+	};
+
+	// Height/depth calculation closure for z-ordering
+	let compute_height = |segment: f32| -> f32 { hash((segment * LINE_COUNT) as u32) };
+
+	// Complete line computation closure - returns (intensity, color, height)
+	let compute_line = |segment_offset: f32, line_x_offset: f32| -> (f32, Vec3, f32) {
+		let segment = line_segment + segment_offset;
+		let x = line_x + line_x_offset;
+		let noise = simplex_noise_3d(vec3(segment, uv.y + time * 0.1, time * 0.07)) * 1.3;
+		let x_bent = x + noise;
+		let line_intensity = x_bent.abs().smoothstep(0.7, 0.6);
+		let line_color = color(segment);
+		let height = compute_height(segment);
+		(line_intensity, line_color, height)
+	};
+
+	// Pass closure - computes and sorts 3 lines for a given segment offset
+	let compute_pass = |pass_segment_offset: f32| -> [(f32, Vec3, f32); 3] {
+		// Generate all three line variants with pass offset
+		let curr = compute_line(pass_segment_offset + 0.0, 0.0);
+		let prev = compute_line(pass_segment_offset - 1.0, 2.0);
+		let next = compute_line(pass_segment_offset + 1.0, -2.0);
+
+		// Sort by height using manual swapping (bubble sort for 3 elements)
+		let mut lines = [prev, curr, next];
+
+		// Pass 1
+		if lines[0].2 > lines[1].2 {
+			let temp = lines[0];
+			lines[0] = lines[1];
+			lines[1] = temp;
+		}
+		if lines[1].2 > lines[2].2 {
+			let temp = lines[1];
+			lines[1] = lines[2];
+			lines[2] = temp;
+		}
+		// Pass 2
+		if lines[0].2 > lines[1].2 {
+			let temp = lines[0];
+			lines[0] = lines[1];
+			lines[1] = temp;
+		}
+
+		lines
+	};
+
+	// Blend closure - blends 3 sorted lines onto a base color
+	let blend_pass = |base_color: Vec3, lines: [(f32, Vec3, f32); 3]| -> Vec3 {
+		base_color
+			.lerp(lines[0].1, lines[0].0)
+			.lerp(lines[1].1, lines[1].0)
+			.lerp(lines[2].1, lines[2].0)
+	};
+
+	// Execute 3 passes, each layering on top of the previous
+	let col_bg = Vec3::ONE;
+	let col = blend_pass(col_bg, compute_pass(0.0)); // Pass 1: Base layer
+	let col = blend_pass(col, compute_pass(100.0)); // Pass 2: Middle layer
+	let col = blend_pass(col, compute_pass(200.0)); // Pass 3: Top layer
+
+	col.powf(2.2).extend(1.0)
+}
+
+pub fn noisy_lines_3(uv: Vec2, size: UVec2, time: f32) -> Vec4 {
+	let uv_current = aspect_preserving_uv(uv, size);
+
+	let uv = uv_current * 2.0 - 1.0;
+
+	let bend_noise = simplex_noise_2d(vec2(uv.y * 0.6, time * 0.5)).fit1101();
+
+	let texture_noise =
+		(simplex_noise_2d((uv_current + vec2(bend_noise / (15.0 / 2.0), 0.0)) * vec2(92.0, 02.0))
+			+ simplex_noise_2d(
+				(uv_current + vec2(bend_noise / (15.0 / 2.0), 0.0)) * vec2(92.0, 2.0) * 2.0 + 120.,
+			) * 0.5)
+			/ 1.5;
+
+	let grid = (uv_current * 340.).sin().fit1101() * 0.5 + 0.5;
+	let bg_texture_noise =
+		((simplex_noise_2d(uv_current * 200.) + simplex_noise_2d(uv_current * 400. + 12.) * 0.5) / 1.5)
+			* grid.x
+			* grid.y;
+
+	let y = uv.y * 0.96;
+	let caps = y.abs().step_fn(1.0, 0.75, |t| t.powf(0.25)) + 0.01;
+
+	let x = uv.x * 15.0 / caps + bend_noise * 3.5 / caps;
+
+	let line = x.abs().smoothstep(1.0, 0.8)
+		* y.abs().smoothstep(1.0, 0.95)
+		* ((texture_noise
+			.fit1101()
+			.powf(0.2 + y.abs().step_fn(0.88, 1.0, |t| t.powf(3.)) * 9.)
+			+ bg_texture_noise * 0.1)
+			/ 1.1)
+			.clamp01()
+			.powf(1.5);
+
+	let col_bg = Vec3::ONE;
+	let col_line = vec3(0.2, 0.2, 0.2);
+
+	let col = col_bg.lerp(col_line, line);
+
+	col.powf(2.2).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/lines/shader/src/shaders/mod.rs">
+pub mod lines_1;
+</file>
+
+<file path="sketches/textures/lines/shader/Cargo.toml">
+[package]
+name = "tex_lines_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# Dependencies for CPU and GPU code
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+shared-nostd.workspace = true
+
+[package.metadata.rust-gpu.build]
+output-dir = "./out/"
+multimodule = true
+</file>
+
+<file path="sketches/textures/lines/Cargo.toml">
+[package]
+name = "tex_lines"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+shared.workspace = true
+</file>
+
+<file path="sketches/textures/sketches/shader/src/shaders/mod.rs">
+pub mod moving_plates;
+pub mod pool_tiles;
+</file>
+
+<file path="sketches/textures/sketches/shader/src/shaders/moving_plates.rs">
+use shared_nostd::{
+	aspect_preserving_uv,
+	shapes::{rounded_rect, rounded_rect_smooth},
+};
+use spirv_std::glam::*;
+use trivalibs_nostd::{color::hsv2rgb_smooth, prelude::*, random::hash::hash2d};
+
+const NUM_TILES: f32 = 15.;
+
+#[derive(Copy, Clone)]
+struct Tile {
+	hue: f32,
+	lightness: f32,
+	height: f32,
+}
+
+fn tile(idx: Vec2, time: f32) -> Tile {
+	let r = hash2d((idx * 17.123411).to_bits());
+	let hue = (r.x + time * 0.01).frct();
+	// let hue = r.x;
+	let height = (time * (r.x + 0.2) + r.y).cos().fit1101();
+	let l = r.y * r.x * 0.4;
+	let lightness = if r.y > 0.5 { 1.0 - l } else { l };
+
+	Tile {
+		hue,
+		height,
+		lightness,
+	}
+}
+
+pub fn shader(uv: Vec2, size: UVec2, t: f32) -> Vec4 {
+	let uv = aspect_preserving_uv(uv, size);
+
+	let uv_scaled = uv * NUM_TILES;
+	let uv_tile = uv_scaled.frct() - 0.5;
+	let idx = uv_scaled.floor() + 11.;
+
+	let dir_tr = vec2(1.0, -1.0);
+	let dir_tc = vec2(0.0, -1.0);
+	let dir_tl = vec2(-1.0, -1.0);
+	let dir_cr = vec2(1.0, 0.0);
+	let dir_cl = vec2(-1.0, 0.0);
+	let dir_br = vec2(1.0, 1.0);
+	let dir_bc = vec2(0.0, 1.0);
+	let dir_bl = vec2(-1.0, 1.0);
+
+	let cc = tile(idx, t);
+
+	let tr = tile(idx + dir_tr, t);
+	let tc = tile(idx + dir_tc, t);
+	let tl = tile(idx + dir_tl, t);
+	let cr = tile(idx + dir_cr, t);
+	let cl = tile(idx + dir_cl, t);
+	let br = tile(idx + dir_br, t);
+	let bc = tile(idx + dir_bc, t);
+	let bl = tile(idx + dir_bl, t);
+
+	let quadrant_color = |t1: Tile, t2: Tile, t3: Tile, dir1: Vec2, dir2: Vec2, dir3: Vec2| {
+		let uv0 = uv_tile * (1. - cc.height * 0.14);
+		let uv1 = (uv_tile - dir1) * (1. - t1.height * 0.14);
+		let uv2 = (uv_tile - dir2) * (1. - t2.height * 0.14);
+		let uv3 = (uv_tile - dir3) * (1. - t3.height * 0.14);
+
+		let tiles = [cc, t1, t2, t3];
+		let uvs = [uv0, uv1, uv2, uv3];
+
+		let mut ground_i = 0;
+		let mut miss = true;
+
+		for i in 0..4 {
+			if tiles[i].height >= tiles[ground_i].height {
+				let uv = uvs[i];
+				let square = rounded_rect(uv, Vec2::ZERO, Vec2::splat(1.0), 0.2);
+				if square > 0.5 {
+					ground_i = i;
+					miss = false;
+				}
+			}
+		}
+
+		let ground = tiles[ground_i];
+
+		let mut shadow = 0.;
+
+		for i in 0..4 {
+			let tile = tiles[i];
+			let height = tile.height;
+			if height > ground.height {
+				let uv = uvs[i];
+
+				// smooth rect
+				let smoothness = (height - ground.height) * 0.7;
+				let rect = rounded_rect_smooth(uv, Vec2::ZERO, Vec2::ONE, 0.2, smoothness);
+				shadow += rect.powf(0.9);
+			}
+		}
+
+		// hsv2rgb(vec3(cc.hue, 0.8, cc.height * 0.8 + 0.2))
+		if miss {
+			Vec3::ZERO
+		} else {
+			hsv2rgb_smooth(vec3(
+				ground.hue,
+				0.7 + ground.height * 0.15,
+				(ground.height * 0.45 + 0.55) * (ground.lightness * 0.9 + 0.1),
+			))
+			.lerp(Vec3::ZERO, (shadow * 0.7).clamp01())
+		}
+	};
+
+	let color;
+
+	// if uv_tile.y > 0.49 || uv_tile.x > 0.49 {
+	// 	color = Vec3::ZERO;
+	// } else
+	if uv_tile.y < 0. && uv_tile.x < 0. {
+		// top left
+		color = quadrant_color(tl, tc, cl, dir_tl, dir_tc, dir_cl);
+	} else if uv_tile.y < 0. && uv_tile.x >= 0. {
+		// top right
+		color = quadrant_color(tr, tc, cr, dir_tr, dir_tc, dir_cr);
+	} else if uv_tile.x < 0. {
+		// bottom left
+		color = quadrant_color(bl, bc, cl, dir_bl, dir_bc, dir_cl);
+	} else {
+		// bottom right
+		color = quadrant_color(br, bc, cr, dir_br, dir_bc, dir_cr);
+	}
+
+	color.powf(1.2).extend(1.)
+}
+</file>
+
+<file path="sketches/textures/sketches/shader/src/shaders/pool_tiles.rs">
+use shared_nostd::aspect_preserving_uv;
+use spirv_std::glam::{Mat2, UVec2, Vec2, Vec4, vec2, vec3};
+use trivalibs_nostd::{
+	color::hsv2rgb,
+	coords::PolarCoord,
+	prelude::*,
+	random::{
+		hash::{hash, hash21},
+		simplex::simplex_noise_2d,
+	},
+};
+
+pub fn shader(uv: Vec2, size: UVec2, t: f32) -> Vec4 {
+	let uv = aspect_preserving_uv(uv, size);
+
+	let drop_center = vec2(-1.2, -1.3);
+	let mut pc = PolarCoord::from_2d(uv - drop_center);
+	pc.radius = pc.radius + (pc.radius * 10.1 - t * 3.).sin().powf(6.) * 0.003;
+	let uv = pc.to_2d() + drop_center;
+
+	let drop_center = vec2(2.2, 0.3);
+	let mut pc = PolarCoord::from_2d(uv - drop_center);
+	pc.radius = pc.radius + (pc.radius * 8.5 - t * 1.8).sin().powf(8.) * 0.0055;
+	let uv = pc.to_2d() + drop_center;
+
+	let uv = uv - 0.5;
+
+	let tile_scale = 50. * 1.0.lerp(0.6, uv.y) * 1.0.lerp(0.85, uv.x);
+	let uv = uv * tile_scale;
+
+	let n = simplex_noise_2d(Vec2::splat(t * 0.006)) * 2.;
+	let mat = Mat2::from_angle(n);
+	let uv = mat * uv;
+
+	let nx = simplex_noise_2d(Vec2::splat(t * 0.01 - 100.));
+	let ny = simplex_noise_2d(Vec2::splat(t * 0.01 - 200.));
+	let offset = vec2(nx, ny) * 33.;
+	let uv = uv + offset;
+
+	let idx = uv.floor();
+
+	let rnd = hash21(idx.to_bits());
+	let n = simplex_noise_2d(idx * 0.2).fit1101();
+
+	let test = n * 0.7 + rnd * 0.3;
+	let val = ((rnd.fit0111() * 0.7).round() + idx.x + 50. * idx.y).rem(3.);
+	let tile_rnd = hash(val as u32 + 345);
+
+	let color = if test > 0.5 {
+		hsv2rgb(vec3(0.6, 0.1, val / 2.5 + tile_rnd * 0.3))
+	} else {
+		hsv2rgb(vec3(tile_rnd * 0.5 + 0.15, 0.3 - tile_rnd * 0.1, 0.7))
+	};
+
+	color.powf(2.2).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/sketches/shader/Cargo.toml">
+[package]
+name = "tex_sketches_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# Dependencies for CPU and GPU code
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+shared-nostd.workspace = true
+
+[package.metadata.rust-gpu.build]
+output-dir = "./out/"
+multimodule = true
+</file>
+
+<file path="sketches/textures/sketches/Cargo.toml">
+[package]
+name = "tex_sketches"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+shared.workspace = true
+</file>
+
+<file path="sketches/textures/tests/shader/src/book_of_shaders/circle.rs">
+use crate::utils;
+use core::f32::consts::TAU;
+use shared_nostd::flip_y;
+use spirv_std::glam::{Vec2, Vec3, Vec4, vec2, vec3};
+use trivalibs_nostd::coords::PolarCoord;
+use trivalibs_nostd::prelude::*;
+
+pub fn shader(st: Vec2, time: f32) -> Vec4 {
+	let st = flip_y(st);
+
+	let center = vec2(0.5, 0.5);
+	let radius = (time * 0.8).sin() * 0.06 + 0.3;
+
+	let circle1 = utils::circle(center, radius, st);
+	let circle2 = utils::circle_smooth(center - vec2(0.0, 0.01), radius, st, 0.05);
+
+	let color1 = vec3(1.0, 1.0, 0.0);
+	let color2 = vec3(1.0, 0.0, 0.0);
+	let color_shadow = vec3(0.3, 0.3, 0.1);
+
+	let bg_color = Vec3::splat(1.0);
+
+	let color = if circle1 > 0.0 {
+		let uv = (st - center) / (radius * 2.0);
+		let mut polar = PolarCoord::from_2d(uv);
+		polar.angle = ((polar.angle + time * 0.2) / (TAU / 2.0)).frct() * TAU / 1.0;
+		let uv = polar.to_2d();
+
+		let cell_uv = (uv * 6.0).frct();
+		let cell = (uv * 6.0).floor();
+		if cell_uv.x < 0.2 || cell_uv.y < 0.2 {
+			Vec3::ZERO
+		} else if (cell.x + cell.y) % 2.0 == 0.0 {
+			color2
+		} else {
+			color1
+		}
+	} else {
+		color_shadow.lerp(bg_color, circle2)
+	};
+	color.extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/book_of_shaders/circles.rs">
+use core::f32::consts::{PI, TAU};
+use spirv_std::glam::{Vec2, Vec3, Vec4, vec2};
+use trivalibs_nostd::{prelude::*, random::hash::hash};
+
+fn circle_line(i: f32, line_count: f32, t: f32, angle: f32) -> f32 {
+	let v1 = hash(i as u32 * 3) * 0.5;
+	let v2 = hash(i as u32 + line_count as u32) * 0.5 + 0.5;
+
+	let s = if v2 > 0.75 { 1.0 } else { -1.0 };
+	let a = (angle + t * v1 * (0.8 / (i.powf(0.5))) * s).frct().abs();
+	step(v1, a) * step(a, v2)
+}
+
+pub fn shader(st: Vec2, t: f32) -> Vec4 {
+	let c1 = (Vec2::splat(0.4) - st).length();
+	let c2 = (Vec2::splat(0.6) - st).length();
+
+	let line_count = 35.0_f32.powf(2.0);
+	let val = (c1 * c2).powf(0.92);
+
+	let i = (val * line_count).powf(0.5).floor();
+
+	let c1 = Vec3::ZERO;
+	let c2 = Vec3::ONE;
+
+	let center = vec2(0.5, 0.5) - st;
+	let angle = (center.y.atan2(center.x) + PI) / TAU;
+
+	let color = if i < 6.0 {
+		let line = circle_line(6.0, line_count, t, angle);
+		c2.lerp(c1, line)
+	} else {
+		let line = circle_line(i, line_count, t, angle);
+		c1.lerp(c2, line)
+	};
+
+	color.extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/book_of_shaders/rect.rs">
+use crate::utils;
+use shared_nostd::flip_y;
+use spirv_std::glam::{Vec2, Vec3, Vec4, vec2, vec3};
+
+pub fn shader(st: Vec2) -> Vec4 {
+	let st = flip_y(st);
+
+	let size = vec2(0.8, 0.65);
+
+	let center1 = vec2(0.5, 0.50);
+	let rec1 = utils::rect(size, center1, st);
+
+	let center2 = vec2(0.5, 0.485);
+	let rec2 = utils::rect_smooth(size, center2, st, 0.12);
+
+	let color1 = vec3(1.0, 1.0, 0.0);
+	let color2 = vec3(0.3, 0.3, 0.1);
+
+	let bg_color = Vec3::splat(1.0);
+	bg_color.lerp(color2, rec2).lerp(color1, rec1).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/book_of_shaders/rounded_rect.rs">
+use crate::utils;
+use core::f32::consts::TAU;
+use spirv_std::glam::{Vec2, Vec3, Vec4, vec2, vec3};
+use trivalibs_nostd::prelude::*;
+
+pub fn shader(st: Vec2) -> Vec4 {
+	let uv = (st * 3.0).frct().fit0111();
+	let idx_v2 = (st * 3.0).floor();
+	let idx = (idx_v2.x + idx_v2.y * 3.0) / 9.0;
+
+	let size = vec2(1.2, 1.0);
+
+	let center = vec2((idx * TAU).cos(), (idx * TAU).sin()) * 0.3;
+
+	let rec = utils::rounded_rect_smooth(uv, center, size, idx * 0.7, 0.3);
+
+	let color = vec3(0.1, 0.0, 0.0);
+
+	let bg_color = Vec3::splat(1.0);
+	bg_color.lerp(color, rec).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/circular_line.rs">
+use core::f32::consts::TAU;
+
+use shared_nostd::aspect_preserving_uv;
+use spirv_std::glam::*;
+use trivalibs_nostd::{prelude::*, random::simplex::simplex_noise_2d};
+
+const TURN_COUNT: f32 = 10.0;
+const BASE_RADIUS: f32 = 0.6;
+const RADIUS_JITTER: f32 = 0.24;
+const LINE_WIDTH: f32 = 0.085;
+
+pub fn shader(uv: Vec2, size: UVec2, time: f32) -> Vec4 {
+	let uv_current = aspect_preserving_uv(uv, size);
+	let uv = uv_current * 2.0 - 1.0;
+
+	let radius = uv.length();
+	let mut angle = uv.y.atan2(uv.x);
+
+	if angle < 0.0 {
+		angle += TAU;
+	}
+
+	let angle_fraction = angle / TAU;
+
+	// Computes the color gradient along the entire 5-turn path (red -> blue).
+	let color_for_progress = |progress: f32| -> Vec3 {
+		let end = Vec3::new(0.95, 0.15, 0.1);
+		let start = Vec3::new(0.15, 0.3, 0.95);
+		start.lerp(end, progress.clamp(0.0, 1.0))
+	};
+
+	// Computes the radius for a given turn with a stable noise wobble.
+	let radius_for_turn = |phase: f32, time: f32| -> f32 {
+		let noise = simplex_noise_2d(vec2(time, phase * 2.3 + 10.)) * RADIUS_JITTER;
+		BASE_RADIUS + noise
+	};
+
+	// Computes intensity, color and draw height for one turn.
+	let sample_turn = |turn: f32| -> (f32, Vec3) {
+		let phase = angle_fraction + turn;
+		let target_radius = radius_for_turn(phase, time * 0.1);
+		let dist = (radius - target_radius).abs();
+		let line_intensity = dist.ltf(LINE_WIDTH);
+		let progress = phase / TURN_COUNT;
+
+		(line_intensity, color_for_progress(progress))
+	};
+
+	let mut color = Vec3::ZERO;
+
+	let mut idx = 0.;
+	while idx < TURN_COUNT {
+		let line = sample_turn(idx);
+		color = color.lerp(line.1, line.0);
+		idx += 1.;
+	}
+
+	color.powf(2.2).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/fbm.rs">
+use crate::utils;
+use shared_nostd::aspect_preserving_uv;
+use spirv_std::glam::{UVec2, Vec2, Vec4, vec2, vec3};
+use trivalibs_nostd::prelude::*;
+
+pub fn shader(uv: Vec2, size: UVec2, time: f32) -> Vec4 {
+	let st = aspect_preserving_uv(uv, size) * 3.0;
+
+	let q = vec2(utils::fbm(st, 5), utils::fbm(st + vec2(10.0, 10.0), 5));
+
+	let r = vec2(
+		utils::fbm(st + 1.1 * q + 0.15 * time, 5),
+		utils::fbm(st + 1.0 * q + 0.126 * time, 5),
+	);
+
+	let f = utils::fbm(st + r + time * 0.1, 5);
+
+	let mut color = vec3(0.101961, 0.619608, 0.666667).lerp(
+		vec3(0.666667, 0.666667, 0.198039),
+		((f * f) * 4.0).clamp01(),
+	);
+
+	color = color.lerp(vec3(0.0, 0.0, 0.164706), q.length().clamp01());
+
+	color = color.lerp(vec3(0.666667, 1.0, 1.0), r.length().clamp01());
+
+	((f * f * f + 0.6 * f * f + 0.5 * f) * color).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/net.rs">
+use spirv_std::glam::{UVec2, Vec2, Vec3, Vec4};
+use trivalibs_nostd::prelude::*;
+
+pub fn shader(uv: Vec2, _size: UVec2) -> Vec4 {
+	let idx = (uv * 8.0).floor() % 2.0;
+	let uv = (uv * 8.0).frct().fit0111();
+	// let uv = uv.fit0111();
+	let tube_x = (1.1 - uv.x.abs().max(0.0)) * 0.85;
+	let tube_x = tube_x.smoothen();
+
+	let tube_y = (1.1 - uv.y.abs().max(0.0)) * 0.85;
+	let tube_y = tube_y.smoothen();
+
+	let tube = if (idx.x + idx.y) % 2.0 == 1.0 {
+		if tube_x < (tube_y * 0.2) {
+			tube_y * (tube_x * 0.2 + 0.8)
+		} else {
+			tube_x * (tube_y * 0.2 + 0.8)
+		}
+	} else {
+		if tube_y < (tube_x * 0.2) {
+			tube_x * (tube_y * 0.2 + 0.8)
+		} else {
+			tube_y * (tube_x * 0.2 + 0.8)
+		}
+	};
+
+	let color = Vec3::splat(tube);
+
+	color.powf(2.2).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/noisy_line.rs">
+use shared_nostd::aspect_preserving_uv;
+use spirv_std::glam::{UVec2, Vec2, Vec3, Vec4, vec2, vec3};
+use trivalibs_nostd::{prelude::*, random::simplex::simplex_noise_2d};
+
+pub fn shader(uv: Vec2, size: UVec2, time: f32) -> Vec4 {
+	let uv_current = aspect_preserving_uv(uv, size);
+
+	let uv = uv_current * 2.0 - 1.0;
+
+	let bend_noise = simplex_noise_2d(vec2(uv.y * 0.6, time * 0.5)).fit1101();
+
+	let texture_noise =
+		(simplex_noise_2d((uv_current + vec2(bend_noise / (15.0 / 2.0), 0.0)) * vec2(92.0, 02.0))
+			+ simplex_noise_2d(
+				(uv_current + vec2(bend_noise / (15.0 / 2.0), 0.0)) * vec2(92.0, 2.0) * 2.0 + 120.,
+			) * 0.5)
+			/ 1.5;
+
+	let grid = (uv_current * 340.).sin().fit1101() * 0.5 + 0.5;
+	let bg_texture_noise =
+		((simplex_noise_2d(uv_current * 200.) + simplex_noise_2d(uv_current * 400. + 12.) * 0.5) / 1.5)
+			* grid.x
+			* grid.y;
+
+	let y = uv.y * 0.96;
+	let caps = y.abs().step_fn(1.0, 0.75, |t| t.powf(0.25)) + 0.01;
+
+	let x = uv.x * 15.0 / caps + bend_noise * 3.5 / caps;
+
+	let line = x.abs().smoothstep(1.0, 0.8)
+		* y.abs().smoothstep(1.0, 0.95)
+		* ((texture_noise
+			.fit1101()
+			.powf(0.2 + y.abs().step_fn(0.88, 1.0, |t| t.powf(3.)) * 9.)
+			+ bg_texture_noise * 0.1)
+			/ 1.1)
+			.clamp01()
+			.powf(1.5);
+
+	let col_bg = Vec3::ONE;
+	let col_line = vec3(0.2, 0.2, 0.2);
+
+	let col = col_bg.lerp(col_line, line);
+
+	col.powf(2.2).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/noisy_lines_1.rs">
+use shared_nostd::aspect_preserving_uv;
+use spirv_std::glam::{UVec2, Vec2, Vec3, Vec4, vec2};
+use trivalibs_nostd::{prelude::*, random::simplex::simplex_noise_3d};
+
+const LINE_COUNT: f32 = 30.;
+
+pub fn shader(uv: Vec2, size: UVec2, time: f32) -> Vec4 {
+	let uv_current = aspect_preserving_uv(uv, size);
+
+	let noise =
+		simplex_noise_3d((uv_current * vec2(2.5, 1.5) - vec2(0., time * 0.6)).extend(time * 0.2));
+
+	let x_offset = 1.0 / LINE_COUNT;
+	let curr_x = uv_current.x;
+	let next_x = curr_x + x_offset;
+	let prev_x = curr_x - x_offset;
+
+	let curr_x_pos = ((curr_x * LINE_COUNT).frct() - 0.5) / 3.;
+	let prev_x_pos = ((prev_x * LINE_COUNT).frct() - 0.5) / 3. + 1. / 3.;
+	let next_x_pos = ((next_x * LINE_COUNT).frct() - 0.5) / 3. - 1. / 3.;
+
+	let get_line = |x: f32| x.smoothstep(-0.06, -0.04) * x.smoothstep(0.06, 0.04);
+
+	let offset = 0.45 * noise;
+
+	let line_curr = get_line(curr_x_pos + offset);
+	let line_prev = get_line(prev_x_pos + offset);
+	let line_next = get_line(next_x_pos + offset);
+
+	let bg = Vec3::splat((noise + 1.0) / 4.0);
+
+	let color = if (uv_current.x * LINE_COUNT).frct() < 0.02 {
+		Vec3::ZERO
+	} else if line_curr > 0.0 {
+		bg.lerp(Vec3::new(1.0, 1.0, 1.0), line_curr)
+	} else if line_next > 0.0 {
+		bg.lerp(Vec3::new(0.0, 1.0, 1.0), line_next)
+	} else if line_prev > 0.0 {
+		bg.lerp(Vec3::new(0.0, 1.0, 0.0), line_prev)
+	} else {
+		bg
+	};
+
+	color.extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/noisy_squares.rs">
+use crate::utils;
+use spirv_std::glam::{Vec2, Vec4, vec2, vec3};
+use trivalibs_nostd::{
+	prelude::*,
+	random::{hash::hash2d, simplex::rot_noise_2d},
+};
+
+pub fn shader(uv: Vec2, _size: Vec2, _time: f32) -> Vec4 {
+	let idx = (uv * 3.0).floor() + 1.0;
+	let tile_uv = (uv * 3.0).frct().fit0111();
+
+	let quad_size = hash2d(idx.to_bits()) * 0.6 + 0.9;
+
+	let fbm_local = |scale: f32, fade: f32, num_octaves: usize| {
+		let mut noise = 0.0;
+		let mut a = 1.0;
+		let mut st = uv;
+		let shift = vec2(100.0, 100.0);
+		let rot = (1.0 / (num_octaves as f32 * 2.0 + 1.0)) * 2.0;
+		for i in 0..num_octaves {
+			noise += a * rot_noise_2d(st, rot * i as f32).0.fit1101();
+			st = st * scale + shift;
+			a *= fade;
+		}
+		noise
+	};
+
+	let noise = fbm_local(idx.x + 1.1, 1.2 / idx.y, 5);
+
+	let square = utils::rounded_rect_smooth(
+		tile_uv * (noise * 0.12 + 0.88),
+		Vec2::ZERO,
+		quad_size,
+		0.03,
+		0.01,
+	);
+
+	let col1 = vec3(0.1, 0.2, 0.3);
+	let col2 = vec3(0.45, 0.5, 0.55);
+
+	let col = col1.lerp(col2, square);
+
+	col.powf(2.2).extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/simplex_prefilled.rs">
+use spirv_std::{
+	Image, Sampler,
+	glam::{UVec2, Vec2, Vec4, vec2},
+};
+
+pub fn shader(
+	uv: Vec2,
+	tex: &Image!(2D, type=f32, sampled),
+	sampler: &Sampler,
+	size: &UVec2,
+) -> Vec4 {
+	let aspect = size.x as f32 / size.y as f32;
+	let noise = tex.sample(*sampler, vec2(uv.x * aspect * 3., uv.y * 3.));
+	let val = (noise.x + noise.y * 0.5 + noise.z * 0.25 + noise.w * 0.125) / 1.875;
+	Vec4::new(val, val, val, 1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/tiled_lines.rs">
+use shared_nostd::aspect_preserving_uv;
+use spirv_std::glam::{UVec2, Vec2, Vec3, Vec4, vec2};
+#[allow(unused_imports)]
+use spirv_std::num_traits::Float;
+use trivalibs_nostd::{
+	prelude::*,
+	random::{hash::hash3d, simplex::simplex_noise_2d},
+};
+
+const NUM_LINES: u32 = 15;
+
+pub fn shader(uv: Vec2, size: UVec2, time: f32) -> Vec4 {
+	let uv = aspect_preserving_uv(uv, size);
+
+	let uv_scaled = uv * 10.;
+	let uv_tile = uv_scaled.frct().fit0111();
+	let idx = uv_scaled.floor();
+
+	let mut color = Vec3::ONE;
+
+	let noise = simplex_noise_2d(uv * vec2(5., 2.));
+
+	for l in 0..NUM_LINES {
+		for i_w in 0..3 {
+			for i_h in 0..3 {
+				let w = i_w as f32 - 1.;
+				let h = i_h as f32 - 1.;
+				let r = hash3d((idx + 10. - vec2(w, h)).extend(l as f32).to_bits());
+				let mut start_x = -1. + r.x;
+				let mut end_x = start_x + 0.75.lerp(1. - start_x, r.y);
+				let y = r.z.fit0111() / 2.7 + noise * 0.15;
+
+				let t = ((time * 0.2 + r.y) * (r.z + 0.1)).frct();
+				if t < 0.5 {
+					end_x = start_x.lerp(end_x, t * 2.);
+				} else {
+					start_x = start_x.lerp(end_x, (t - 0.5) * 2.);
+				}
+
+				let w_third = w * 2. / 3.;
+				let h_third = h * 2. / 3.;
+				let uv = uv_tile / 3. + vec2(w_third, h_third);
+
+				let line = uv.x.smoothstep(start_x, start_x + 0.05)
+					* uv.x.smoothstep(end_x, end_x - 0.05)
+					* uv.y.smoothstep(y - 0.025, y - 0.02)
+					* uv.y.smoothstep(y + 0.025, y + 0.02);
+
+				let line_color = Vec3::ZERO;
+				color = color.lerp(line_color, line);
+			}
+		}
+	}
+
+	color.powf(2.2).extend(1.)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/utils.rs">
+use spirv_std::glam::{Vec2, mat2, vec2};
+#[allow(unused_imports)]
+use spirv_std::num_traits::Float;
+use trivalibs_nostd::{prelude::*, random::simplex::simplex_noise_2d};
+
+// Geometry utilities used by multiple shaders
+
+pub fn rect(size: Vec2, center: Vec2, st: Vec2) -> f32 {
+	let half_size = size * 0.5;
+	let rect = (center - st).abs() / half_size;
+	1.0.step(rect.x.max(rect.y))
+}
+
+pub fn rect_smooth(size: Vec2, center: Vec2, st: Vec2, smoothness: f32) -> f32 {
+	let half_size = size * 0.5;
+	let rect = (center - st).abs() / half_size;
+	let s = smoothness / size;
+	let e0 = Vec2::ONE + s;
+	let e1 = Vec2::ONE - s;
+	let smooth = rect.smoothstep(e0, e1);
+	smooth.x * smooth.y
+}
+
+pub fn circle(center: Vec2, radius: f32, st: Vec2) -> f32 {
+	let dist = (st - center).length_squared() / radius;
+	radius.step(dist)
+}
+
+pub fn circle_smooth(center: Vec2, radius: f32, st: Vec2, smoothness: f32) -> f32 {
+	let dist = (st - center).length();
+	dist.smoothstep(radius - smoothness, radius + smoothness)
+}
+
+pub fn rounded_rect_smooth(
+	st: Vec2,
+	center: Vec2,
+	size: Vec2,
+	radius: f32,
+	smoothness: f32,
+) -> f32 {
+	let offset = size / 2. - radius;
+	let d = ((st - center).abs() - offset).max(Vec2::ZERO).length();
+	let s = smoothness / 2.;
+	let e0 = radius + s;
+	let e1 = radius - s;
+	d.smoothstep(e0, e1)
+}
+
+// Noise utilities
+
+pub fn fbm(st: Vec2, num_octaves: usize) -> f32 {
+	let mut v = 0.0;
+	let mut a = 0.5;
+	let mut st = st;
+	let shift = vec2(100.0, 100.0);
+	// Rotate to reduce axial bias
+	let rot = mat2(vec2(0.5.cos(), 0.5.sin()), vec2(-0.5.sin(), 0.5.cos()));
+	for _ in 0..num_octaves {
+		v += a * simplex_noise_2d(st).fit1101();
+		st = rot * st * 2.0 + shift;
+		a *= 0.5;
+	}
+	v
+}
+</file>
+
+<file path="sketches/textures/tests/shader/Cargo.toml">
+[package]
+name = "tex_tests_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# Dependencies for CPU and GPU code
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+shared-nostd.workspace = true
+
+[package.metadata.rust-gpu.build]
+output-dir = "./out/"
+multimodule = true
+</file>
+
+<file path="sketches/textures/tests/Cargo.toml">
+[package]
+name = "tex_tests"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+shared.workspace = true
+</file>
+
+<file path="shared-nostd/src/lib.rs">
+#![no_std]
+// Shared utilities for shader code (no_std compatible)
+// This crate can be used by both shader crates and host code
+#![allow(unexpected_cfgs)]
+
+#[cfg(not(target_arch = "spirv"))]
+use glam::{UVec2, Vec2, vec2};
+#[cfg(target_arch = "spirv")]
+use spirv_std::glam::{UVec2, Vec2, vec2};
+
+pub mod shapes;
+
+pub fn aspect_preserving_uv(uv: Vec2, size: UVec2) -> Vec2 {
+	let aspect = size.x as f32 / size.y as f32;
+	if aspect > 1.0 {
+		uv * vec2(1.0, 1.0 / aspect)
+	} else {
+		uv * vec2(aspect, 1.0)
+	}
+}
+
+pub fn flip_y(uv: Vec2) -> Vec2 {
+	vec2(uv.x, 1.0 - uv.y)
+}
+</file>
+
+<file path="shared-nostd/src/shapes.rs">
+#![allow(unexpected_cfgs)]
+
+#[cfg(not(target_arch = "spirv"))]
+use glam::Vec2;
+#[cfg(target_arch = "spirv")]
+use spirv_std::glam::Vec2;
+use trivalibs_nostd::prelude::*;
+
+pub fn rect(size: Vec2, center: Vec2, st: Vec2) -> f32 {
+	let half_size = size * 0.5;
+
+	// This is the first strategy of the book of shaders
+	// let rect = (center - half_size).step(st) * (1.0 - (center + half_size).step(st));
+	// rect.x * rect.y
+
+	let rect = (center - st).abs() / half_size;
+	// 1.0 - (rect.x.max(rect.y)).clamp(0.0, 1.0).floor()
+	1.0.step(rect.x.max(rect.y))
+}
+
+pub fn rect_smooth(size: Vec2, center: Vec2, st: Vec2, smoothness: f32) -> f32 {
+	let half_size = size * 0.5;
+
+	let rect = (center - st).abs() / half_size;
+
+	let s = smoothness / size;
+	let e0 = Vec2::ONE + s;
+	let e1 = Vec2::ONE - s;
+
+	let smooth = rect.smoothstep(e0, e1);
+
+	smooth.x * smooth.y
+}
+
+pub fn circle(center: Vec2, radius: f32, st: Vec2) -> f32 {
+	// let dist = (st - center).length();
+	let dist = (st - center).length_squared() / radius; // eqivalent (why?) and omits the sqrt of length()
+	radius.step(dist) // inverting edge and x results in 1.0 - x.step(egde)
+}
+
+pub fn circle_smooth(center: Vec2, radius: f32, st: Vec2, smoothness: f32) -> f32 {
+	let dist = (st - center).length();
+	dist.smoothstep(radius - smoothness, radius + smoothness)
+}
+
+pub fn rounded_rect(st: Vec2, center: Vec2, size: Vec2, radius: f32) -> f32 {
+	let offset = size / 2. - radius;
+	let d = ((st - center).abs() - offset).max(Vec2::ZERO).length();
+	radius.step(d)
+}
+
+pub fn rounded_rect_smooth(
+	st: Vec2,
+	center: Vec2,
+	size: Vec2,
+	radius: f32,
+	smoothness: f32,
+) -> f32 {
+	let offset = size / 2. - radius;
+	let d = ((st - center).abs() - offset).max(Vec2::ZERO).length();
+
+	let s = smoothness / 2.;
+	let e0 = radius + s;
+	let e1 = radius - s;
+
+	d.smoothstep(e0, e1)
+}
+</file>
+
+<file path="sketches/rooms/base/Cargo.toml">
+[package]
+name = "room"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+</file>
+
+<file path="sketches/rooms/columns/shader/Cargo.toml">
+[package]
+name = "columns_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# Dependencies for CPU and GPU code
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+</file>
+
+<file path="sketches/rooms/grid_ceiling/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{Mat4, Vec2, Vec3, Vec4, swizzles::*, vec3};
+#[allow(unused_imports)]
+use spirv_std::num_traits::Float;
+use spirv_std::{Image, Sampler, spirv};
+use trivalibs_nostd::prelude::*;
+use trivalibs_nostd::random::simplex::rot_noise_3d;
+
+#[spirv(vertex)]
+pub fn wall_pre_render_vert(
+	position: Vec3,
+	uv: Vec2,
+	normal: Vec3,
+	#[spirv(position)] out_vert: &mut Vec4,
+	out_pos: &mut Vec3,
+	out_norm: &mut Vec3,
+	out_uv: &mut Vec2,
+) {
+	*out_vert = uv.fit0111().extend(0.).extend(1.0);
+	*out_pos = position;
+	*out_norm = normal;
+	*out_uv = uv;
+}
+
+#[spirv(fragment)]
+pub fn wall_pre_render_frag(in_pos: Vec3, _in_norm: Vec3, in_uv: Vec2, out: &mut Vec4) {
+	let noise1 = rot_noise_3d(in_pos, in_uv.x);
+
+	// let noise2 = rot_noise_3d(in_pos.cross(in_norm), in_uv.y);
+
+	// let val = (noise1.0 + noise2.0).fit1101() / 2.0;
+	let val = noise1.0.fit1101() / 2.0;
+
+	*out = Vec3::splat(val.powf(2.2)).extend(1.0);
+}
+
+#[spirv(vertex)]
+pub fn wall_render_vert(
+	position: Vec3,
+	uv: Vec2,
+	normal: Vec3,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] mvp_mat: &Mat4,
+	#[spirv(position)] out_pos: &mut Vec4,
+	out_norm: &mut Vec3,
+	out_uv: &mut Vec2,
+) {
+	*out_pos = *mvp_mat * position.extend(1.0);
+	*out_norm = normal;
+	*out_uv = uv;
+}
+
+#[spirv(fragment)]
+pub fn wall_render_frag(
+	_in_norm: Vec3,
+	in_uv: Vec2,
+	#[spirv(descriptor_set = 0, binding = 1)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	let uv = in_uv * 40.0;
+	let uv = uv.fract();
+
+	let col = if uv.x < 0.25 || uv.y < 0.25 {
+		tex.sample(*sampler, in_uv).xyz()
+	} else {
+		vec3(in_uv.x, in_uv.y, 0.5)
+	};
+
+	*out = col.xyz().powf(2.2).extend(1.0);
+}
+</file>
+
+<file path="sketches/strokes/1/old_code/tile-fields/crate/src/geom.rs">
+use bytemuck::{Pod, Zeroable};
+use serde::Serialize;
+use tvs_libs::{
+	data_structures::grid::make_grid_from_cols,
+	geometry::mesh_geometry_3d::{MeshBufferedGeometryType, MeshGeometry, Position3D, face_normal},
+	prelude::*,
+	rendering::buffered_geometry::{
+		BufferedGeometry, BufferedVertexData, NoAttributeOverride, VertexFormat, VertexType, vert_type,
+	},
+};
+
+#[repr(C)]
+#[derive(Pod, Zeroable, Clone, Copy, Serialize)]
+struct Vertex {
+	pos: Vec3,
+	uv: Vec2,
+}
+impl BufferedVertexData for Vertex {
+	fn vertex_layout() -> Vec<VertexType> {
+		vec![
+			vert_type("position", VertexFormat::Float32x3),
+			vert_type("uv", VertexFormat::Float32x2),
+		]
+	}
+}
+impl NoAttributeOverride for Vertex {}
+impl Position3D for Vertex {
+	fn position(&self) -> Vec3 {
+		self.pos
+	}
+}
+impl Lerp<f32> for Vertex {
+	fn lerp(self, other: Self, t: f32) -> Self {
+		Vertex {
+			pos: self.pos.lerp(other.pos, t),
+			uv: self.uv.lerp(other.uv, t),
+		}
+	}
+}
+fn vert(pos: Vec3, uv: Vec2) -> Vertex {
+	Vertex { pos, uv }
+}
+
+pub fn create_canvas(width: usize, height: usize) -> BufferedGeometry {
+	let w = width as f32 / 200.;
+	let h = height as f32 / 100.;
+	let b = 1.0;
+	let tl = vert(vec3(-w, h + b, 0.), vec2(0., 1.));
+	let tr = vert(vec3(w, h + b, 0.), vec2(1., 1.));
+	let bl = vert(vec3(-w, b, 0.0), vec2(0., 0.));
+	let br = vert(vec3(w, b, 0.0), vec2(1., 0.));
+
+	let grid_front = make_grid_from_cols(vec![vec![tl, bl], vec![tr, br]]).subdivide(10, 10);
+
+	let grid_back =
+		grid_front.map(|v| vert(vec3(v.val.pos.x, v.val.pos.y, v.val.pos.z - 0.30), v.val.uv));
+
+	let grid_top = make_grid_from_cols(vec![grid_front.last_row(), grid_back.last_row()]);
+
+	let left_grid = make_grid_from_cols(vec![
+		grid_front.first_col().clone(),
+		grid_back.first_col().clone(),
+	]);
+
+	let right_grid = make_grid_from_cols(vec![
+		grid_front.last_col().clone(),
+		grid_back.last_col().clone(),
+	]);
+
+	let bottom_grid = make_grid_from_cols(vec![grid_front.first_row(), grid_back.first_row()]);
+
+	let mut geom = MeshGeometry::new();
+	let front_props = face_normal(Vec3::Z);
+	geom.add_faces_data(
+		grid_front
+			.to_cw_quads()
+			.into_iter()
+			.map(move |quad| (quad, front_props)),
+	);
+	let back_props = face_normal(-Vec3::Z);
+	geom.add_faces_data(
+		grid_back
+			.to_ccw_quads()
+			.into_iter()
+			.map(move |quad| (quad, back_props)),
+	);
+	let top_props = face_normal(Vec3::Y);
+	geom.add_faces_data(
+		grid_top
+			.to_ccw_quads()
+			.into_iter()
+			.map(move |quad| (quad, top_props)),
+	);
+	let bottom_props = face_normal(-Vec3::Y);
+	geom.add_faces_data(
+		bottom_grid
+			.to_cw_quads()
+			.into_iter()
+			.map(move |quad| (quad, bottom_props)),
+	);
+	let left_props = face_normal(-Vec3::X);
+	geom.add_faces_data(
+		left_grid
+			.to_ccw_quads()
+			.into_iter()
+			.map(move |quad| (quad, left_props)),
+	);
+	let right_props = face_normal(Vec3::X);
+	geom.add_faces_data(
+		right_grid
+			.to_cw_quads()
+			.into_iter()
+			.map(move |quad| (quad, right_props)),
+	);
+
+	geom.to_buffered_geometry_by_type(MeshBufferedGeometryType::FaceNormals)
+}
+
+pub fn create_wall() -> BufferedGeometry {
+	let w = 20.;
+	let h = 37.;
+	let tl = vert(vec3(-w, h, -0.5), vec2(0., 1.));
+	let tr = vert(vec3(w, h, -0.5), vec2(1., 1.));
+	let bl = vert(vec3(-w, 0.0, -0.5), vec2(0., 0.));
+	let br = vert(vec3(w, 0.0, -0.5), vec2(1., 0.));
+
+	let grid = make_grid_from_cols(vec![vec![tl, bl], vec![tr, br]]).subdivide(10, 10);
+
+	let mut geom = MeshGeometry::new();
+	let wall_props = face_normal(vec3(0.0, 0.0, 1.0));
+	geom.add_faces_data(
+		grid
+			.to_cw_quads()
+			.into_iter()
+			.map(move |quad| (quad, wall_props)),
+	);
+
+	geom.to_buffered_geometry_by_type(MeshBufferedGeometryType::FaceNormals)
+}
+
+pub fn create_ground() -> BufferedGeometry {
+	let w = 37.;
+	let grid = make_grid_from_cols(vec![
+		vec![
+			vert(vec3(-w, 0.0, w), vec2(0.0, 0.0)),
+			vert(vec3(-w, 0.0, -w), vec2(0.0, 1.0)),
+		],
+		vec![
+			vert(vec3(w, 0.0, w), vec2(1.0, 0.0)),
+			vert(vec3(w, 0.0, -w), vec2(1.0, 1.0)),
+		],
+	]);
+	let grid = grid.subdivide(10, 10);
+
+	let mut geom = MeshGeometry::new();
+	let ground_props = face_normal(vec3(0.0, 1.0, 0.0));
+	geom.add_faces_data(
+		grid
+			.to_ccw_quads()
+			.into_iter()
+			.map(move |quad| (quad, ground_props)),
+	);
+
+	geom.to_buffered_geometry_by_type(MeshBufferedGeometryType::FaceNormals)
+}
+</file>
+
+<file path="sketches/strokes/1/shader/Cargo.toml">
+[package]
+name = "strokes_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+</file>
+
+<file path="sketches/strokes/1/src/painting.rs">
+use trivalibs::{nostd::color::hsv2rgb, prelude::*, rendering::line_2d::Line};
+
+#[derive(Clone, Copy)]
+pub struct Color {
+	pub hue: f32,
+	pub lightness: f32,
+}
+
+#[derive(Clone, Copy)]
+pub struct Tile {
+	pub top: f32,
+	pub left: f32,
+	pub width: f32,
+	pub height: f32,
+	pub color: Color,
+}
+
+fn subdivide_tile<F: Fn() -> Color>(
+	tile: Tile,
+	min_size: f32,
+	max_splits: usize,
+	split_variance: f32,
+	split_direction_variance: f32,
+	get_color: F,
+) -> Vec<Tile> {
+	if tile.width <= min_size || tile.height <= min_size {
+		return vec![tile];
+	}
+
+	let divide_horizontally =
+		tile.width / tile.height + (rand_f32() * 2.0 - 1.0) * split_direction_variance > 1.;
+
+	let tile_length = if divide_horizontally {
+		tile.width
+	} else {
+		tile.height
+	};
+
+	let tile_count = usize::min(max_splits, (tile_length / min_size).floor() as usize);
+	if tile_count < 2 {
+		return vec![tile];
+	}
+
+	let mut tiles = vec![];
+
+	let mut split_ratios = vec![0.];
+	split_ratios.append(
+		&mut (1..tile_count)
+			.map(|i| ((rand_f32() * 2.0 - 1.0) * 0.5 * split_variance + i as f32) / tile_count as f32)
+			.collect(),
+	);
+	split_ratios.push(1.);
+
+	for ps in split_ratios.windows(2) {
+		let l1 = ps[0];
+		let l2 = ps[1];
+		let start = l1 * tile_length;
+		let length = (l2 - l1) * tile_length;
+		let new_tile = if divide_horizontally {
+			Tile {
+				left: start + tile.left,
+				width: length,
+				top: tile.top,
+				height: tile.height,
+				color: get_color(),
+			}
+		} else {
+			Tile {
+				left: tile.left,
+				width: tile.width,
+				top: start + tile.top,
+				height: length,
+				color: get_color(),
+			}
+		};
+		tiles.push(new_tile);
+	}
+
+	tiles
+}
+
+#[derive(Clone)]
+pub struct Painting {
+	pub width: u32,
+	pub height: u32,
+	pub tiles: Vec<Tile>,
+	pub brush_size: f32,
+}
+
+fn random_split(v: Vec<f32>) -> Vec<f32> {
+	let idx = rand_usize(v.len() - 1);
+	let item_i = v[idx];
+	let item_ii = v[idx + 1];
+
+	let mut res = vec![];
+	for i in 0..=idx {
+		res.push(v[i]);
+		res.push(Lerp::lerp(item_i, item_ii, rand_f32()));
+	}
+	for i in (idx + 1)..v.len() {
+		res.push(v[i]);
+	}
+
+	res
+}
+
+pub fn create_painting(width: u32, height: u32, color_count: u8) -> Painting {
+	let mut hues: Vec<f32> = vec![0., 1.];
+	for _ in 0..color_count - 1 {
+		hues = random_split(hues);
+	}
+	hues.pop();
+
+	let hue_shift = rand_f32();
+	let colors = hues
+		.into_iter()
+		.map(|h| {
+			let hue = h + hue_shift;
+			Color {
+				hue: hue - hue.floor(),
+				lightness: (rand_f32() + rand_f32()) * 0.4 + 0.1,
+			}
+		})
+		.collect::<Vec<_>>();
+
+	let get_color = || colors.pick().clone();
+
+	let brush_size = height as f32 / 50.0;
+
+	let first_tile = Tile {
+		top: 0.,
+		left: 0.,
+		width: width as f32,
+		height: height as f32,
+		color: get_color(),
+	};
+
+	let mut tiles = vec![first_tile];
+
+	let subdivide_count = rand_usize(4) + 1;
+
+	for _ in 0..subdivide_count {
+		let mut new_tiles = vec![];
+		for tile in tiles {
+			let max_splits = rand_usize(3) + 2;
+			new_tiles.append(&mut subdivide_tile(
+				tile,
+				brush_size * 3.,
+				max_splits,
+				0.5,
+				0.5,
+				get_color,
+			));
+		}
+		tiles = new_tiles;
+	}
+
+	Painting {
+		brush_size,
+		tiles,
+		width,
+		height,
+	}
+}
+
+fn get_line_edges(tile: &Tile, brush_size: f32) -> (Vec<Vec2>, bool) {
+	let steps = ((tile.height * 1.3) / brush_size).floor().max(4.);
+	let step = tile.height / steps;
+
+	let mut is_left = rand_bool();
+
+	let delta = || step * 0.2 * (rand_f32() * 2.0 - 1.0);
+
+	let mut points = Vec::new();
+
+	let point_w_offset = step * 0.06;
+
+	points.push(vec2(
+		if is_left {
+			tile.left - point_w_offset
+		} else {
+			tile.left + tile.width + point_w_offset
+		} + delta() * f32::max(tile.width / (brush_size * 3.), 2.),
+		tile.top + step * 1.25 + delta(),
+	));
+	is_left = !is_left;
+
+	for i in 1..(steps * 2. - 1.) as usize {
+		points.push(vec2(
+			if is_left {
+				tile.left - point_w_offset
+			} else {
+				tile.left + tile.width + point_w_offset
+			} + delta() * f32::max(tile.width / (brush_size * 3.), 2.),
+			tile.top + step * i as f32 * 0.49 + step * 0.75 + delta(),
+		));
+		is_left = !is_left;
+	}
+
+	points.push(vec2(
+		if is_left {
+			tile.left - point_w_offset
+		} else {
+			tile.left + tile.width + point_w_offset
+		} + delta() * f32::max(tile.width / (brush_size * 3.), 2.),
+		tile.top + step * (steps - 1.) + delta(),
+	));
+
+	(points, is_left)
+}
+
+fn make_curve(width: f32, brush_size: f32, p1: Vec2, p2: Vec2, reverse: bool) -> Vec<Vec2> {
+	let normal_scale_factor = (brush_size / 6.) * (width / brush_size).min(15.);
+	let line = p2 - p1;
+	let steps = ((line.length() / 35.).floor() as usize).max(8);
+	let normal = if reverse {
+		vec2(-line.y, line.x).normalize()
+	} else {
+		vec2(line.y, -line.x).normalize()
+	};
+	let p3 = p1 + line * 0.5 + normal * (rand_f32() - 0.6) * normal_scale_factor;
+	let p4 = p1 + line * 0.5 + normal * (rand_f32() - 0.6) * normal_scale_factor;
+	(0..=steps)
+		.map(|t| {
+			let t = t as f32 / steps as f32;
+			Vec2::cubic_bezier(t, p1, p3, p4, p2)
+		})
+		.collect()
+}
+
+pub struct TileStrokes {
+	pub lines: Vec<Line>,
+	pub color: Vec3,
+}
+
+pub fn calculate_color(color: Color) -> Vec3 {
+	hsv2rgb(vec3(
+		(color.hue + rand_normal_01() * 0.1).fract(),
+		((rand_f32() + rand_f32()) * 0.5).powf(1.5),
+		(color.lightness + rand_normal_11() * 0.4).clamp01(),
+	))
+}
+
+pub fn generate_tile_strokes(painting: &Painting) -> Vec<TileStrokes> {
+	let mut result = vec![];
+
+	let mut shuffled = painting.tiles.clone();
+	shuffled.shuffle(&mut rand::rng());
+
+	for tile in shuffled.iter() {
+		let brush_size = painting
+			.brush_size
+			.max(tile.height / 10.)
+			.min(painting.brush_size * 3.);
+
+		let (points, mut is_left) = get_line_edges(tile, brush_size);
+
+		let mut total_length = 0.0;
+		let mut lines = vec![];
+
+		for ps in points.windows(2) {
+			let p1 = ps[0];
+			let p2 = ps[1];
+			let curve_points = make_curve(tile.width, brush_size, p1, p2, is_left);
+			is_left = !is_left;
+
+			let mut line = Line::new_offset(brush_size, total_length);
+
+			for point in curve_points {
+				line.add(point);
+			}
+
+			let line_length = line.line_length();
+			total_length += line_length;
+
+			lines.push(line);
+		}
+
+		result.push(TileStrokes {
+			lines,
+			color: calculate_color(tile.color),
+		});
+	}
+
+	result
+}
+</file>
+
+<file path="sketches/template/shader/Cargo.toml">
+[package]
+name = "template_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+shared-nostd.workspace = true
+</file>
+
+<file path="sketches/template/Cargo.toml">
+[package]
+name = "template"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+shared.workspace = true
+</file>
+
+<file path="sketches/tests/bloom/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{Vec2, Vec3, Vec4, Vec4Swizzles, vec2, vec3, vec4};
+use spirv_std::spirv;
+use spirv_std::{Image, Sampler};
+#[allow(unused_imports)]
+use trivalibs_nostd::prelude::*;
+
+/// Test scene with multiple circles at varying brightness levels
+#[spirv(fragment)]
+pub fn test_scene_fs(
+	#[spirv(frag_coord)] frag_coord: Vec4,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] resolution: &Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	// Use normalized coordinates
+	let uv = frag_coord.xy() / *resolution;
+	let aspect = resolution.x / resolution.y;
+
+	// Adjust UV for aspect ratio
+	let uv_corrected = vec2(uv.x * aspect, uv.y);
+
+	// Dark background
+	let mut color = vec3(0.1, 0.1, 0.1);
+
+	// Helper function to create a circle with smooth edges
+	let circle = |center: Vec2, radius: f32, brightness: Vec3| {
+		let dist = (uv_corrected - center).length();
+		let alpha = 1.0 - ((dist - radius) / (radius * 0.05)).clamp(0.0, 1.0);
+		brightness * alpha
+	};
+
+	let t = *time * 0.5;
+
+	// Bright circles (HDR intensity - will bloom)
+	color += circle(vec2(0.3 + t.sin() * 0.1, 0.5), 0.15, vec3(3.0, 3.0, 2.5)); // Yellow-white
+	color += circle(vec2(0.7, 0.5 + t.cos() * 0.1), 0.12, vec3(1.5, 2.5, 4.0)); // Cyan
+	color += circle(vec2(0.5, 0.3), 0.1, vec3(4.0, 1.5, 1.5)); // Red-orange
+
+	// Dimmer circles (below threshold - won't bloom)
+	color += circle(vec2(0.25, 0.75), 0.08, vec3(0.6, 0.6, 0.8)); // Dim blue
+	color += circle(vec2(0.75, 0.75), 0.08, vec3(0.8, 0.6, 0.6)); // Dim red
+	color += circle(vec2(0.5, 0.7), 0.06, vec3(0.7, 0.7, 0.5)); // Dim yellow
+
+	*out = vec4(color.x, color.y, color.z, 1.0).powf(2.3);
+}
+
+/// Extract bright pixels above threshold
+#[spirv(fragment)]
+pub fn threshold_fs(
+	#[spirv(frag_coord)] frag_coord: Vec4,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] resolution: &Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] threshold: &f32,
+	#[spirv(descriptor_set = 0, binding = 2)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	let uv = frag_coord.xy() / *resolution;
+	let color = tex.sample(*sampler, uv);
+
+	// Calculate luminance
+	let brightness = color.x * 0.2126 + color.y * 0.7152 + color.z * 0.0722;
+
+	if brightness > *threshold {
+		*out = color;
+	} else {
+		*out = vec4(0.0, 0.0, 0.0, 1.0);
+	}
+}
+
+/// Downsample with Gaussian blur (single pass for simplicity)
+#[spirv(fragment)]
+pub fn downsample_blur_fs(
+	#[spirv(frag_coord)] frag_coord: Vec4,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] resolution: &Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] blur_radius: &f32,
+	#[spirv(descriptor_set = 0, binding = 2)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	let uv = frag_coord.xy() / *resolution;
+	// Simple box blur for downsampling (4 samples)
+	let offset = vec2(0.5, 0.5) * *blur_radius / *resolution;
+	let s0 = tex.sample(*sampler, uv + vec2(-offset.x, -offset.y));
+	let s1 = tex.sample(*sampler, uv + vec2(offset.x, -offset.y));
+	let s2 = tex.sample(*sampler, uv + vec2(-offset.x, offset.y));
+	let s3 = tex.sample(*sampler, uv + vec2(offset.x, offset.y));
+	*out = (s0 + s1 + s2 + s3) * 0.25;
+}
+
+/// Upsample with blur (single pass)
+#[spirv(fragment)]
+pub fn upsample_blur_fs(
+	#[spirv(frag_coord)] frag_coord: Vec4,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] resolution: &Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] blur_radius: &f32,
+	#[spirv(descriptor_set = 0, binding = 2)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	let uv = frag_coord.xy() / *resolution;
+	// Tent filter (9 samples) for upsampling
+	let offset = vec2(1.0, 1.0) * *blur_radius / *resolution;
+
+	let s = tex.sample(*sampler, uv);
+	let n = tex.sample(*sampler, uv + vec2(0.0, offset.y));
+	let s_s = tex.sample(*sampler, uv + vec2(0.0, -offset.y));
+	let e = tex.sample(*sampler, uv + vec2(offset.x, 0.0));
+	let w = tex.sample(*sampler, uv + vec2(-offset.x, 0.0));
+
+	let ne = tex.sample(*sampler, uv + vec2(offset.x, offset.y));
+	let nw = tex.sample(*sampler, uv + vec2(-offset.x, offset.y));
+	let se = tex.sample(*sampler, uv + vec2(offset.x, -offset.y));
+	let sw = tex.sample(*sampler, uv + vec2(-offset.x, -offset.y));
+
+	*out = s * 0.25 + (n + s_s + e + w) * 0.125 + (ne + nw + se + sw) * 0.0625;
+}
+
+/// Composite scene with bloom
+#[spirv(fragment)]
+pub fn composite_fs(
+	#[spirv(frag_coord)] frag_coord: Vec4,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] resolution: &Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] bloom_intensity: &f32,
+	#[spirv(descriptor_set = 0, binding = 2)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] scene_tex: &Image!(2D, type=f32, sampled),
+	#[spirv(descriptor_set = 1, binding = 1)] bloom_tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	let uv = frag_coord.xy() / *resolution;
+	let scene = scene_tex.sample(*sampler, uv);
+	let bloom = bloom_tex.sample(*sampler, uv);
+
+	*out = scene + bloom * *bloom_intensity;
+}
+</file>
+
+<file path="sketches/tests/tex_layer/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{UVec3, Vec2, Vec3, Vec4, vec4};
+use spirv_std::spirv;
+use trivalibs_nostd::prelude::*;
+
+#[spirv(fragment)]
+pub fn main(
+	coord: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] _size: &UVec3,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] color: &Vec3,
+	out: &mut Vec4,
+) {
+	*out = vec4(
+		color.x,
+		(color.y - coord.x).clamp01(),
+		(color.z - coord.y).clamp01(),
+		1.0,
+	);
+}
+</file>
+
+<file path="sketches/tests/tex_layer/shader/Cargo.toml">
+[package]
+name = "test_tex_layer_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+shared-nostd.workspace = true
+</file>
+
+<file path="sketches/tests/tex_layer/Cargo.toml">
+[package]
+name = "test_tex_layer"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+shared.workspace = true
+</file>
+
+<file path="sketches/textures/lines/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{UVec2, Vec2, Vec4};
+use spirv_std::spirv;
+
+pub mod shaders;
+
+#[spirv(fragment)]
+pub fn lines_1(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::lines_1::shader(uv, *size, *time);
+}
+</file>
+
+<file path="sketches/textures/sketches/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{UVec2, Vec2, Vec4};
+#[allow(unused_imports)]
+use spirv_std::num_traits::Float;
+use spirv_std::spirv;
+
+pub mod shaders;
+
+#[spirv(fragment)]
+pub fn moving_plates(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::moving_plates::shader(uv, *size, *time);
+}
+
+#[spirv(fragment)]
+pub fn pool_tiles(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::pool_tiles::shader(uv, *size, *time);
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/book_of_shaders/colors.rs">
+#![allow(unused_imports)]
+
+use crate::utils;
+use core::f32::consts::TAU;
+use spirv_std::glam::{Vec2, Vec4, vec2, vec3};
+use spirv_std::num_traits::Float;
+use trivalibs_nostd::color::{
+	hsv2rgb, hsv2rgb_smooth, hsv2rgb_smoother, hsv2rgb_smoothest, rgb2hsl,
+};
+use trivalibs_nostd::coords::PolarCoord;
+
+pub fn shader(uv: Vec2, time: f32) -> Vec4 {
+	let c = vec3(uv.x, uv.y, 1.0);
+	let mut c_hsv = rgb2hsl(c);
+	c_hsv.z = (c_hsv.z + (time + uv.x * TAU * 6.0).sin()) * 0.5;
+	let c_rgb = hsv2rgb(c_hsv);
+
+	let center = vec2(0.5, 0.5);
+	let radius = 0.4;
+
+	let circle = utils::circle_smooth(center, radius, uv, 0.05);
+
+	let polar = PolarCoord::from_2d_with_center(uv, center);
+	let c_polar = hsv2rgb_smooth(vec3(
+		polar.angle / TAU + 0.5,
+		polar.radius / (radius - 0.01),
+		1.0,
+	));
+
+	c_polar.lerp(c_rgb, circle).extend(1.0)
+	// c.extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/book_of_shaders/mod.rs">
+pub mod circle;
+pub mod circles;
+pub mod colors;
+pub mod rect;
+pub mod rounded_rect;
+pub mod shaping_fns;
+</file>
+
+<file path="sketches/textures/tests/shader/src/book_of_shaders/shaping_fns.rs">
+#![allow(unused_imports)]
+
+use core::f32::consts::PI;
+use shared_nostd::flip_y;
+use spirv_std::num_traits::Float;
+use spirv_std::{
+	glam::{Vec2, Vec3, Vec4, vec3},
+	num_traits::Pow,
+};
+use trivalibs_nostd::prelude::*;
+
+// fn plot_line_1(st: Vec2) -> f32 {
+// 	smoothstep(0.02, 0.0, (st.y - st.x).abs())
+// }
+
+fn plot(st: Vec2, val: f32) -> f32 {
+	// smoothstep(val - 0.02, val, st.y) - smoothstep(val, val + 0.02, st.y)
+	step(val - 0.02, st.y) - step(val + 0.02, st.y)
+}
+
+const PLOT_COLOR: Vec3 = vec3(0.0, 1.0, 0.0);
+
+pub fn shader(st: Vec2) -> Vec4 {
+	let st = flip_y(st);
+
+	let x = st.x;
+
+	// let y = x;
+	// let y = x.pow(5.0);
+	// let y = step(0.4, x) - step(0.6, x);
+	// let y = x.pow(5.0) - st.y.pow(5.0);
+	// let y = x.log(0.5);
+	// let y = x.sqrt();
+	// let y = x.pow(0.4);
+	// let y = st.x * 0.5 + 0.5;
+	// let y = x.pow(PI);
+	// let y = (x * 16.0).sin().abs();
+	// let y = 1.0 - (x * 16.0).sin().abs();
+	// let y = (x * 20.0).sin() * 0.5 + 1.0;
+	let y = (x * 8.0).sin().frct();
+	// let y = (x * 8.0).sin();
+
+	let color = Vec3::splat(y);
+
+	let pct = plot(st, y);
+	let color = (1.0 - pct) * color + pct * PLOT_COLOR;
+
+	// gamma correction
+	let color = color.powf(2.2);
+
+	color.extend(1.0)
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/shaders/mod.rs">
+pub mod circular_line;
+pub mod fbm;
+pub mod net;
+pub mod noisy_line;
+pub mod noisy_lines_1;
+pub mod noisy_squares;
+pub mod simplex_prefilled;
+pub mod tiled_lines;
+</file>
+
+<file path="rust-toolchain.toml">
+[toolchain]
+channel = "nightly"
+# channel = "nightly-2024-11-22"
+components = ["rust-src", "rustc-dev", "llvm-tools"]
+</file>
+
+<file path="shared/Cargo.toml">
+[package]
+name = "shared"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+trivalibs.workspace = true
+trivalibs-nostd.workspace = true
+noise.workspace = true
+bytemuck.workspace = true
+</file>
+
+<file path="shared-nostd/Cargo.toml">
+[package]
+name = "shared-nostd"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+trivalibs-nostd.workspace = true
+
+[target.'cfg(target_arch = "spirv")'.dependencies]
+spirv-std.workspace = true
+[target.'cfg(not(target_arch = "spirv"))'.dependencies]
+glam.workspace = true
+</file>
+
+<file path="sketches/rooms/base/shader/Cargo.toml">
+[package]
+name = "room_shader"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+# Dependencies for CPU and GPU code
+[dependencies]
+spirv-std.workspace = true
+trivalibs-nostd.workspace = true
+shared-nostd.workspace = true
+</file>
+
+<file path="sketches/rooms/grid_ceiling/src/main.rs">
+use geom::create_plane;
+use trivalibs::{
+	common_utils::camera_controls::BasicFirstPersonCameraController,
+	map,
+	painter::{prelude::*, utils::input_state::InputState},
+	prelude::*,
+	rendering::camera::{CamProps, PerspectiveCamera},
+};
+
+use crate::geom::{GridProps, create_grid_columns_form, create_grid_rows_form};
+
+mod geom;
+
+struct App {
+	cam: PerspectiveCamera,
+	vp_mat: BindingBuffer<Mat4>,
+	// grid_row_tex: Layer,
+	// grid_col_tex: Layer,
+	canvas: Layer,
+
+	input: InputState,
+	cam_controller: BasicFirstPersonCameraController,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let pre_render_shade = p.shade([Float32x3, Float32x2, Float32x3]).create();
+		load_vertex_shader!(pre_render_shade, p, "../shader/wall_pre_render_vert.spv");
+		load_fragment_shader!(pre_render_shade, p, "../shader/wall_pre_render_frag.spv");
+
+		let grid_size = (20., 30.);
+		let grid_col_count = 15;
+		let strip_width = 0.15;
+		let strip_height = 0.8;
+
+		let grid_row = create_grid_rows_form(GridProps {
+			grid_width: grid_size.0,
+			grid_height: grid_size.1,
+			count: ((grid_size.1 / grid_size.0) * grid_col_count as f32).floor() as usize,
+			strip_height,
+			strip_width,
+			center: vec3(0., 15., 0.),
+		});
+
+		let grid_row_form = p.form(&grid_row.form).create();
+
+		let grid_col = create_grid_columns_form(GridProps {
+			grid_width: grid_size.0,
+			grid_height: grid_size.1,
+			count: grid_col_count,
+			strip_height,
+			strip_width,
+			center: vec3(0., 15., 0.),
+		});
+
+		let grid_col_form = p.form(&grid_col.form).create();
+
+		let grid_row_tex_shape = p
+			.shape(grid_row_form, pre_render_shade)
+			.with_cull_mode(None)
+			.create();
+		let grid_col_tex_shape = p
+			.shape(grid_col_form, pre_render_shade)
+			.with_cull_mode(None)
+			.create();
+
+		let grid_row_tex = p
+			.layer()
+			.with_size(
+				(grid_row.texture_size.0 * 50.).floor() as u32,
+				(grid_row.texture_size.1 * 50.).floor() as u32,
+			)
+			.with_shape(grid_row_tex_shape)
+			.with_mips()
+			.create_and_init();
+
+		p.paint(grid_row_tex);
+
+		let grid_col_tex = p
+			.layer()
+			.with_size(
+				(grid_col.texture_size.0 * 50.).floor() as u32,
+				(grid_col.texture_size.1 * 50.).floor() as u32,
+			)
+			.with_shape(grid_col_tex_shape)
+			.with_mips()
+			.create_and_init();
+
+		p.paint(grid_col_tex);
+
+		let wall_render_shade = p
+			.shade([Float32x3, Float32x2, Float32x3])
+			.with_bindings([BINDING_BUFFER_VERT, BINDING_SAMPLER_FRAG])
+			.with_layers([BINDING_LAYER_FRAG])
+			.create();
+		load_vertex_shader!(wall_render_shade, p, "../shader/wall_render_vert.spv");
+		load_fragment_shader!(wall_render_shade, p, "../shader/wall_render_frag.spv");
+
+		let cam = PerspectiveCamera::create(CamProps {
+			fov: Some(0.6),
+			translation: Some(vec3(0.0, 3.0, 15.0)),
+			// rot_horizontal: Some(PI),
+			..default()
+		});
+
+		let ground_form = p
+			.form(&create_plane(100.0, 100.0, Vec3::Y, Vec3::ZERO))
+			.create();
+		let roof_form = p
+			.form(&create_plane(100.0, 100.0, -Vec3::Y, vec3(0.0, 20.0, 0.0)))
+			.create();
+		let wall_form = p
+			.form(&create_plane(20.5, 5.0, Vec3::Z, vec3(15.0, 3.0, 0.0)))
+			.create();
+
+		let ground_shape = p.shape(ground_form, wall_render_shade).create();
+		let wall_shape = p.shape(wall_form, wall_render_shade).create();
+		let roof_shape = p.shape(roof_form, wall_render_shade).create();
+		let grid_row_shape = p.shape(grid_row_form, wall_render_shade).create();
+		let grid_col_shape = p
+			.shape(grid_col_form, wall_render_shade)
+			.with_layers(map! {0 => grid_col_tex.binding()})
+			.create();
+
+		let vp_mat = p.bind_mat4();
+		let sampler = p
+			.sampler()
+			.with_filters(wgpu::FilterMode::Linear)
+			.with_mipmap_filter(wgpu::FilterMode::Linear)
+			.create();
+
+		let canvas = p
+			.layer()
+			.with_shapes([
+				ground_shape,
+				wall_shape,
+				roof_shape,
+				grid_row_shape,
+				grid_col_shape,
+			])
+			.with_clear_color(wgpu::Color {
+				r: 0.5,
+				g: 0.6,
+				b: 0.7,
+				a: 1.0,
+			})
+			.with_bindings(map! {
+				0 => vp_mat.binding(),
+				1 => sampler.binding()
+			})
+			.with_layers(map! {0 => grid_row_tex.binding()})
+			.with_multisampling()
+			.with_depth_test()
+			.create();
+
+		Self {
+			cam,
+			canvas,
+			// grid_col_tex,
+			// grid_row_tex,
+			vp_mat,
+			input: default(),
+			cam_controller: BasicFirstPersonCameraController::new(1.0, 3.0),
+		}
+	}
+
+	fn resize(&mut self, _p: &mut Painter, width: u32, height: u32) {
+		self.cam.set_aspect_ratio(width as f32 / height as f32);
+		self.cam_controller.set_screen_size(width, height);
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self
+			.cam_controller
+			.update_camera(&mut self.cam, &self.input, tpf);
+
+		self.vp_mat.update(p, self.cam.view_proj_mat());
+
+		p.paint_and_show(self.canvas);
+		// p.show(self.grid_col_tex);
+
+		p.request_next_frame();
+	}
+
+	fn event(&mut self, e: Event<()>, _p: &mut Painter) {
+		self.input.process_event(e);
+	}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: true,
+			remember_window_dimensions: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/strokes/1/Cargo.toml">
+[package]
+name = "strokes"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+trivalibs.workspace = true
+trivalibs-nostd.workspace = true
+shared.workspace = true
+</file>
+
+<file path="sketches/tests/ball/src/geom.rs">
+use grid::{CIRCLE_COLS_COORD_OPS, make_grid_with_coord_ops};
+use std::f32::consts::PI;
+use trivalibs::{
+	prelude::*,
+	rendering::{
+		BufferedGeometry,
+		mesh_geometry::{MeshBufferType, MeshGeometry},
+	},
+};
+
+#[apply(gpu_data)]
+struct Vertex {
+	pos: Vec3,
+	uv: Vec2,
+	color: Vec3,
+}
+impl Position3D for Vertex {
+	fn position(&self) -> Vec3 {
+		self.pos
+	}
+}
+
+fn vert(pos: Vec3, uv: Vec2, color: Vec3) -> Vertex {
+	Vertex { pos, color, uv }
+}
+
+pub fn create_ball_geom() -> BufferedGeometry {
+	let mut grid = make_grid_with_coord_ops(CIRCLE_COLS_COORD_OPS);
+	let mut col1 = vec![];
+	let mut y = -5.0;
+	while y <= 5.0 {
+		let x = f32::sqrt(25.0 - y * y);
+		col1.push((vec3(x, y, 0.0), vec2(0.0, y / 10.0 + 0.5)));
+		y += 0.5;
+	}
+	grid.add_col(col1.clone());
+
+	let stops = 20;
+	let angle = (PI * 2.0) / stops as f32;
+	for i in 1..stops {
+		let q = Quat::from_rotation_y(angle * i as f32);
+		let col = col1
+			.iter()
+			.map(|(pos, uv)| {
+				let v = q.mul_vec3(*pos);
+				(vec3(v.x, pos.y, v.z), vec2(i as f32 / stops as f32, uv.y))
+			})
+			.collect();
+		grid.add_col(col)
+	}
+
+	let mut geom = MeshGeometry::new();
+	for quad in grid.to_ccw_quads() {
+		let r: f32 = random();
+		let g: f32 = random();
+		let b: f32 = random();
+
+		let color = vec3(r, g, b);
+
+		let v0 = vert(quad[0].0, quad[0].1, color);
+		let v1 = vert(quad[1].0, quad[1].1, color);
+		let v2 = vert(quad[2].0, quad[2].1, color);
+		let v3 = vert(quad[3].0, quad[3].1, color);
+
+		if v0.pos.y == -5.0 {
+			// v0 == v1
+			geom.add_face(&[v0, v2, v3]);
+		} else if v2.pos.y == 5.0 {
+			// v2 == v3
+			geom.add_face(&[v0, v1, v2]);
+		} else {
+			geom.add_face(&[v0, v1, v2, v3]);
+		}
+	}
+
+	geom.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithVertexNormal)
+}
+
+#[test]
+fn test_ball1() {
+	let res = create_ball_geom();
+	// println!("{:?}", res);
+	assert!(res.vertex_buffer.len() > 0);
+	println!("buffer len: {}", res.vertex_buffer.len());
+	println!(
+		"index buffer len: {}",
+		res.index_buffer.map(|i| i.len()).unwrap_or(0)
+	);
+}
+</file>
+
+<file path="sketches/tests/ball/src/main.rs">
+use geom::create_ball_geom;
+use trivalibs::{
+	map,
+	math::transform::Transform,
+	painter::prelude::*,
+	prelude::*,
+	rendering::{
+		camera::{CamProps, PerspectiveCamera},
+		scene::SceneObject,
+	},
+};
+
+mod geom;
+
+struct App {
+	cam: PerspectiveCamera,
+	ball_transform: Transform,
+
+	mvp: BindingBuffer<Mat4>,
+	norm: BindingBuffer<Mat3U>,
+	canvas: Layer,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let tex_bytes = include_bytes!("../texture.png");
+		let mut reader = png::Decoder::new(std::io::Cursor::new(tex_bytes))
+			.read_info()
+			.unwrap();
+		// Allocate the output buffer.
+		let mut buf = vec![0; reader.output_buffer_size().unwrap()];
+		// Read the next frame. An APNG might contain multiple frames.
+		let info = reader.next_frame(&mut buf).unwrap();
+		// Grab the bytes of the image.
+		let tex_rgba = &buf[..info.buffer_size()];
+
+		let texture = p
+			.layer()
+			.with_size(info.width, info.height)
+			.with_static_texture_data(tex_rgba)
+			.create();
+
+		let shade = p
+			.shade([Float32x3, Float32x2, Float32x3, Float32x3])
+			.with_bindings([
+				BINDING_BUFFER_VERT,
+				BINDING_BUFFER_VERT,
+				BINDING_SAMPLER_FRAG,
+			])
+			.with_layers([BINDING_LAYER_FRAG])
+			.create();
+		load_vertex_shader!(shade, p, "../shader/vertex.spv");
+		load_fragment_shader!(shade, p, "../shader/fragment.spv");
+
+		let form = p.form(&create_ball_geom()).create();
+
+		let mvp = p.bind_mat4();
+		let norm = p.bind_mat3();
+
+		let s = p.sampler_linear().binding();
+
+		let shape = p
+			.shape(form, shade)
+			.with_bindings(map! {
+				0 => mvp.binding(),
+				1 => norm.binding(),
+				2 => s
+			})
+			.with_layers(map! {
+				0 => texture.binding()
+			})
+			.create();
+
+		let canvas = p
+			.layer()
+			.with_shape(shape)
+			.with_clear_color(wgpu::Color {
+				r: 0.5,
+				g: 0.6,
+				b: 0.7,
+				a: 1.0,
+			})
+			.with_multisampling()
+			.create();
+
+		Self {
+			cam: PerspectiveCamera::create(CamProps {
+				fov: Some(0.6),
+				..default()
+			}),
+			ball_transform: Transform::from_translation(vec3(0.0, 0.0, -20.0)),
+			canvas,
+			mvp,
+			norm,
+		}
+	}
+
+	fn resize(&mut self, _p: &mut Painter, width: u32, height: u32) {
+		self.cam.set_aspect_ratio(width as f32 / height as f32);
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self.ball_transform.rotate_y(tpf * 0.5);
+
+		self
+			.mvp
+			.update(p, self.ball_transform.model_view_proj_mat(&self.cam));
+
+		self
+			.norm
+			.update_mat3(p, self.ball_transform.view_normal_mat(&self.cam));
+
+		p.paint_and_show(self.canvas);
+
+		p.request_next_frame();
+	}
+
+	fn event(&mut self, _e: Event<()>, _p: &mut Painter) {}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: true,
+			remember_window_dimensions: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/tests/tex_layer/src/main.rs">
+use shared::static_effect_layer_u8;
+use trivalibs::{painter::prelude::*, prelude::*};
+
+struct App {
+	canvas: Layer,
+	time: f32,
+	color: BindingBuffer<Vec3U>,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let color = p.bind_vec3();
+
+		let (canvas, shade) = static_effect_layer_u8(p, 10, 10, map! { 1 => color.binding() });
+		load_fragment_shader!(shade, p, "../shader/main.spv");
+
+		Self {
+			canvas,
+			time: 0.0,
+			color,
+		}
+	}
+
+	fn resize(&mut self, _p: &mut Painter, _width: u32, _height: u32) {}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		p.request_next_frame();
+		if self.time % 1.0 < 0.05 {
+			self.color.update_vec3(p, rand_vec3());
+		}
+		self.time += tpf;
+		p.paint_and_show(self.canvas)
+	}
+
+	fn event(&mut self, _e: Event<()>, _p: &mut Painter) {}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			remember_window_dimensions: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/textures/tests/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use spirv_std::glam::{UVec2, Vec2, Vec4};
+#[allow(unused_imports)]
+use spirv_std::num_traits::Float;
+use spirv_std::{Image, Sampler, spirv};
+
+mod book_of_shaders;
+mod shaders;
+mod utils;
+
+#[spirv(fragment)]
+pub fn simplex_prefilled(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(descriptor_set = 0, binding = 1)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	*out = shaders::simplex_prefilled::shader(uv, tex, sampler, size);
+}
+
+#[spirv(fragment)]
+pub fn fbm_shader(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::fbm::shader(uv, *size, *time);
+}
+
+#[spirv(fragment)]
+pub fn noisy_lines_1(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::noisy_lines_1::shader(uv, *size, *time);
+}
+
+#[spirv(fragment)]
+pub fn noisy_lines_2(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::noisy_line::shader(uv, *size, *time);
+}
+
+#[spirv(fragment)]
+pub fn circular_line(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::circular_line::shader(uv, *size, *time);
+}
+
+#[spirv(fragment)]
+pub fn tiled_lines(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::tiled_lines::shader(uv, *size, *time);
+}
+
+#[spirv(fragment)]
+pub fn net(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] _time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::net::shader(uv, *size);
+}
+
+#[spirv(fragment)]
+pub fn noisy_quads(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = shaders::noisy_squares::shader(uv, size.as_vec2(), *time);
+}
+
+#[spirv(fragment)]
+pub fn bos_shapes_rounded_rect(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] _size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] _time: &f32,
+	out: &mut Vec4,
+) {
+	*out = book_of_shaders::rounded_rect::shader(uv);
+}
+
+#[spirv(fragment)]
+pub fn bos_shaping_fns(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] _size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] _time: &f32,
+	out: &mut Vec4,
+) {
+	*out = book_of_shaders::shaping_fns::shader(uv);
+}
+
+#[spirv(fragment)]
+pub fn bos_shapes_rect(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] _size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] _time: &f32,
+	out: &mut Vec4,
+) {
+	*out = book_of_shaders::rect::shader(uv);
+}
+
+#[spirv(fragment)]
+pub fn bos_shapes_circle(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] _size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = book_of_shaders::circle::shader(uv, *time);
+}
+
+#[spirv(fragment)]
+pub fn bos_colors(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] _size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = book_of_shaders::colors::shader(uv, *time);
+}
+
+#[spirv(fragment)]
+pub fn bos_shapes_circles(
+	uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] _size: &UVec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] time: &f32,
+	out: &mut Vec4,
+) {
+	*out = book_of_shaders::circles::shader(uv, *time);
+}
+</file>
+
+<file path="sketches/rooms/base/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+use shared_nostd::flip_y;
+use spirv_std::glam::{Mat4, Vec2, Vec3, Vec4, swizzles::*, vec2, vec3};
+use spirv_std::{Image, Sampler, spirv};
+use trivalibs_nostd::prelude::*;
+use trivalibs_nostd::random::simplex::{rot_noise_3d, simplex_noise_3d};
+
+#[spirv(vertex)]
+pub fn wall_pre_render_vert(
+	position: Vec3,
+	uv: Vec2,
+	normal: Vec3,
+	#[spirv(position)] out_vert: &mut Vec4,
+	out_pos: &mut Vec3,
+	out_uv: &mut Vec2,
+	out_norm: &mut Vec3,
+) {
+	*out_vert = uv.fit0111().extend(0.).extend(1.0);
+	*out_pos = position;
+	*out_uv = uv;
+	*out_norm = normal;
+}
+
+#[spirv(fragment)]
+pub fn wall_pre_render_frag(in_pos: Vec3, in_uv: Vec2, _in_norm: Vec3, out: &mut Vec4) {
+	// let noise1 = simplex_noise_3d(in_pos / 1. + Vec3::splat(140.0));
+	let noise1 = rot_noise_3d(in_pos / 3. + Vec3::splat(140.0), 0.).0;
+
+	// let noise2 = rot_noise_3d(in_pos.cross(in_norm), in_uv.y);
+
+	// let val = (noise1.0 + noise2.0).fit1101() / 2.0;
+	let val = noise1.fit1101() / 1.0;
+
+	*out = Vec3::splat(val.clamp01().powf(2.2)).extend(1.0);
+	// *out = vec3(val.clamp01(), in_uv.x, in_uv.y).extend(1.0);
+	// *out = vec3(0.0, in_uv.x, in_uv.y).extend(1.0);
+}
+
+#[spirv(vertex)]
+pub fn wall_render_vert(
+	position: Vec3,
+	uv: Vec2,
+	normal: Vec3,
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] mvp_mat: &Mat4,
+	#[spirv(position)] out_pos: &mut Vec4,
+	out_uv: &mut Vec2,
+	out_norm: &mut Vec3,
+) {
+	*out_pos = *mvp_mat * position.extend(1.0);
+	*out_uv = uv;
+	*out_norm = normal;
+}
+
+#[spirv(fragment)]
+pub fn wall_render_frag(
+	in_uv: Vec2,
+	_in_norm: Vec3,
+	#[spirv(descriptor_set = 0, binding = 1)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	let uv = in_uv * 40.0;
+	let uv = uv.fract();
+
+	// let col = if uv.x < 0.75 || uv.y < 0.75 {
+	// 	tex.sample(*sampler, vec2(in_uv.x, 1.0 - in_uv.y)).xyz()
+	// } else {
+	// 	vec3(0.0, in_uv.x, in_uv.y)
+	// };
+	let col = tex.sample(*sampler, flip_y(in_uv)).xyz();
+
+	*out = col.xyz().powf(2.2).extend(1.0);
+}
+</file>
+
+<file path="sketches/strokes/1/shader/src/lib.rs">
+#![no_std]
+#![allow(unexpected_cfgs)]
+
+#[allow(unused_imports)]
+use spirv_std::num_traits::Float;
+use spirv_std::spirv;
+use spirv_std::{
+	Image, Sampler,
+	glam::{Vec2, Vec3, Vec4, vec4},
+};
+use trivalibs_nostd::{prelude::*, random::simplex::fbm_simplex_2d};
+
+// Line vertex shader
+#[spirv(vertex)]
+pub fn line_vert(
+	// Attribs
+	position: Vec2,
+	_width: f32,
+	_length: f32,
+	uv: Vec2,
+	local_uv: Vec2,
+	// Uniforms
+	#[spirv(uniform, descriptor_set = 0, binding = 0)] size: &Vec2,
+	// Outputs
+	#[spirv(position)] out_pos: &mut Vec4,
+	out_uv: &mut Vec2,
+	out_local_uv: &mut Vec2,
+) {
+	let pos = (position / size).fit0111();
+
+	*out_pos = vec4(pos.x, -pos.y, 0.0, 1.0);
+	*out_uv = uv;
+	*out_local_uv = local_uv;
+}
+
+// Line fragment shader with brush effect (simplified without noise texture for now)
+#[spirv(fragment)]
+pub fn line_frag(
+	uv: Vec2,
+	local_uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] color: &Vec3,
+	#[spirv(uniform, descriptor_set = 0, binding = 2)] rand_offset: &Vec2,
+	out: &mut Vec4,
+) {
+	let mut alpha = fbm_simplex_2d(uv * 2.0 + rand_offset, 4, 2.0, 0.7) / 4.0;
+
+	// Fade out edges along the stroke width (localUv.y)
+	alpha -= local_uv.x.fit0111().abs().powf(10.0);
+
+	// Fade out edges along stroke length (uv.y)
+	alpha -= uv.y.fit0111().abs().powf(10.0);
+
+	// adjust overall alpha
+	alpha = (alpha + 0.3).clamp01();
+
+	// Fade out at the end of stroke
+	alpha *= uv.x.smoothstep(1.0, 0.90);
+
+	*out = color.powf(2.2).extend(alpha);
+	// *out = color.extend(0.5);
+}
+
+// Background shader - simple solid color
+#[spirv(fragment)]
+pub fn bg_frag(
+	_uv: Vec2,
+	#[spirv(uniform, descriptor_set = 0, binding = 1)] color: &Vec3,
+	out: &mut Vec4,
+) {
+	*out = color.extend(1.0);
+}
+
+#[spirv(fragment)]
+pub fn canvas_frag(
+	uv: Vec2,
+	#[spirv(descriptor_set = 0, binding = 0)] sampler: &Sampler,
+	#[spirv(descriptor_set = 1, binding = 0)] tex: &Image!(2D, type=f32, sampled),
+	out: &mut Vec4,
+) {
+	*out = tex.sample(*sampler, uv);
+}
+</file>
+
+<file path="sketches/tests/bloom/src/main.rs">
+use trivalibs::{map, painter::prelude::*, prelude::*};
+
+struct App {
+	time: f32,
+
+	// Bindings
+	u_time: BindingBuffer<f32>,
+	u_blur_radius: BindingBuffer<f32>,
+	u_resolution: BindingBuffer<Vec2>,
+	u_resolution_mip1: BindingBuffer<Vec2>,
+	u_resolution_mip2: BindingBuffer<Vec2>,
+	u_resolution_mip3: BindingBuffer<Vec2>,
+	u_resolution_mip4: BindingBuffer<Vec2>,
+
+	// Layers
+	scene_layer: Layer,
+	bloom_layer: Layer,
+	canvas: Layer,
+}
+
+impl CanvasApp for App {
+	fn init(p: &mut Painter) -> Self {
+		// Create shaders
+		let test_scene_shade = p
+			.shade_effect()
+			.with_bindings([BINDING_BUFFER_FRAG, BINDING_BUFFER_FRAG])
+			.create();
+		load_fragment_shader!(test_scene_shade, p, "../shader/test_scene_fs.spv");
+
+		let threshold_shade = p
+			.shade_effect()
+			.with_bindings([
+				BINDING_BUFFER_FRAG,
+				BINDING_BUFFER_FRAG,
+				BINDING_SAMPLER_FRAG,
+			])
+			.with_layer()
+			.create();
+		load_fragment_shader!(threshold_shade, p, "../shader/threshold_fs.spv");
+
+		let downsample_shade = p
+			.shade_effect()
+			.with_bindings([
+				BINDING_BUFFER_FRAG,
+				BINDING_BUFFER_FRAG,
+				BINDING_SAMPLER_FRAG,
+			])
+			.with_layer()
+			.create();
+		load_fragment_shader!(downsample_shade, p, "../shader/downsample_blur_fs.spv");
+
+		let upsample_shade = p
+			.shade_effect()
+			.with_bindings([
+				BINDING_BUFFER_FRAG,
+				BINDING_BUFFER_FRAG,
+				BINDING_SAMPLER_FRAG,
+			])
+			.with_layer()
+			.create();
+		load_fragment_shader!(upsample_shade, p, "../shader/upsample_blur_fs.spv");
+
+		let composite_shade = p
+			.shade_effect()
+			.with_bindings([
+				BINDING_BUFFER_FRAG,
+				BINDING_BUFFER_FRAG,
+				BINDING_SAMPLER_FRAG,
+			])
+			.with_layers([BINDING_LAYER_FRAG, BINDING_LAYER_FRAG])
+			.create();
+		load_fragment_shader!(composite_shade, p, "../shader/composite_fs.spv");
+
+		// Create bindings
+		let u_time = p.bind_f32();
+		let u_threshold = p.bind_f32();
+		let u_bloom_intensity = p.bind_f32();
+		let u_blur_radius = p.bind_f32();
+		let u_resolution = p.bind_vec2();
+		let u_resolution_mip1 = p.bind_vec2();
+		let u_resolution_mip2 = p.bind_vec2();
+		let u_resolution_mip3 = p.bind_vec2();
+		let u_resolution_mip4 = p.bind_vec2();
+
+		// Initialize parameter values
+		u_threshold.update(p, 1.0);
+		u_bloom_intensity.update(p, 0.05);
+		u_blur_radius.update(p, 8.0);
+
+		// Create sampler
+		let sampler = p.sampler_linear();
+
+		// Create scene layer using single_effect_layer
+		let scene_layer = p
+			.single_effect_layer(test_scene_shade)
+			.with_bindings(map! {
+				0 => u_resolution.binding(),
+				1 => u_time.binding(),
+			})
+			.with_float16_format()
+			.create();
+
+		// Create threshold effect
+		let threshold_effect = p
+			.effect(threshold_shade)
+			.with_bindings(map! {
+				0 => u_resolution.binding(),
+				1 => u_threshold.binding(),
+				2 => sampler.binding(),
+			})
+			.with_layers(map! {
+				0 => scene_layer.binding()
+			})
+			.with_mip_target(0)
+			.create();
+
+		let mut effects = vec![threshold_effect];
+
+		// Downsample chain: mip 0→1→2→3→4 (single pass per level)
+		for i in 0..4 {
+			let res_binding = match i {
+				0 => u_resolution_mip1,
+				1 => u_resolution_mip2,
+				2 => u_resolution_mip3,
+				3 => u_resolution_mip4,
+				_ => unreachable!(),
+			};
+
+			effects.push(
+				p.effect(downsample_shade)
+					.with_bindings(map! {
+						0 => res_binding.binding(),
+						1 => u_blur_radius.binding(),
+						2 => sampler.binding(),
+					})
+					.with_mip_source(i)
+					.with_mip_target(i + 1)
+					.create(),
+			);
+		}
+
+		// Create additive blend state for upsampling
+		let additive_blend = wgpu::BlendState {
+			color: wgpu::BlendComponent {
+				src_factor: wgpu::BlendFactor::One,
+				dst_factor: wgpu::BlendFactor::One,
+				operation: wgpu::BlendOperation::Add,
+			},
+			alpha: wgpu::BlendComponent::REPLACE,
+		};
+
+		// Upsample chain: mip 4→3→2→1→0 (single pass per level with additive blending)
+		for i in (0..4).rev() {
+			let res_binding = match i {
+				0 => u_resolution,
+				1 => u_resolution_mip1,
+				2 => u_resolution_mip2,
+				3 => u_resolution_mip3,
+				_ => unreachable!(),
+			};
+
+			effects.push(
+				p.effect(upsample_shade)
+					.with_bindings(map! {
+						0 => res_binding.binding(),
+						1 => u_blur_radius.binding(),
+						2 => sampler.binding(),
+					})
+					.with_mip_source(i + 1)
+					.with_mip_target(i)
+					.with_blend_state(additive_blend)
+					.create(),
+			);
+		}
+
+		// Create bloom layer with all effects
+		let bloom_layer = p
+			.layer()
+			.with_effects(effects)
+			.with_mips_max(5)
+			.with_float16_format()
+			.create();
+
+		// Create final composite layer
+		let canvas = p
+			.single_effect_layer(composite_shade)
+			.with_float16_format()
+			.with_bindings(map! {
+				0 => u_resolution.binding(),
+				1 => u_bloom_intensity.binding(),
+				2 => sampler.binding(),
+			})
+			.with_layers(map! {
+				0 => scene_layer.binding(),
+				1 => bloom_layer.binding()
+			})
+			.create();
+
+		Self {
+			time: 0.0,
+			u_time,
+			u_blur_radius,
+			u_resolution,
+			u_resolution_mip1,
+			u_resolution_mip2,
+			u_resolution_mip3,
+			u_resolution_mip4,
+
+			scene_layer,
+			bloom_layer,
+			canvas,
+		}
+	}
+
+	fn resize(&mut self, p: &mut Painter, width: u32, height: u32) {
+		self
+			.u_resolution
+			.update(p, vec2(width as f32, height as f32));
+		self
+			.u_resolution_mip1
+			.update(p, vec2((width / 2) as f32, (height / 2) as f32));
+		self
+			.u_resolution_mip2
+			.update(p, vec2((width / 4) as f32, (height / 4) as f32));
+		self
+			.u_resolution_mip3
+			.update(p, vec2((width / 8) as f32, (height / 8) as f32));
+		self
+			.u_resolution_mip4
+			.update(p, vec2((width / 16) as f32, (height / 16) as f32));
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self.time += tpf;
+		self.u_time.update(p, self.time);
+		self.u_blur_radius.update(p, 4.0 + 4.0 * self.time.sin());
+
+		// p.paint_and_show(self.scene_layer);
+		p.paint(self.scene_layer);
+		p.paint(self.bloom_layer);
+		p.paint_and_show(self.canvas);
+
+		p.request_next_frame();
+	}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: false,
+			remember_window_dimensions: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/textures/lines/src/main.rs">
+use trivalibs::{map, painter::prelude::*, prelude::*};
+
+struct App {
+	time: f32,
+	u_size: BindingBuffer<UVec2>,
+	u_time: BindingBuffer<f32>,
+
+	layers: Vec<Layer>,
+	current_layer: usize,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let u_size = p.bind_uvec2();
+		let u_time = p.bind_f32();
+
+		let shade_canvas = |p: &mut Painter| {
+			let s = p
+				.shade_effect()
+				.with_bindings([BINDING_BUFFER_FRAG, BINDING_BUFFER_FRAG])
+				.create();
+
+			let layer = p
+				.single_effect_layer(s)
+				.with_bindings(map! {
+					0 => u_size.binding(),
+					1 => u_time.binding()
+				})
+				.create();
+
+			(s, layer)
+		};
+
+		let (s, canvas_noisy_lines_2) = shade_canvas(p);
+		load_fragment_shader!(s, p, "../shader/out/lines_1.spv");
+
+		// return App
+
+		Self {
+			time: 0.0,
+			u_size,
+			u_time,
+
+			layers: vec![canvas_noisy_lines_2],
+			current_layer: 0,
+		}
+	}
+
+	fn resize(&mut self, p: &mut Painter, width: u32, height: u32) {
+		self.u_size.update(p, uvec2(width, height));
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self.time += tpf;
+		self.u_time.update(p, self.time);
+
+		let layer = self.layers[self.current_layer];
+		p.paint_and_show(layer);
+
+		p.request_next_frame();
+	}
+
+	fn event(&mut self, e: Event<()>, p: &mut Painter) {
+		match e {
+			Event::PointerUp { button, .. } => {
+				p.request_next_frame();
+				match button {
+					PointerButton::Primary => {
+						self.current_layer = (self.current_layer + 1) % self.layers.len();
+					}
+					_ => {
+						self.current_layer = (self.current_layer + self.layers.len() - 1) % self.layers.len();
+					}
+				}
+			}
+			_ => {}
+		}
+	}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: true,
+			remember_window_dimensions: true,
+			features: Some(wgpu::Features::FLOAT32_FILTERABLE),
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/textures/sketches/src/main.rs">
+use trivalibs::{map, painter::prelude::*, prelude::*};
+
+struct App {
+	time: f32,
+	u_size: BindingBuffer<UVec2>,
+	u_time: BindingBuffer<f32>,
+
+	layers: Vec<Layer>,
+	current_layer: usize,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let u_size = p.bind_uvec2();
+
+		let u_time = p.bind_f32();
+
+		let shade_canvas = |p: &mut Painter| {
+			let s = p
+				.shade_effect()
+				.with_bindings([BINDING_BUFFER_FRAG, BINDING_BUFFER_FRAG])
+				.create();
+
+			let layer = p
+				.single_effect_layer(s)
+				.with_bindings(map! {
+					0 => u_size.binding(),
+					1 => u_time.binding()
+				})
+				.create();
+
+			(s, layer)
+		};
+
+		let (s, canvas_tiles) = shade_canvas(p);
+		load_fragment_shader!(s, p, "../shader/out/moving_plates.spv");
+
+		let (s, canvas_pool_tiles) = shade_canvas(p);
+		load_fragment_shader!(s, p, "../shader/out/pool_tiles.spv");
+
+		// return App
+
+		Self {
+			time: 0.0,
+			u_size,
+			u_time,
+
+			layers: vec![canvas_pool_tiles, canvas_tiles],
+			current_layer: 0,
+		}
+	}
+
+	fn resize(&mut self, p: &mut Painter, width: u32, height: u32) {
+		self.u_size.update(p, uvec2(width, height));
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self.time += tpf;
+		self.u_time.update(p, self.time);
+
+		let layer = self.layers[self.current_layer];
+		p.paint_and_show(layer);
+
+		p.request_next_frame();
+	}
+
+	fn event(&mut self, e: Event<()>, p: &mut Painter) {
+		match e {
+			Event::PointerUp { button, .. } => {
+				p.request_next_frame();
+				match button {
+					PointerButton::Primary => {
+						self.current_layer = (self.current_layer + 1) % self.layers.len();
+					}
+					_ => {
+						self.current_layer = (self.current_layer + self.layers.len() - 1) % self.layers.len();
+					}
+				}
+			}
+			_ => {}
+		}
+	}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: true,
+			remember_window_dimensions: true,
+			features: Some(wgpu::Features::FLOAT32_FILTERABLE),
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/textures/tests/src/main.rs">
+use shared::noise_texture_f32;
+use trivalibs::{map, painter::prelude::*, prelude::*};
+
+#[derive(Copy, Clone)]
+struct Canvas {
+	layer: Layer,
+	animated: bool,
+}
+
+struct App {
+	time: f32,
+	u_size: BindingBuffer<UVec2>,
+	u_time: BindingBuffer<f32>,
+
+	canvases: Vec<Canvas>,
+	current_canvas: usize,
+}
+
+const NOISE_TEXTURE_WIDTH: u32 = 256;
+const NOISE_TEXTURE_HEIGHT: u32 = 256;
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let noise_tex = noise_texture_f32(p, NOISE_TEXTURE_WIDTH, NOISE_TEXTURE_HEIGHT, 0.6);
+
+		let sampler = p
+			.sampler()
+			.with_filters(wgpu::FilterMode::Linear)
+			.with_address_modes(wgpu::AddressMode::Repeat)
+			.create();
+
+		let u_size = p.bind_uvec2();
+
+		let u_time = p.bind_f32();
+
+		let texture_shade_canvas = |p: &mut Painter, tex: Layer, animated: bool| {
+			let s = p
+				.shade_effect()
+				.with_bindings([BINDING_BUFFER_FRAG, BINDING_SAMPLER_FRAG])
+				.with_layers([BINDING_LAYER_FRAG])
+				.create();
+
+			let layer = p
+				.single_effect_layer(s)
+				.with_bindings(map! {
+					0 => u_size.binding(),
+					1 => sampler.binding(),
+				})
+				.with_layers(map! {
+					0 => tex.binding()
+				})
+				.create();
+
+			(s, Canvas { layer, animated })
+		};
+
+		let shade_canvas = |p: &mut Painter, animated: bool| {
+			let s = p
+				.shade_effect()
+				.with_bindings([BINDING_BUFFER_FRAG, BINDING_BUFFER_FRAG])
+				.create();
+
+			let layer = p
+				.single_effect_layer(s)
+				.with_bindings(map! {
+					0 => u_size.binding(),
+					1 => u_time.binding()
+				})
+				.create();
+
+			(s, Canvas { layer, animated })
+		};
+
+		let (s, canvas_fbm_shader) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/fbm_shader.spv");
+
+		let (s, canvas_circular_line) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/circular_line.spv");
+
+		let (s, canvas_simplex_prefilled) = texture_shade_canvas(p, noise_tex, false);
+		load_fragment_shader!(s, p, "../shader/out/simplex_prefilled.spv");
+
+		let (s, canvas_bos_shaping_fns) = shade_canvas(p, false);
+		load_fragment_shader!(s, p, "../shader/out/bos_shaping_fns.spv");
+
+		let (s, canvas_bos_colors) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/bos_colors.spv");
+
+		let (s, canvas_bos_shapes_rect) = shade_canvas(p, false);
+		load_fragment_shader!(s, p, "../shader/out/bos_shapes_rect.spv");
+
+		let (s, canvas_bos_shapes_rounded_rect) = shade_canvas(p, false);
+		load_fragment_shader!(s, p, "../shader/out/bos_shapes_rounded_rect.spv");
+
+		let (s, canvas_bos_shapes_circle) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/bos_shapes_circle.spv");
+
+		let (s, canvas_bos_shapes_circles) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/bos_shapes_circles.spv");
+
+		let (s, canvas_noisy_lines_1) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/noisy_lines_1.spv");
+
+		let (s, canvas_tiled_lines) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/tiled_lines.spv");
+
+		let (s, canvas_noisy_lines_2) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/noisy_lines_2.spv");
+
+		let (s, canvas_noisy_quads) = shade_canvas(p, true);
+		load_fragment_shader!(s, p, "../shader/out/noisy_quads.spv");
+
+		let (s, canvas_net) = shade_canvas(p, false);
+		load_fragment_shader!(s, p, "../shader/out/net.spv");
+
+		// return App
+
+		Self {
+			time: 0.0,
+			u_size,
+			u_time,
+
+			canvases: vec![
+				canvas_circular_line,
+				canvas_noisy_lines_2,
+				canvas_net,
+				canvas_tiled_lines,
+				canvas_noisy_lines_1,
+				canvas_bos_shapes_circles,
+				canvas_bos_shapes_circle,
+				canvas_bos_shapes_rect,
+				canvas_bos_colors,
+				canvas_bos_shaping_fns,
+				canvas_fbm_shader,
+				canvas_simplex_prefilled,
+				canvas_bos_shapes_rounded_rect,
+				canvas_noisy_quads,
+			],
+			current_canvas: 0,
+		}
+	}
+
+	fn resize(&mut self, p: &mut Painter, width: u32, height: u32) {
+		self.u_size.update(p, uvec2(width, height));
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self.time += tpf;
+		self.u_time.update(p, self.time);
+		let c = &self.canvases[self.current_canvas];
+		if c.animated {
+			p.request_next_frame();
+		}
+		p.paint_and_show(c.layer)
+	}
+
+	fn event(&mut self, e: Event<()>, p: &mut Painter) {
+		match e {
+			Event::PointerUp { button, .. } => {
+				p.request_next_frame();
+				match button {
+					PointerButton::Primary => {
+						self.current_canvas = (self.current_canvas + 1) % self.canvases.len();
+					}
+					_ => {
+						self.current_canvas =
+							(self.current_canvas + self.canvases.len() - 1) % self.canvases.len();
+					}
+				}
+			}
+			_ => {}
+		}
+	}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: true,
+			remember_window_dimensions: true,
+			features: Some(wgpu::Features::FLOAT32_FILTERABLE),
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="shared/src/lib.rs">
+use noise::{NoiseFn, Simplex};
+use trivalibs::{
+	painter::{
+		Painter, binding::ValueBinding, layer::Layer, prelude::BINDING_BUFFER_FRAG, shade::Shade, wgpu,
+	},
+	prelude::*,
+	rendering::texture::f64_to_u8,
+};
+
+mod plate_geometry;
+
+pub fn rand_rgba_f32(width: u32, height: u32) -> Vec<f32> {
+	let mut rgba = vec![0.0; (width * height * 4) as usize];
+	for i in 0..rgba.len() {
+		rgba[i] = rand_range(0.0, 1.0);
+	}
+	rgba
+}
+
+pub fn rand_rgba_u8(width: u32, height: u32) -> Vec<u8> {
+	let mut rgba = vec![0; (width * height * 4) as usize];
+	for i in 0..rgba.len() {
+		rgba[i] = rand_range(0., 255.) as u8;
+	}
+	rgba
+}
+
+pub fn tiled_noise(u: f64, v: f64, scale: f64, seed: u32) -> f64 {
+	let simplex = Simplex::new(seed);
+
+	// Map coordinates to circle for seamless wrapping
+	let angle_x = u * std::f64::consts::TAU;
+	let angle_y = v * std::f64::consts::TAU;
+
+	let nx = angle_x.cos() * scale;
+	let ny = angle_y.cos() * scale;
+	let nz = angle_x.sin() * scale;
+	let nw = angle_y.sin() * scale;
+
+	// Get 4D noise value
+	let value = simplex.get([nx, ny, nz, nw]);
+
+	value.fit1101()
+}
+
+pub fn tiled_noise_rgba<T: Copy + Clone>(
+	width: u32,
+	height: u32,
+	initial_scale: f64,
+	scale_factor: f64,
+	f: fn(f64) -> T,
+) -> Vec<T> {
+	let size = (width * height) as usize;
+	let mut rgba = vec![f(0.0); size * 4];
+	let seed_r = rand_f32().floor() as u32;
+	let seed_g = rand_f32().floor() as u32;
+	let seed_b = rand_f32().floor() as u32;
+	let seed_a = rand_f32().floor() as u32;
+
+	for i in 0..size {
+		let u = (i % width as usize) as f64 / width as f64;
+		let v = (i / width as usize) as f64 / height as f64;
+		let i = i * 4;
+		rgba[i] = f(tiled_noise(u, v, initial_scale, seed_r));
+		rgba[i + 1] = f(tiled_noise(u, v, initial_scale * scale_factor, seed_g));
+		rgba[i + 2] = f(tiled_noise(
+			u,
+			v,
+			initial_scale * scale_factor * 2.0,
+			seed_b,
+		));
+		rgba[i + 3] = f(tiled_noise(
+			u,
+			v,
+			initial_scale * scale_factor * 4.0,
+			seed_a,
+		));
+	}
+
+	rgba
+}
+
+pub fn noise_texture_u8(p: &mut Painter, width: u32, height: u32, noise_scale: f64) -> Layer {
+	p.layer()
+		.with_size(width, height)
+		.with_static_texture_data(&tiled_noise_rgba(
+			width,
+			height,
+			noise_scale,
+			2.0,
+			f64_to_u8,
+		))
+		.create()
+}
+
+pub fn random_texture_u8(p: &mut Painter, width: u32, height: u32) -> Layer {
+	p.layer()
+		.with_size(width, height)
+		.with_static_texture_data(&rand_rgba_u8(width, height))
+		.create()
+}
+
+pub fn random_texture_f32(p: &mut Painter, width: u32, height: u32) -> Layer {
+	p.layer()
+		.with_size(width, height)
+		.with_format(wgpu::TextureFormat::Rgba32Float)
+		.with_static_texture_data(bytemuck::cast_slice(&rand_rgba_f32(width, height)))
+		.create()
+}
+
+pub fn noise_texture_f32(p: &mut Painter, width: u32, height: u32, noise_scale: f64) -> Layer {
+	p.layer()
+		.with_size(width, height)
+		.with_format(wgpu::TextureFormat::Rgba32Float)
+		.with_static_texture_data(bytemuck::cast_slice(&tiled_noise_rgba(
+			width,
+			height,
+			noise_scale,
+			2.0,
+			|x| x as f32,
+		)))
+		.create()
+}
+
+pub fn static_effect_layer(
+	p: &mut Painter,
+	width: u32,
+	height: u32,
+	format: wgpu::TextureFormat,
+	bindings: Vec<(u32, ValueBinding)>,
+) -> (Layer, Shade) {
+	let bindings_len = bindings.len() + 1;
+	let mut shade_bindings = Vec::with_capacity(bindings.len() + 1);
+	for _ in 0..bindings_len {
+		shade_bindings.push(BINDING_BUFFER_FRAG);
+	}
+
+	let shade = p.shade_effect().with_bindings(shade_bindings).create();
+
+	let size = p.bind_const_uvec2(uvec2(width, height));
+
+	let mut new_bindings = Vec::with_capacity(bindings_len);
+	new_bindings.push((0, size));
+	for b in bindings.into_iter() {
+		new_bindings.push(b);
+	}
+
+	let layer = p
+		.single_effect_layer(shade)
+		.with_size(width, height)
+		.with_bindings(new_bindings)
+		.with_format(format)
+		.create();
+
+	(layer, shade)
+}
+
+pub fn static_effect_layer_u8(
+	p: &mut Painter,
+	width: u32,
+	height: u32,
+	bindings: Vec<(u32, ValueBinding)>,
+) -> (Layer, Shade) {
+	static_effect_layer(
+		p,
+		width,
+		height,
+		wgpu::TextureFormat::Rgba8UnormSrgb,
+		bindings,
+	)
+}
+
+pub fn static_effect_layer_f32(
+	p: &mut Painter,
+	width: u32,
+	height: u32,
+	bindings: Vec<(u32, ValueBinding)>,
+) -> (Layer, Shade) {
+	static_effect_layer(p, width, height, wgpu::TextureFormat::Rgba32Float, bindings)
+}
+</file>
+
+<file path="sketches/template/src/main.rs">
+use trivalibs::{painter::prelude::*, prelude::*};
+
+struct App {
+	canvas: Layer,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let shade = p.shade_effect().create();
+		load_fragment_shader!(shade, p, "../shader/main.spv");
+
+		let effect = p.effect(shade).create();
+
+		let canvas = p.layer().with_effect(effect).create();
+
+		Self { canvas }
+	}
+
+	fn resize(&mut self, p: &mut Painter, _width: u32, _height: u32) {
+		p.request_next_frame();
+	}
+
+	fn frame(&mut self, p: &mut Painter, _tpf: f32) {
+		p.paint_and_show(self.canvas);
+
+		// p.request_next_frame(); // request frame here instead of resize for constant animation loop
+	}
+
+	fn event(&mut self, _e: Event<()>, _p: &mut Painter) {}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			remember_window_dimensions: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/rooms/columns/src/main.rs">
+use std::f32::consts::{PI, TAU};
+use trivalibs::{
+	common_utils::camera_controls::BasicFirstPersonCameraController,
+	map,
+	math::transform::Transform,
+	painter::{prelude::*, utils::input_state::InputState},
+	prelude::*,
+	rendering::{
+		BufferedGeometry,
+		camera::{CamProps, PerspectiveCamera},
+		mesh_geometry::{
+			MeshBufferType, MeshGeometry, face_normal, face_props,
+			utils::{Vert3dUv, vert_pos_uv},
+		},
+		scene::SceneObject,
+		shapes::{cuboid::Cuboid, quad::Quad3D},
+	},
+};
+
+pub fn create_plane(width: f32, height: f32, normal: Vec3, center: Vec3) -> BufferedGeometry {
+	let plane: Quad3D<Vert3dUv> =
+		Quad3D::from_dimensions_center_f(width, height, normal, center, vert_pos_uv).into();
+
+	let mut geom = MeshGeometry::new();
+	geom.add_face_data(&plane.to_ccw_verts(), face_normal(plane.normal));
+
+	geom.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal)
+}
+
+pub fn create_balk_form(width: f32, height: f32, length: f32) -> BufferedGeometry {
+	let bbox = Cuboid::box_at(Vec3::ZERO, width, height, length);
+
+	let mut geom = MeshGeometry::new();
+
+	let left = bbox.left_face_f(|pos, uvw| vert_pos_uv(pos, vec2(1.0 - uvw.z, uvw.y)));
+	geom.add_face_data(&left.to_ccw_verts(), face_props(left.normal, 2));
+
+	let right = bbox.right_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.z, uvw.y)));
+	geom.add_face_data(&right.to_ccw_verts(), face_props(right.normal, 3));
+
+	let bottom = bbox.bottom_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.x, uvw.z)));
+	geom.add_face_data(&bottom.to_ccw_verts(), face_props(bottom.normal, 5));
+
+	geom.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal)
+}
+
+pub fn create_column_form(width: f32, height: f32) -> BufferedGeometry {
+	let bbox = Cuboid::box_at(Vec3::ZERO, width, height, width);
+
+	let mut geom = MeshGeometry::new();
+
+	let front = bbox.front_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.x, uvw.y)));
+	geom.add_face_data(&front.to_ccw_verts(), face_props(front.normal, 0));
+
+	let back = bbox.back_face_f(|pos, uvw| vert_pos_uv(pos, vec2(1.0 - uvw.x, uvw.y)));
+	geom.add_face_data(&back.to_ccw_verts(), face_props(back.normal, 1));
+
+	let left = bbox.left_face_f(|pos, uvw| vert_pos_uv(pos, vec2(1.0 - uvw.z, uvw.y)));
+	geom.add_face_data(&left.to_ccw_verts(), face_props(left.normal, 2));
+
+	let right = bbox.right_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.z, uvw.y)));
+	geom.add_face_data(&right.to_ccw_verts(), face_props(right.normal, 3));
+
+	geom.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal)
+}
+
+struct App {
+	cam: PerspectiveCamera,
+	vp_mat: BindingBuffer<Mat4>,
+	canvas: Layer,
+
+	input: InputState,
+	cam_controller: BasicFirstPersonCameraController,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let shade = p
+			.shade([Float32x3, Float32x2, Float32x3])
+			.with_bindings([
+				BINDING_BUFFER_VERT,
+				BINDING_BUFFER_VERT,
+				BINDING_BUFFER_VERT,
+			])
+			.create();
+		load_vertex_shader!(shade, p, "../shader/ground_vert.spv");
+		load_fragment_shader!(shade, p, "../shader/ground_frag.spv");
+
+		let cam = PerspectiveCamera::create(CamProps {
+			fov: Some(0.6),
+			translation: Some(vec3(0.0, 3.0, 15.0)),
+			..default()
+		});
+
+		let to_binding = |p: &mut Painter, t: Transform| {
+			let m_mat = t.model_mat();
+			let n_mat = t.model_normal_mat();
+			let u_m_mat = p.bind_const_mat4(m_mat);
+			let u_n_mat = p.bind_const_mat3(n_mat);
+			InstanceBinding {
+				bindings: map! {
+					0 => u_m_mat,
+					1 => u_n_mat
+				},
+				..default()
+			}
+		};
+
+		let to_instances = |p: &mut Painter, transforms: Vec<Transform>| {
+			transforms.iter().map(|t| to_binding(p, *t)).collect()
+		};
+
+		let ground_form = p
+			.form(&create_plane(200.0, 200.0, Vec3::Y, Vec3::ZERO))
+			.create();
+		let u = to_binding(p, Transform::IDENTITY).bindings;
+		let ground_shape = p.shape(ground_form, shade).with_bindings(u).create();
+
+		let col_space = 12.;
+		let col_height = 40.;
+		let col_width = 2.;
+		let balk_height = col_width * 3.4;
+
+		let cols_count_z_half = 8.;
+		let cols_count_x_half = 4.;
+
+		let i_cols_count_z_half = cols_count_z_half as i32;
+		let i_cols_count_x_half = cols_count_x_half as i32;
+
+		let column_form = p.form(&create_column_form(col_width, col_height)).create();
+		let mut column_transforms = vec![];
+		for i in -i_cols_count_z_half..=i_cols_count_z_half {
+			column_transforms.push(Transform::from_translation(vec3(
+				-cols_count_x_half * col_space,
+				col_height / 2.,
+				i as f32 * col_space,
+			)));
+			column_transforms.push(Transform::from_translation(vec3(
+				cols_count_x_half * col_space,
+				col_height / 2.,
+				i as f32 * col_space,
+			)));
+			column_transforms.push(Transform::from_translation(vec3(
+				-(cols_count_x_half - 1.) * col_space,
+				col_height / 2.,
+				i as f32 * col_space,
+			)));
+			column_transforms.push(Transform::from_translation(vec3(
+				(cols_count_x_half - 1.) * col_space,
+				col_height / 2.,
+				i as f32 * col_space,
+			)));
+		}
+
+		for i in -i_cols_count_x_half..=i_cols_count_x_half {
+			column_transforms.push(Transform::from_translation(vec3(
+				i as f32 * col_space,
+				col_height / 2.,
+				-cols_count_z_half * col_space,
+			)));
+			column_transforms.push(Transform::from_translation(vec3(
+				i as f32 * col_space,
+				col_height / 2.,
+				cols_count_z_half * col_space,
+			)));
+			column_transforms.push(Transform::from_translation(vec3(
+				i as f32 * col_space,
+				col_height / 2.,
+				-(cols_count_z_half - 1.) * col_space,
+			)));
+			column_transforms.push(Transform::from_translation(vec3(
+				i as f32 * col_space,
+				col_height / 2.,
+				(cols_count_z_half - 1.) * col_space,
+			)));
+		}
+
+		let column_instances = to_instances(p, column_transforms);
+		let column_shape = p
+			.shape(column_form, shade)
+			.with_instances(column_instances)
+			.create();
+
+		let balk_form = p
+			.form(&create_balk_form(col_width, balk_height, col_space))
+			.create();
+		let mut balk_transforms = vec![];
+		for i in -i_cols_count_x_half..=i_cols_count_x_half {
+			balk_transforms.push(
+				Transform::from_translation(vec3(
+					i as f32 * col_space,
+					col_height - balk_height / 2.,
+					0.,
+				))
+				.with_scale(vec3(1., 1., cols_count_z_half * 2.)),
+			);
+		}
+		for i in -i_cols_count_z_half..=i_cols_count_z_half {
+			balk_transforms.push(
+				Transform::from_translation(vec3(
+					0.,
+					col_height - balk_height / 2.0,
+					i as f32 * col_space,
+				))
+				.with_scale(vec3(1.0, 1., cols_count_x_half * 2.))
+				.with_rotation(Quat::from_rotation_y(PI / 2.)),
+			);
+		}
+		let balk_instances = to_instances(p, balk_transforms);
+		let balk_shape = p
+			.shape(balk_form, shade)
+			.with_instances(balk_instances)
+			.create();
+
+		let wall_form = p
+			.form(&create_plane(
+				col_space,
+				col_height,
+				Vec3::Z,
+				vec3(0., col_height / 2., 0.),
+			))
+			.create();
+
+		let wall_transforms = vec![
+			Transform::from_xyz(0., 0., -cols_count_z_half * col_space).with_scale(vec3(
+				cols_count_x_half * 2. + 2.,
+				1.,
+				1.,
+			)),
+			Transform::from_xyz(-cols_count_x_half * col_space, 0., 0.)
+				.with_rotation(Quat::from_rotation_y(TAU * 1. / 4.))
+				.with_scale(vec3(cols_count_z_half * 2. + 2., 1., 1.)),
+			Transform::from_xyz(0., 0., cols_count_z_half * col_space)
+				.with_scale(vec3(cols_count_x_half * 2. + 2., 1., 1.))
+				.with_rotation(Quat::from_rotation_y(TAU * 0.5)),
+			Transform::from_xyz(cols_count_x_half * col_space, 0., 0.)
+				.with_rotation(Quat::from_rotation_y(TAU * 3. / 4.))
+				.with_scale(vec3(cols_count_z_half * 2. + 2., 1., 1.)),
+		];
+
+		let wall_instances = to_instances(p, wall_transforms);
+		let wall_shape = p
+			.shape(wall_form, shade)
+			.with_instances(wall_instances)
+			.create();
+
+		let vp_mat = p.bind_mat4();
+
+		let canvas = p
+			.layer()
+			.with_shapes([ground_shape, column_shape, balk_shape, wall_shape])
+			.with_clear_color(wgpu::Color {
+				r: 0.9,
+				g: 0.95,
+				b: 0.99,
+				a: 1.0,
+			})
+			.with_bindings(map! {
+				2 => vp_mat.binding(),
+			})
+			.with_multisampling()
+			.with_depth_test()
+			.create();
+
+		Self {
+			cam,
+			canvas,
+			vp_mat,
+			input: default(),
+			cam_controller: BasicFirstPersonCameraController::new(3.0, 4.0),
+		}
+	}
+
+	fn resize(&mut self, _p: &mut Painter, width: u32, height: u32) {
+		self.cam.set_aspect_ratio(width as f32 / height as f32);
+		self.cam_controller.set_screen_size(width, height);
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self
+			.cam_controller
+			.update_camera(&mut self.cam, &self.input, tpf);
+
+		self.vp_mat.update(p, self.cam.view_proj_mat());
+
+		p.paint_and_show(self.canvas);
+
+		p.request_next_frame();
+	}
+
+	fn event(&mut self, e: Event<()>, _p: &mut Painter) {
+		self.input.process_event(e);
+	}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: true,
+			remember_window_dimensions: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="Cargo.toml">
+[workspace]
+resolver = "2"
+
+members = [
+    "sketches/template",
+    "sketches/textures/*",
+    "sketches/rooms/*",
+    "sketches/tests/*",
+    "sketches/strokes/*",
+    "sketches/**/shader",
+    "run-watch",
+    "shared",
+    "shared-nostd"
+]
+
+[workspace.package]
+edition = "2024"
+
+[workspace.metadata.rust-gpu.build]
+multimodule = true
+
+[workspace.metadata.rust-gpu.install]
+spirv_builder_source = "https://github.com/Rust-GPU/rust-gpu"
+spirv_builder_version = "b3eda4df9814b6176d3c0844eb67f70a22ebb378"
+
+[workspace.dependencies]
+
+trivalibs = { path = "trivalibs/crates/trivalibs" }
+trivalibs-nostd = { path = "trivalibs/crates/trivalibs_nostd" }
+trivalibs-core = { path = "trivalibs/crates/trivalibs_core" }
+trivalibs-painter = { path = "trivalibs/crates/trivalibs_painter" }
+shared = { path = "shared" }
+shared-nostd = { path = "shared-nostd" }
+serde = { version = "1.0", features = ["derive"] }
+serde_repr = "0.1"
+serde_bytes = "0.11"
+bytemuck = { version = "1.21", features = ["derive"] }
+js-sys = "0.3"
+lerp = "0.5"
+approx = "0.5"
+rand = {version = "0.9", features = ["thread_rng"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+glam = { version = "0.30", features = [
+	"bytemuck",
+	"serde",
+	"rand",
+	"approx",
+] }
+winit = "0.30"
+wgpu = { version = "26.0", features = ["spirv"] }
+spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu", rev = "b3eda4df9814b6176d3c0844eb67f70a22ebb378" }
+log = "0.4"
+env_logger = "0.11"
+pollster = "0.4"
+macro_rules_attribute = "0.2"
+png = "0.18"
+flume = "0.11"
+notify = "8.2"
+noise = "0.9"
+
+# Enable a small amount of optimization in the dev profile.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = true
+</file>
+
+<file path="sketches/rooms/base/src/main.rs">
+use serde::{Deserialize, Serialize};
+use trivalibs::{
+	common_utils::camera_controls::BasicFirstPersonCameraController,
+	map,
+	painter::{prelude::*, utils::input_state::InputState},
+	prelude::*,
+	rendering::{
+		camera::{CamProps, CameraDevState, PerspectiveCamera},
+		mesh_geometry::{MeshBufferType, MeshGeometry, utils::vert_pos_uv},
+		shapes::cuboid::Cuboid,
+	},
+};
+
+const ROOM_HEIGHT: f32 = 5.5;
+const ROOM_DEPTH: f32 = 10.0;
+const ROOM_WIDTH: f32 = 6.5;
+const WALL_LENGTH: f32 = ROOM_DEPTH * 2.0 + ROOM_WIDTH * 2.0;
+
+const TEX_SCALE: f32 = 20.0;
+
+struct App {
+	cam: PerspectiveCamera,
+	vp_mat: BindingBuffer<Mat4>,
+	canvas: Layer,
+
+	ceil_tex: Layer,
+	wall_tex: Layer,
+	floor_tex: Layer,
+
+	input: InputState,
+	cam_controller: BasicFirstPersonCameraController,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct DevState {
+	cam: CameraDevState,
+}
+
+impl CanvasApp<(), DevState> for App {
+	fn init(p: &mut Painter) -> Self {
+		let room_cube = Cuboid::box_at(
+			vec3(0., ROOM_HEIGHT / 2., 0.),
+			ROOM_WIDTH,
+			ROOM_HEIGHT,
+			ROOM_DEPTH,
+		);
+
+		let ceil = MeshGeometry::from_face(
+			room_cube
+				.top_face_f(|pos, uvw| vert_pos_uv(pos, uvw.xz()))
+				.to_cw_verts(),
+		)
+		.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal);
+
+		let floor = MeshGeometry::from_face(
+			room_cube
+				.bottom_face_f(|pos, uvw| vert_pos_uv(pos, uvw.xz()))
+				.to_cw_verts(),
+		)
+		.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal);
+
+		let walls = [
+			room_cube
+				.front_face_f(|pos, uvw| vert_pos_uv(pos, vec2(uvw.x * ROOM_WIDTH / WALL_LENGTH, uvw.y))),
+			room_cube.right_face_f(|pos, uvw| {
+				vert_pos_uv(
+					pos,
+					vec2((ROOM_WIDTH + uvw.z * ROOM_DEPTH) / WALL_LENGTH, uvw.y),
+				)
+			}),
+			room_cube.back_face_f(|pos, uvw| {
+				vert_pos_uv(
+					pos,
+					vec2(
+						(ROOM_WIDTH + ROOM_DEPTH + (1.0 - uvw.x) * ROOM_WIDTH) / WALL_LENGTH,
+						uvw.y,
+					),
+				)
+			}),
+			room_cube.left_face_f(|pos, uvw| {
+				vert_pos_uv(
+					pos,
+					vec2(
+						(ROOM_WIDTH + ROOM_DEPTH + ROOM_WIDTH + (1.0 - uvw.z) * ROOM_DEPTH) / WALL_LENGTH,
+						uvw.y,
+					),
+				)
+			}),
+		]
+		.iter()
+		.map(|face| {
+			MeshGeometry::from_face(face.to_cw_verts())
+				.to_buffered_geometry_by_type(MeshBufferType::FaceVerticesWithFaceNormal)
+		})
+		.collect::<Vec<_>>();
+
+		let floor_form = p.form(&floor).create();
+		let ceil_form = p.form(&ceil).create();
+		let walls_form = p.form_builder().with_buffers(&walls).create();
+
+		let pre_render_shade = p.shade([Float32x3, Float32x2, Float32x3]).create();
+		load_vertex_shader!(pre_render_shade, p, "../shader/wall_pre_render_vert.spv");
+		load_fragment_shader!(pre_render_shade, p, "../shader/wall_pre_render_frag.spv");
+
+		let wall_render_shade = p
+			.shade([Float32x3, Float32x2, Float32x3])
+			.with_bindings([BINDING_BUFFER_VERT, BINDING_SAMPLER_FRAG])
+			.with_layers([BINDING_LAYER_FRAG])
+			.create();
+		load_vertex_shader!(wall_render_shade, p, "../shader/wall_render_vert.spv");
+		load_fragment_shader!(wall_render_shade, p, "../shader/wall_render_frag.spv");
+
+		let cam = PerspectiveCamera::create(CamProps {
+			fov: Some(0.6),
+			translation: Some(vec3(0.0, 1.7, 0.0)),
+			// rot_horizontal: Some(PI),
+			..default()
+		});
+
+		let floor_tex_shape = p.shape(floor_form, pre_render_shade).create();
+		let wall_tex_shape = p.shape(walls_form, pre_render_shade).create();
+		let ceil_tex_shape = p
+			.shape(ceil_form, pre_render_shade)
+			.with_cull_mode(Some(wgpu::Face::Front))
+			.create();
+
+		let floor_tex = p
+			.layer()
+			.with_shape(floor_tex_shape)
+			.with_size(
+				(ROOM_WIDTH * TEX_SCALE).floor() as u32,
+				(ROOM_DEPTH * TEX_SCALE).floor() as u32,
+			)
+			.with_mips()
+			.create_and_paint();
+
+		let wall_tex = p
+			.layer()
+			.with_shape(wall_tex_shape)
+			.with_size(
+				(WALL_LENGTH * TEX_SCALE).floor() as u32,
+				(ROOM_HEIGHT * TEX_SCALE).floor() as u32,
+			)
+			.with_mips()
+			.create_and_paint();
+
+		let ceil_tex = p
+			.layer()
+			.with_shape(ceil_tex_shape)
+			.with_size(
+				(ROOM_WIDTH * TEX_SCALE).floor() as u32,
+				(ROOM_DEPTH * TEX_SCALE).floor() as u32,
+			)
+			.with_mips()
+			.create_and_paint();
+
+		let floor_shape = p
+			.shape(floor_form, wall_render_shade)
+			.with_layers([(0, floor_tex.binding())])
+			.create();
+		let wall_shape = p
+			.shape(walls_form, wall_render_shade)
+			.with_layers([(0, wall_tex.binding())])
+			.create();
+		let ceil_shape = p
+			.shape(ceil_form, wall_render_shade)
+			.with_layers([(0, ceil_tex.binding())])
+			.create();
+
+		let vp_mat = p.bind_mat4();
+		let sampler = p
+			.sampler()
+			.with_filters(wgpu::FilterMode::Linear)
+			.with_mipmap_filter(wgpu::FilterMode::Linear)
+			.create();
+
+		let canvas = p
+			.layer()
+			.with_shapes([floor_shape, wall_shape, ceil_shape])
+			.with_clear_color(wgpu::Color {
+				r: 0.5,
+				g: 0.6,
+				b: 0.7,
+				a: 1.0,
+			})
+			.with_bindings(map! {
+				0 => vp_mat.binding(),
+				1 => sampler.binding()
+			})
+			.with_multisampling()
+			.with_depth_test()
+			.create();
+
+		Self {
+			cam,
+			canvas,
+			vp_mat,
+
+			ceil_tex,
+			wall_tex,
+			floor_tex,
+
+			input: default(),
+			cam_controller: BasicFirstPersonCameraController::new(1.0, 3.0),
+		}
+	}
+
+	fn resize(&mut self, _p: &mut Painter, width: u32, height: u32) {
+		self.cam.set_aspect_ratio(width as f32 / height as f32);
+		self.cam_controller.set_screen_size(width, height);
+	}
+
+	fn frame(&mut self, p: &mut Painter, tpf: f32) {
+		self
+			.cam_controller
+			.update_camera(&mut self.cam, &self.input, tpf);
+
+		self.vp_mat.update(p, self.cam.view_proj_mat());
+
+		p.paint_and_show(self.canvas);
+
+		p.request_next_frame();
+	}
+
+	fn event(&mut self, e: Event<()>, p: &mut Painter) {
+		if let Event::ShaderReloadEvent = e {
+			p.compose([self.ceil_tex, self.wall_tex, self.floor_tex]);
+		}
+
+		self.input.process_event(e);
+	}
+
+	fn load_dev_state(&mut self, state: DevState) {
+		self.cam.from_dev_state(&state.cam);
+	}
+	fn save_dev_state(&self) -> DevState {
+		DevState {
+			cam: self.cam.to_dev_state(),
+		}
+	}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			use_vsync: true,
+			remember_window_dimensions: true,
+			dev_state_key: "room_base",
+			reload_dev_state: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+<file path="sketches/strokes/1/src/main.rs">
+use shared::static_effect_layer_u8;
+use trivalibs::{
+	map, painter::prelude::*, prelude::*,
+	rendering::line_2d::buffered_geometry::LineBufferedGeometryVec,
+};
+
+mod painting;
+use painting::{create_painting, generate_tile_strokes};
+
+use crate::painting::calculate_color;
+
+struct App {
+	canvas_layer: Layer,
+}
+
+impl CanvasApp<()> for App {
+	fn init(p: &mut Painter) -> Self {
+		let size = p.canvas_size();
+
+		let painting = create_painting(size.width, size.height, 5);
+
+		let bg_color = calculate_color(painting.tiles.pick().color);
+
+		let u_color = p.bind_vec3();
+		u_color.update_vec3(p, bg_color);
+
+		let (bg_layer, bg_shade) = static_effect_layer_u8(p, 2, 2, map! { 1 => u_color.binding() });
+		load_fragment_shader!(bg_shade, p, "../shader/bg_frag.spv");
+		p.init_and_paint(bg_layer);
+
+		let line_shade = p
+			.shade([Float32x2, Float32, Float32, Float32x2, Float32x2])
+			.with_bindings([
+				BINDING_BUFFER_VERT,
+				BINDING_BUFFER_FRAG,
+				BINDING_BUFFER_FRAG,
+			])
+			.create();
+		load_vertex_shader!(line_shade, p, "../shader/line_vert.spv");
+		load_fragment_shader!(line_shade, p, "../shader/line_frag.spv");
+
+		let line_form = p
+			.form_builder()
+			.with_topology(wgpu::PrimitiveTopology::TriangleStrip)
+			.create();
+
+		let blend_state = wgpu::BlendState {
+			color: wgpu::BlendComponent {
+				src_factor: wgpu::BlendFactor::One,
+				dst_factor: wgpu::BlendFactor::Zero,
+				operation: wgpu::BlendOperation::Add,
+			},
+			alpha: wgpu::BlendComponent {
+				src_factor: wgpu::BlendFactor::One,
+				dst_factor: wgpu::BlendFactor::One,
+				operation: wgpu::BlendOperation::Max,
+			},
+		};
+
+		let u_size = p.bind_const_vec2(vec2(painting.width as f32, painting.height as f32));
+		let u_rand_offset = p.bind_vec2();
+
+		let line_shape = p
+			.shape(line_form, line_shade)
+			.with_blend_state(blend_state)
+			.with_bindings(map! {
+				0 => u_size,
+				1 => u_color.binding(),
+				2 => u_rand_offset.binding()
+			})
+			.create();
+
+		let painting_layer = p
+			.layer()
+			.with_size(painting.width as u32, painting.height as u32)
+			.with_shape(line_shape)
+			.with_clear_color(wgpu::Color::TRANSPARENT)
+			.create_and_init();
+
+		let canvas_shade = p
+			.shade_effect()
+			.with_bindings([BINDING_SAMPLER_FRAG])
+			.with_layer()
+			.create();
+		load_fragment_shader!(canvas_shade, p, "../shader/canvas_frag.spv");
+
+		let sampler = p.sampler_linear();
+
+		let canvas_layer = p
+			.single_effect_layer(canvas_shade)
+			.with_size(painting.width, painting.height)
+			.with_bindings(map! { 0 => sampler.binding() })
+			.with_layers(map! {0 => bg_layer.binding()})
+			.with_blend_state(wgpu::BlendState::ALPHA_BLENDING)
+			.create_and_init();
+
+		canvas_layer.set_layer_binding(p, 0, bg_layer.binding());
+
+		p.paint(canvas_layer);
+
+		canvas_layer.set_layer_binding(p, 0, painting_layer.binding());
+
+		// === painting process ===
+
+		let paint_strokes = |p: &mut Painter| {
+			let strokes = generate_tile_strokes(&painting);
+
+			for tile in &strokes {
+				line_form.update_all(p, &tile.lines.to_buffered_geometry());
+
+				u_rand_offset.update(p, vec2(rand_f32(), rand_f32()));
+				u_color.update_vec3(p, tile.color);
+
+				p.compose([painting_layer, canvas_layer]);
+			}
+		};
+
+		paint_strokes(p);
+		paint_strokes(p);
+		paint_strokes(p);
+
+		Self { canvas_layer }
+	}
+
+	fn resize(&mut self, p: &mut Painter, _width: u32, _height: u32) {
+		p.request_next_frame();
+	}
+
+	fn frame(&mut self, p: &mut Painter, _tpf: f32) {
+		p.show(self.canvas_layer);
+	}
+
+	fn event(&mut self, _e: Event<()>, _p: &mut Painter) {}
+}
+
+pub fn main() {
+	App::create()
+		.config(AppConfig {
+			show_fps: true,
+			remember_window_dimensions: true,
+			..default()
+		})
+		.start();
+}
+</file>
+
+</files>

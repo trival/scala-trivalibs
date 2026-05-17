@@ -120,6 +120,12 @@ site. Used in `allocateAttribs`.
   for not yet completed features.
 - `documents/done/*.md` — Completed designs, for reference and historical
   record, including base designs and decisions that shaped the current codebase.
+- `documents/scala-reference/*.md` — Scala language features and conventions,
+  for reference when writing new code or reviewing PRs. Advanced recent features
+  not yet present in general language model knowledge.
+- `documents/rust-painter/*.md` — Reference of the Rust Painter implementation,
+  that the Scala port follows. Our scala implementation has mostly reached
+  feature parity.
 
 ## JS Bundle Size Rules
 
