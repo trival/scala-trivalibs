@@ -73,7 +73,6 @@ def main(): Unit =
 
     // Logarithmic-chain shade (dir is pre-scaled by diameter).
     val blur9Shade = painter.layerShade[BlurUniforms, BlurPanels]: program =>
-      program.fn(Blur.gaussianBlur9)
       program.frag: ctx =>
         ctx.out.color := Blur.gaussianBlur9(
           ctx.textures.source,
@@ -85,7 +84,6 @@ def main(): Unit =
 
     val blur5Shade = painter.layerShade[FixedBlurUniforms, BlurPanels]:
       program =>
-        program.fn(Blur.gaussianBlur5)
         program.frag: ctx =>
           ctx.out.color := Blur.gaussianBlur5(
             ctx.textures.source,
@@ -96,7 +94,6 @@ def main(): Unit =
           )
 
     val boxBlurShade = painter.layerShade[BlurUniforms, BlurPanels]: program =>
-      program.fn(Blur.boxBlur)
       program.frag: ctx =>
         ctx.out.color := Blur.boxBlur(
           ctx.textures.source,
@@ -108,7 +105,6 @@ def main(): Unit =
         )
 
     val gaussShade = painter.layerShade[BlurUniforms, BlurPanels]: program =>
-      program.fn(Blur.gaussianBlur)
       program.frag: ctx =>
         ctx.out.color := Blur.gaussianBlur(
           ctx.textures.source,

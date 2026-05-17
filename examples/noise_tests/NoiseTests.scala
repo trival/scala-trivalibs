@@ -85,13 +85,7 @@ def main(): Unit =
           ret(p.uv * vec2(aspect.min(1.0), aspectInv.min(1.0))),
         )
 
-    // -------------------------------------------------------------------------
-    // Boilerplate-free greyscale noise shade. Bakes in fn registrations
-    // (including aspectUv) and exposes only the values each shader actually
-    // uses: the input uv, the time + res uniforms, and the assignable out.
-    // -------------------------------------------------------------------------
-
-    def aspectShade(fns: Any*)(
+    def noiseShade(
         body: (
             uv: Vec2Expr,
             t: FloatExpr,
@@ -100,8 +94,6 @@ def main(): Unit =
         ) => Block,
     ): Shade[Uniforms, EmptyTuple] =
       painter.layerShade[Uniforms]: program =>
-        fns.foreach(f => program.fn(f.asInstanceOf[WgslFn[Any, Any]]))
-        program.fn(aspectUv)
         program.frag: ctx =>
           body(ctx.in.uv, ctx.bindings.time, ctx.bindings.res, ctx.out.color)
 
@@ -109,56 +101,52 @@ def main(): Unit =
     // Simplex noise shaders
     // -------------------------------------------------------------------------
 
-    val simplex2dShade = aspectShade(Simplex.simplexNoise2d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * (t.sin * 5.0 + 6.0),
-          n := Simplex.simplexNoise2d(uv).fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val simplex2dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * (t.sin * 5.0 + 6.0),
+        n := Simplex.simplexNoise2d(uv).fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val simplex3dShade = aspectShade(Simplex.simplexNoise3d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 5.0,
-          n := Simplex.simplexNoise3d(vec3(uv.x, uv.y, t * 0.3)).fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val simplex3dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 5.0,
+        n := Simplex.simplexNoise3d(vec3(uv.x, uv.y, t * 0.3)).fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val simplex2dSeededShade = aspectShade(Simplex.simplexNoise2dSeeded):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 5.0,
-          n := Simplex.simplexNoise2dSeeded(uv, t * 0.2).fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val simplex2dSeededShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 5.0,
+        n := Simplex.simplexNoise2dSeeded(uv, t * 0.2).fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val simplex3dSeededShade = aspectShade(Simplex.simplexNoise3dSeeded):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 5.0,
-          n := Simplex
-            .simplexNoise3dSeeded(
-              vec3(uv.x, uv.y, 0.0),
-              vec3(t * 0.1, t * 0.07, 0.0),
-            )
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val simplex3dSeededShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 5.0,
+        n := Simplex
+          .simplexNoise3dSeeded(
+            vec3(uv.x, uv.y, 0.0),
+            vec3(t * 0.1, t * 0.07, 0.0),
+          )
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
     // -------------------------------------------------------------------------
     // fBm shaders
     // -------------------------------------------------------------------------
 
-    val fbm2dShade = aspectShade(Simplex.fbmSimplex2d): (inUv, t, r, out) =>
+    val fbm2dShade = noiseShade: (inUv, t, r, out) =>
       val uv = LetVec2("uv")
       val n = LetFloat("n")
       Block(
@@ -167,17 +155,16 @@ def main(): Unit =
         out := vec4(n, n, n, 1.0),
       )
 
-    val fbm2dSeededShade = aspectShade(Simplex.fbmSimplex2dSeeded):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 3.0,
-          n := Simplex.fbmSimplex2dSeeded(uv, 5.i, 2.0, 0.5, t * 0.3).fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val fbm2dSeededShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 3.0,
+        n := Simplex.fbmSimplex2dSeeded(uv, 5.i, 2.0, 0.5, t * 0.3).fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val fbm3dShade = aspectShade(Simplex.fbmSimplex3d): (inUv, t, r, out) =>
+    val fbm3dShade = noiseShade: (inUv, t, r, out) =>
       val uv = LetVec2("uv")
       val n = LetFloat("n")
       Block(
@@ -188,29 +175,28 @@ def main(): Unit =
         out := vec4(n, n, n, 1.0),
       )
 
-    val fbm3dSeededShade = aspectShade(Simplex.fbmSimplex3dSeeded):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 3.0,
-          n := Simplex
-            .fbmSimplex3dSeeded(
-              vec3(uv.x, uv.y, 0.0),
-              5.i,
-              2.0,
-              0.5,
-              vec3(t * 0.1, 0.0, 0.0),
-            )
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val fbm3dSeededShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 3.0,
+        n := Simplex
+          .fbmSimplex3dSeeded(
+            vec3(uv.x, uv.y, 0.0),
+            5.i,
+            2.0,
+            0.5,
+            vec3(t * 0.1, 0.0, 0.0),
+          )
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
     // -------------------------------------------------------------------------
     // Worley noise
     // -------------------------------------------------------------------------
 
-    val worley2dShade = aspectShade(Simplex.worley2d): (inUv, t, r, out) =>
+    val worley2dShade = noiseShade: (inUv, t, r, out) =>
       val uv = LetVec2("uv")
       val n = LetFloat("n")
       Block(
@@ -223,20 +209,18 @@ def main(): Unit =
     // 4D simplex noise shaders
     // -------------------------------------------------------------------------
 
-    val simplex4dShade = aspectShade(Simplex.simplexNoise4d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 4.0,
-          n := Simplex
-            .simplexNoise4d(vec4(uv.x, uv.y, t * 0.2, t * 0.13))
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val simplex4dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 4.0,
+        n := Simplex
+          .simplexNoise4d(vec4(uv.x, uv.y, t * 0.2, t * 0.13))
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
     val tilingSimplexNoise2dShade = painter.layerShade[Uniforms]: program =>
-      program.fn(Simplex.tilingSimplexNoise2d)
       program.frag: ctx =>
         val n = LetFloat("n")
         val t = ctx.bindings.time
@@ -254,95 +238,88 @@ def main(): Unit =
     // psrdnoise 2D shaders
     // -------------------------------------------------------------------------
 
-    val tilingRotNoise2dShade = aspectShade(Psrdnoise.tilingRotNoise2d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 2.5,
-          n := Psrdnoise
-            .tilingRotNoise2d(uv.fract * 4.0 + 0.5, vec2(4.0, 4.0), t * 0.1)
-            .x
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val tilingRotNoise2dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 2.5,
+        n := Psrdnoise
+          .tilingRotNoise2d(uv.fract * 4.0 + 0.5, vec2(4.0, 4.0), t * 0.1)
+          .x
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val tilingNoise2dShade = aspectShade(Psrdnoise.tilingNoise2d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 2.5,
-          n := Psrdnoise
-            .tilingNoise2d(uv.fract * 4.0 + 0.5, vec2(4.0, 4.0))
-            .x
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val tilingNoise2dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 2.5,
+        n := Psrdnoise
+          .tilingNoise2d(uv.fract * 4.0 + 0.5, vec2(4.0, 4.0))
+          .x
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val rotNoise2dShade = aspectShade(Psrdnoise.rotNoise2d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 5.0,
-          n := Psrdnoise.rotNoise2d(uv, t * 0.05).x.fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val rotNoise2dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 5.0,
+        n := Psrdnoise.rotNoise2d(uv, t * 0.05).x.fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
     // -------------------------------------------------------------------------
     // psrdnoise 3D shaders
     // -------------------------------------------------------------------------
 
-    val tilingRotNoise3dShade = aspectShade(Psrdnoise.tilingRotNoise3d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 4.0,
-          n := Psrdnoise
-            .tilingRotNoise3d(
-              vec3(uv.x, uv.y, t * 0.1),
-              vec3(4.0, 4.0, 4.0),
-              t * 0.05,
-            )
-            .x
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val tilingRotNoise3dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 4.0,
+        n := Psrdnoise
+          .tilingRotNoise3d(
+            vec3(uv.x, uv.y, t * 0.1),
+            vec3(4.0, 4.0, 4.0),
+            t * 0.05,
+          )
+          .x
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val tilingNoise3dShade = aspectShade(Psrdnoise.tilingNoise3d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 4.0,
-          n := Psrdnoise
-            .tilingNoise3d(vec3(uv.x, uv.y, t * 0.2), vec3(4.0, 4.0, 4.0))
-            .x
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val tilingNoise3dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 4.0,
+        n := Psrdnoise
+          .tilingNoise3d(vec3(uv.x, uv.y, t * 0.2), vec3(4.0, 4.0, 4.0))
+          .x
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
-    val rotNoise3dShade = aspectShade(Psrdnoise.rotNoise3d):
-      (inUv, t, r, out) =>
-        val uv = LetVec2("uv")
-        val n = LetFloat("n")
-        Block(
-          uv := aspectUv(inUv, r) * 5.0,
-          n := Psrdnoise
-            .rotNoise3d(vec3(uv.x, uv.y, t * 0.15), t * 0.03)
-            .x
-            .fit1101,
-          out := vec4(n, n, n, 1.0),
-        )
+    val rotNoise3dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 5.0,
+        n := Psrdnoise
+          .rotNoise3d(vec3(uv.x, uv.y, t * 0.15), t * 0.03)
+          .x
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
 
     // -------------------------------------------------------------------------
     // Hash display shader
     // -------------------------------------------------------------------------
 
     val hashShade = painter.layerShade[Uniforms]: program =>
-      program.fn(hashDisplay)
       program.frag: ctx =>
         val t = ctx.bindings.time
         Block(

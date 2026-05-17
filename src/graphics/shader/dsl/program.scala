@@ -66,7 +66,9 @@ class Program[A, V, U, P, FO]:
         TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]](kinds),
       textures = TypedPanelAccessor[P](),
     )
-    vertBody = body(ctx)
+    val reg = FnRegistry()
+    vertBody = FnRegistry.withActive(reg)(body(ctx))
+    reg.items.foreach(fnRec)
 
   /** Fragment shader with no typed locals. */
   inline def frag(
@@ -92,7 +94,9 @@ class Program[A, V, U, P, FO]:
         TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]](kinds),
       textures = TypedPanelAccessor[P](),
     )
-    fragBody = body(ctx)
+    val reg = FnRegistry()
+    fragBody = FnRegistry.withActive(reg)(body(ctx))
+    reg.items.foreach(fnRec)
 
   def vertBodyStr: String = Block.unwrap(vertBody)
   def fragBodyStr: String = Block.unwrap(fragBody)

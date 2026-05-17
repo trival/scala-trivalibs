@@ -3,7 +3,7 @@ package trivalibs.graphics.shader.dsl
 import trivalibs.graphics.math.cpu.*
 import trivalibs.graphics.math.gpu.*
 import trivalibs.graphics.shader.WGSLType
-import trivalibs.utils.js.Arr
+import trivalibs.utils.js.{Arr, Dict, has, set}
 
 import scala.NamedTuple.AnyNamedTuple
 import scala.compiletime.*
@@ -17,6 +17,44 @@ class WgslFnData(
     val src: String,
     val deps: Arr[WgslFnData] = Arr(),
 ) extends scala.scalajs.js.Object
+
+// ---------------------------------------------------------------------------
+// FnRegistry — collects WgslFns called inside a scope (a Program body or a
+// WgslFn.dsl body). The currently-active registry lives in a module-level
+// `var` (safe on single-threaded Scala.js). Program.vert/frag,
+// LayerProgram.frag, and WgslFn.dsl save+set+restore it around their body
+// execution; the per-arity `apply` extensions report into it via
+// FnRegistry.trackUse. Calls outside any scope are a no-op (no error) so that
+// helper functions which build bodies as plain lambdas continue to compose.
+// ---------------------------------------------------------------------------
+
+class FnRegistry:
+  private val seen = Dict[Boolean]()
+  private val collected = Arr[WgslFnData]()
+  def use(d: WgslFnData): Unit =
+    if !seen.has(d.name) then
+      seen.set(d.name, true)
+      d.deps.foreach(use)
+      collected.push(d)
+  def items: Arr[WgslFnData] = collected
+
+object FnRegistry:
+  // Ambient active registry. Single-threaded JS → no synchronization needed.
+  private var active: FnRegistry | Null = null
+
+  def trackUse(d: WgslFnData): Unit =
+    val r = active
+    if r != null then r.use(d)
+
+  /** Run `body` with `reg` installed as the active registry, restoring the
+    * previous one (typically null) on exit. Used by Program.vert/frag,
+    * LayerProgram.frag, and WgslFn.dsl to scope auto-registration.
+    */
+  inline def withActive[T](reg: FnRegistry)(body: => T): T =
+    val prev = active
+    active = reg
+    try body
+    finally active = prev
 
 // ---------------------------------------------------------------------------
 // WgslFn[P, R] — typed opaque wrapper
@@ -81,11 +119,12 @@ object WgslFn:
   ): WgslFn[P, R] =
     val p = TypedExprAccessor[NamedTuple.Map[P & AnyNamedTuple, ToExpr]]("")
     val ret = ReturnEmitter[R]()
-    val block = body(p, ret)
+    val reg = FnRegistry()
+    val block = FnRegistry.withActive(reg)(body(p, ret))
     val paramList = buildParamList[P]
     val retType = wgslReturnType[R]
     val src = s"fn $name($paramList) -> $retType {\n${Block.unwrap(block)}\n}"
-    WgslFnData(name, src)
+    WgslFnData(name, src, reg.items)
 
   // -------------------------------------------------------------------------
   // Internal: compile-time param list + return type
@@ -167,9 +206,20 @@ object WgslFn:
 
   extension [P, R](fn: WgslFn[P, R])
     def withDeps(ds: WgslFnData*): WgslFn[P, R] =
-      val depsArr = Arr[WgslFnData]()
-      for d <- ds do depsArr.push(d)
-      WgslFnData(fn.name, fn.src, depsArr)
+      val seen = Dict[Boolean]()
+      val merged = Arr[WgslFnData]()
+      var i = 0
+      while i < fn.deps.length do
+        val d = fn.deps(i)
+        if !seen.has(d.name) then
+          seen.set(d.name, true)
+          merged.push(d)
+        i += 1
+      for d <- ds do
+        if !seen.has(d.name) then
+          seen.set(d.name, true)
+          merged.push(d)
+      WgslFnData(fn.name, fn.src, merged)
 
   // -------------------------------------------------------------------------
   // apply extensions — per-arity, enabling myFn(arg1, arg2) call syntax
@@ -181,6 +231,7 @@ object WgslFn:
   // Arity 1 — unnamed
   extension [N1, R](fn: WgslFn[N1 *: EmptyTuple, R])
     inline def apply(a1: ToExpr[N1]): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1)")
 
   // Arity 1 — named tuple
@@ -188,11 +239,13 @@ object WgslFn:
       fn: WgslFn[NamedTuple.NamedTuple[K1 *: EmptyTuple, N1 *: EmptyTuple], R]
   )
     inline def apply(a1: ToExpr[N1]): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1)")
 
   // Arity 2 — unnamed
   extension [N1, N2, R](fn: WgslFn[N1 *: N2 *: EmptyTuple, R])
     inline def apply(a1: ToExpr[N1], a2: ToExpr[N2]): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2)")
 
   // Arity 2 — named tuple
@@ -203,6 +256,7 @@ object WgslFn:
       ]
   )
     inline def apply(a1: ToExpr[N1], a2: ToExpr[N2]): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2)")
 
   // Arity 3 — unnamed
@@ -212,6 +266,7 @@ object WgslFn:
         a2: ToExpr[N2],
         a3: ToExpr[N3],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3)")
 
   // Arity 3 — named tuple
@@ -226,6 +281,7 @@ object WgslFn:
         a2: ToExpr[N2],
         a3: ToExpr[N3],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3)")
 
   // Arity 4 — unnamed
@@ -238,6 +294,7 @@ object WgslFn:
         a3: ToExpr[N3],
         a4: ToExpr[N4],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4)")
 
   // Arity 4 — named tuple
@@ -263,6 +320,7 @@ object WgslFn:
         a3: ToExpr[N3],
         a4: ToExpr[N4],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4)")
 
   // Arity 5 — unnamed
@@ -276,6 +334,7 @@ object WgslFn:
         a4: ToExpr[N4],
         a5: ToExpr[N5],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5)")
 
   // Arity 5 — named tuple
@@ -304,6 +363,7 @@ object WgslFn:
         a4: ToExpr[N4],
         a5: ToExpr[N5],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5)")
 
   // Arity 6 — unnamed
@@ -318,6 +378,7 @@ object WgslFn:
         a5: ToExpr[N5],
         a6: ToExpr[N6],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5, $a6)")
 
   // Arity 6 — named tuple
@@ -349,6 +410,7 @@ object WgslFn:
         a5: ToExpr[N5],
         a6: ToExpr[N6],
     ): ToExpr[R] =
+      FnRegistry.trackUse(fn)
       callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5, $a6)")
 
   // -------------------------------------------------------------------------
@@ -380,11 +442,12 @@ object WgslFn:
         TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]](kinds),
       ret = ReturnEmitter[R](),
     )
-    val block = body(ctx)
+    val reg = FnRegistry()
+    val block = FnRegistry.withActive(reg)(body(ctx))
     val paramList = buildParamList[P]
     val retType = wgslReturnType[R]
     val src = s"fn $name($paramList) -> $retType {\n${Block.unwrap(block)}\n}"
-    WgslFnData(name, src)
+    WgslFnData(name, src, reg.items)
 
 // ---------------------------------------------------------------------------
 // WgslFnCtx[P, L, R] — context for WgslFn.dsl with typed locals

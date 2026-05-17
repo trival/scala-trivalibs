@@ -40,8 +40,6 @@ def main(): Unit =
         ret(p.offset + p.mat * p.pos)
 
     val shade = painter.shade[Attribs, Varyings, Uniforms]: program =>
-      program.fn(applyTransform)
-
       program.vert[(t: Vec2)]: ctx =>
         val t = ctx.locals.t
         Block(

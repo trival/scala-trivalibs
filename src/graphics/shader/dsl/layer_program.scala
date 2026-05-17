@@ -65,6 +65,8 @@ class LayerProgram[U, P, FO]:
         TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]](kinds),
       textures = TypedPanelAccessor[P](),
     )
-    fragBody = body(ctx)
+    val reg = FnRegistry()
+    fragBody = FnRegistry.withActive(reg)(body(ctx))
+    reg.items.foreach(fnRec)
 
   def fragBodyStr: String = Block.unwrap(fragBody)
