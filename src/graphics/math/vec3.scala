@@ -17,6 +17,8 @@ trait Vec3BaseG[Num, Vec]:
     def dot(other: Vec): Num
     def length_squared: Num
     def length: Num
+    /** Euclidean distance between `v` and `other` — `length(v - other)`. */
+    def distance(other: Vec): Num
 
 trait Vec3ImmutableOpsG[Num, Vec]:
   def create(x: Num, y: Num, z: Num): Vec
@@ -81,6 +83,17 @@ trait Vec3ImmutableOpsG[Num, Vec]:
     def step(edge: Num): Vec
     def smoothstep(edge0: Vec, edge1: Vec): Vec
 
+    /** Reflects incident vector `v` about the surface normal `n`. `n` must be
+      * unit length. Computed as `v - 2 * dot(n, v) * n`.
+      */
+    def reflect(n: Vec): Vec
+    /** Refracts incident vector `v` through a surface with normal `n` and
+      * ratio of indices of refraction `eta` (source / destination). Returns a
+      * zero vector on total internal reflection. `v` and `n` must be unit
+      * length.
+      */
+    def refract(n: Vec, eta: Num): Vec
+
 // ---------------------------------------------------------------------------
 // CPU-specific variants — concrete Double implementations + CPU-only ops.
 // ---------------------------------------------------------------------------
@@ -91,6 +104,11 @@ trait Vec3Base[Vec] extends Vec3BaseG[Double, Vec]:
       v.x * other.x + v.y * other.y + v.z * other.z
     def length_squared: Double = v.dot(v)
     def length: Double = v.length_squared.sqrt
+    def distance(other: Vec): Double =
+      val dx = v.x - other.x
+      val dy = v.y - other.y
+      val dz = v.z - other.z
+      (dx * dx + dy * dy + dz * dz).sqrt
 
 // format: off
 trait Vec3ImmutableOps[Vec]:
@@ -172,6 +190,17 @@ trait Vec3ImmutableOps[Vec]:
         v.y.smoothstep(edge0.y, edge1.y),
         v.z.smoothstep(edge0.z, edge1.z),
       )
+
+    def reflect(n: Vec): Vec =
+      val d = v.dot(n) * 2.0
+      create(v.x - n.x * d, v.y - n.y * d, v.z - n.z * d)
+    def refract(n: Vec, eta: Double): Vec =
+      val dotNI = n.dot(v)
+      val k = 1.0 - eta * eta * (1.0 - dotNI * dotNI)
+      if k < 0.0 then create(0.0, 0.0, 0.0)
+      else
+        val s = eta * dotNI + k.sqrt
+        create(v.x * eta - n.x * s, v.y * eta - n.y * s, v.z * eta - n.z * s)
 // format: on
 
 trait Vec3Mutable[Vec] extends Vec3Base[Vec]:

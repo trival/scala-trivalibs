@@ -40,16 +40,21 @@ object NumOps:
 trait NumExt[P]:
   extension (p: P)
     def sqrt: P
+    def inverseSqrt: P
     def pow(exp: P): P
     def abs: P
     def sign: P
     def floor: P
     def ceil: P
     def round: P
+    def trunc: P
     def fract: P
     def exp: P
+    def exp2: P
     def log: P
     def log2: P
+    def degrees: P
+    def radians: P
 
     def sin: P
     def cos: P
@@ -58,6 +63,9 @@ trait NumExt[P]:
     def acos: P
     def atan: P
     def atan2(other: P): P
+    def sinh: P
+    def cosh: P
+    def tanh: P
 
     def min(other: P): P
     def max(other: P): P
@@ -115,16 +123,21 @@ object NumExt:
   given NumExt[Double]:
     extension (p: Double)
       inline def sqrt = Math.sqrt(p)
+      inline def inverseSqrt = 1.0 / Math.sqrt(p)
       inline def pow(e: Double) = Math.pow(p, e)
       inline def abs = Math.abs(p)
       inline def sign = Math.signum(p)
       inline def floor = Math.floor(p)
       inline def ceil = Math.ceil(p)
       inline def round = Math.round(p).toDouble
+      inline def trunc = if p < 0.0 then Math.ceil(p) else Math.floor(p)
       inline def fract = p - Math.floor(p)
       inline def exp = Math.exp(p)
+      inline def exp2 = Math.pow(2.0, p)
       inline def log = Math.log(p)
       inline def log2 = Math.log(p) / Math.log(2.0)
+      inline def degrees = Math.toDegrees(p)
+      inline def radians = Math.toRadians(p)
 
       inline def sin = Math.sin(p)
       inline def cos = Math.cos(p)
@@ -133,6 +146,9 @@ object NumExt:
       inline def acos = Math.acos(p)
       inline def atan = Math.atan(p)
       inline def atan2(other: Double) = Math.atan2(p, other)
+      inline def sinh = Math.sinh(p)
+      inline def cosh = Math.cosh(p)
+      inline def tanh = Math.tanh(p)
 
       inline def min(other: Double) = Math.min(p, other)
       inline def max(other: Double) = Math.max(p, other)
@@ -153,16 +169,22 @@ object NumExt:
   given NumExt[Float]:
     extension (p: Float)
       inline def sqrt = Math.sqrt(p).toFloat
+      inline def inverseSqrt = (1.0 / Math.sqrt(p)).toFloat
       inline def pow(e: Float) = Math.pow(p, e).toFloat
       inline def abs = Math.abs(p)
       inline def sign = Math.signum(p)
       inline def floor = Math.floor(p).toFloat
       inline def ceil = Math.ceil(p).toFloat
       inline def round = Math.round(p).toFloat
+      inline def trunc =
+        (if p < 0f then Math.ceil(p) else Math.floor(p)).toFloat
       inline def fract = p - Math.floor(p).toFloat
       inline def exp = Math.exp(p).toFloat
+      inline def exp2 = Math.pow(2.0, p).toFloat
       inline def log = Math.log(p).toFloat
       inline def log2 = (Math.log(p) / Math.log(2.0)).toFloat
+      inline def degrees = Math.toDegrees(p).toFloat
+      inline def radians = Math.toRadians(p).toFloat
 
       inline def sin = Math.sin(p).toFloat
       inline def cos = Math.cos(p).toFloat
@@ -171,6 +193,9 @@ object NumExt:
       inline def acos = Math.acos(p).toFloat
       inline def atan = Math.atan(p).toFloat
       inline def atan2(other: Float) = Math.atan2(p, other).toFloat
+      inline def sinh = Math.sinh(p).toFloat
+      inline def cosh = Math.cosh(p).toFloat
+      inline def tanh = Math.tanh(p).toFloat
 
       inline def min(other: Float) = Math.min(p, other)
       inline def max(other: Float) = Math.max(p, other)

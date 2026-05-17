@@ -35,6 +35,7 @@ given NumOps[FloatExpr]:
 given NumExt[FloatExpr]:
   extension (a: FloatExpr)
     def sqrt: FloatExpr = FloatExpr(s"sqrt(${a.wgsl})")
+    def inverseSqrt: FloatExpr = FloatExpr(s"inverseSqrt(${a.wgsl})")
     def pow(exp: FloatExpr): FloatExpr = FloatExpr(
       s"pow(${a.wgsl}, ${exp.wgsl})",
     )
@@ -43,10 +44,14 @@ given NumExt[FloatExpr]:
     def floor: FloatExpr = FloatExpr(s"floor(${a.wgsl})")
     def ceil: FloatExpr = FloatExpr(s"ceil(${a.wgsl})")
     def round: FloatExpr = FloatExpr(s"round(${a.wgsl})")
+    def trunc: FloatExpr = FloatExpr(s"trunc(${a.wgsl})")
     def fract: FloatExpr = FloatExpr(s"fract(${a.wgsl})")
     def exp: FloatExpr = FloatExpr(s"exp(${a.wgsl})")
+    def exp2: FloatExpr = FloatExpr(s"exp2(${a.wgsl})")
     def log: FloatExpr = FloatExpr(s"log(${a.wgsl})")
     def log2: FloatExpr = FloatExpr(s"log2(${a.wgsl})")
+    def degrees: FloatExpr = FloatExpr(s"degrees(${a.wgsl})")
+    def radians: FloatExpr = FloatExpr(s"radians(${a.wgsl})")
     def sin: FloatExpr = FloatExpr(s"sin(${a.wgsl})")
     def cos: FloatExpr = FloatExpr(s"cos(${a.wgsl})")
     def tan: FloatExpr = FloatExpr(s"tan(${a.wgsl})")
@@ -56,6 +61,9 @@ given NumExt[FloatExpr]:
     def atan2(other: FloatExpr): FloatExpr = FloatExpr(
       s"atan2(${a.wgsl}, ${other.wgsl})",
     )
+    def sinh: FloatExpr = FloatExpr(s"sinh(${a.wgsl})")
+    def cosh: FloatExpr = FloatExpr(s"cosh(${a.wgsl})")
+    def tanh: FloatExpr = FloatExpr(s"tanh(${a.wgsl})")
     def min(other: FloatExpr): FloatExpr = FloatExpr(
       s"min(${a.wgsl}, ${other.wgsl})",
     )
@@ -98,6 +106,9 @@ given Vec2BaseG[FloatExpr, Vec2Expr] =
       )
       def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
       def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
+      def distance(other: Vec2Expr): FloatExpr = FloatExpr(
+        s"distance(${v.wgsl}, ${other.wgsl})",
+      )
 
 given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
   def create(x: FloatExpr, y: FloatExpr): Vec2Expr =
@@ -181,6 +192,11 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def >=(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"step(${other.wgsl}, ${v.wgsl})")
 
+    override def reflect(n: Vec2Expr): Vec2Expr =
+      Vec2Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
+    override def refract(n: Vec2Expr, eta: FloatExpr): Vec2Expr =
+      Vec2Expr(s"refract(${v.wgsl}, ${n.wgsl}, ${eta.wgsl})")
+
 // ---------------------------------------------------------------------------
 // Vec3 — LocalVec3 <: Vec3Expr
 // ---------------------------------------------------------------------------
@@ -196,6 +212,9 @@ given Vec3BaseG[FloatExpr, Vec3Expr] =
       )
       def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
       def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
+      def distance(other: Vec3Expr): FloatExpr = FloatExpr(
+        s"distance(${v.wgsl}, ${other.wgsl})",
+      )
 
 given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
   def create(x: FloatExpr, y: FloatExpr, z: FloatExpr): Vec3Expr =
@@ -281,6 +300,11 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def >=(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"step(${other.wgsl}, ${v.wgsl})")
 
+    override def reflect(n: Vec3Expr): Vec3Expr =
+      Vec3Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
+    override def refract(n: Vec3Expr, eta: FloatExpr): Vec3Expr =
+      Vec3Expr(s"refract(${v.wgsl}, ${n.wgsl}, ${eta.wgsl})")
+
 // ---------------------------------------------------------------------------
 // Vec4 — LocalVec4 <: Vec4Expr
 // ---------------------------------------------------------------------------
@@ -297,6 +321,9 @@ given Vec4BaseG[FloatExpr, Vec4Expr] =
       )
       def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
       def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
+      def distance(other: Vec4Expr): FloatExpr = FloatExpr(
+        s"distance(${v.wgsl}, ${other.wgsl})",
+      )
 
 given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
   def create(x: FloatExpr, y: FloatExpr, z: FloatExpr, w: FloatExpr): Vec4Expr =
@@ -375,6 +402,11 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     @annotation.targetName("gteVecG")
     override def >=(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"step(${other.wgsl}, ${v.wgsl})")
+
+    override def reflect(n: Vec4Expr): Vec4Expr =
+      Vec4Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
+    override def refract(n: Vec4Expr, eta: FloatExpr): Vec4Expr =
+      Vec4Expr(s"refract(${v.wgsl}, ${n.wgsl}, ${eta.wgsl})")
 
 // ---------------------------------------------------------------------------
 // Mat2
@@ -503,6 +535,39 @@ given Mat4ImmutableOpsG[FloatExpr, Mat4Expr]:
         Vec4ImmutableOpsG[FloatExpr, Vec],
     ): Vec =
       Vec4Expr(s"(${m.wgsl} * ${v.asInstanceOf[Expr].wgsl})").asInstanceOf[Vec]
+
+// ---------------------------------------------------------------------------
+// Swizzles — consecutive sub-vector splits + full-arity reverse.
+// ---------------------------------------------------------------------------
+
+extension (v: Vec2Expr)
+  def yx: Vec2Expr = Vec2Expr(s"${v.wgsl}.yx")
+
+extension (v: Vec3Expr)
+  @annotation.targetName("vec3_xy")
+  def xy: Vec2Expr = Vec2Expr(s"${v.wgsl}.xy")
+  @annotation.targetName("vec3_yz")
+  def yz: Vec2Expr = Vec2Expr(s"${v.wgsl}.yz")
+  def zyx: Vec3Expr = Vec3Expr(s"${v.wgsl}.zyx")
+  @annotation.targetName("vec3_rg") inline def rg: Vec2Expr = v.xy
+  @annotation.targetName("vec3_gb") inline def gb: Vec2Expr = v.yz
+  inline def bgr: Vec3Expr = v.zyx
+
+extension (v: Vec4Expr)
+  @annotation.targetName("vec4_xy")
+  def xy: Vec2Expr = Vec2Expr(s"${v.wgsl}.xy")
+  @annotation.targetName("vec4_yz")
+  def yz: Vec2Expr = Vec2Expr(s"${v.wgsl}.yz")
+  def zw: Vec2Expr = Vec2Expr(s"${v.wgsl}.zw")
+  def xyz: Vec3Expr = Vec3Expr(s"${v.wgsl}.xyz")
+  def yzw: Vec3Expr = Vec3Expr(s"${v.wgsl}.yzw")
+  def wzyx: Vec4Expr = Vec4Expr(s"${v.wgsl}.wzyx")
+  @annotation.targetName("vec4_rg") inline def rg: Vec2Expr = v.xy
+  @annotation.targetName("vec4_gb") inline def gb: Vec2Expr = v.yz
+  inline def ba: Vec2Expr = v.zw
+  inline def rgb: Vec3Expr = v.xyz
+  inline def gba: Vec3Expr = v.yzw
+  inline def abgr: Vec4Expr = v.wzyx
 
 // ---------------------------------------------------------------------------
 // Vector constructors (lowercase, matching WGSL syntax)
