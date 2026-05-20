@@ -42,7 +42,7 @@ class PerspectiveCamera private (
 
   // ---- FPS-style movement ----
 
-  def updateTransform(
+  def move(
       forward: Double = 0.0,
       left: Double = 0.0,
       up: Double = 0.0,
