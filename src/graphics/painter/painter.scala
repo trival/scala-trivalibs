@@ -11,6 +11,8 @@ import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.*
 import trivalibs.graphics.shader.dsl.LayerProgram
 import trivalibs.graphics.shader.dsl.Program
+import trivalibs.utils.events.InputState
+import trivalibs.utils.events.interactiveCanvas
 import trivalibs.utils.js.*
 
 import scala.compiletime.erasedValue
@@ -70,6 +72,26 @@ class Painter(
 
   def width: Int = canvas.width
   def height: Int = canvas.height
+
+  /** Convenience: set up an [[InputState]] for this painter's canvas with the
+    * interactive-canvas defaults (focusable, cleared outline, focus on
+    * pointer-down, initial focus). See [[interactiveCanvas]].
+    */
+  def input(
+      initialFocus: Boolean = true,
+      holdDelay: Double = 400.0,
+      holdRadius: Double = 5.0,
+      suppressContextMenu: Boolean = true,
+      onActivity: Maybe[js.Function0[Unit]] = Maybe.Not,
+  ): InputState =
+    interactiveCanvas(
+      canvas,
+      initialFocus,
+      holdDelay,
+      holdRadius,
+      suppressContextMenu,
+      onActivity,
+    )
 
   // =========================================================================
   // Shared samplers

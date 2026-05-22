@@ -28,6 +28,7 @@ class InputState(
     holdRadius: Double = 5.0,
     suppressContextMenu: Boolean = true,
     onActivity: Maybe[js.Function0[Unit]] = Maybe.Not,
+    focusOnPointerDown: Boolean = false,
 ):
   private inline def fireActivity(): Unit =
     if !js.isUndefined(onActivity.asInstanceOf[js.Any]) then onActivity.safe()
@@ -58,6 +59,7 @@ class InputState(
   private val disposePointer = pointerRelay(
     el,
     onDown = (b, x, y) =>
+      if focusOnPointerDown then keyTarget.asInstanceOf[dom.HTMLElement].focus()
       buttonsDown.set(b.key, true)
       pointerX = x
       pointerY = y
@@ -96,6 +98,21 @@ class InputState(
     suppressContextMenu = suppressContextMenu,
   )
 
+  // Track focus of the key target so complex UIs can render a focus hint even
+  // though the default focus outline is cleared on interactive canvases.
+  private var _hasFocus =
+    if keyTarget == dom.window then dom.document.hasFocus()
+    else keyTarget == dom.document.activeElement
+
+  private val focusFn: js.Function1[dom.Event, Unit] = _ =>
+    _hasFocus = true
+    fireActivity()
+  private val blurFn: js.Function1[dom.Event, Unit] = _ =>
+    _hasFocus = false
+    fireActivity()
+  keyTarget.addEventListener[dom.Event]("focus", focusFn)
+  keyTarget.addEventListener[dom.Event]("blur", blurFn)
+
   // ---- queries ----
 
   def isKeyDown(key: Key): Boolean = keysDown.has(key.code)
@@ -108,6 +125,11 @@ class InputState(
 
   def dragging: Boolean = _dragging
   def holding: Boolean = _holding
+
+  /** Whether the key target currently has focus. Useful for rendering a focus
+    * affordance when the native outline has been cleared.
+    */
+  def hasFocus: Boolean = _hasFocus
 
   /** True when nothing is driving the scene: no keys or pointer buttons down
     * and no active drag/hold. A render loop can stop itself once this holds
@@ -130,3 +152,5 @@ class InputState(
   def dispose(): Unit =
     disposeKeyboard()
     disposePointer()
+    keyTarget.removeEventListener[dom.Event]("focus", focusFn)
+    keyTarget.removeEventListener[dom.Event]("blur", blurFn)
