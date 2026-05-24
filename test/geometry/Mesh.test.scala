@@ -1,11 +1,40 @@
 package trivalibs.graphics.geometry
 
 import munit.FunSuite
+import trivalibs.graphics.math.cpu.Vec2
 import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.given
 import trivalibs.utils.js.*
 
 class MeshTest extends FunSuite:
+
+  // ---------------------------------------------------------------------------
+  // derived Position for named-tuple / case-class vertices
+  // ---------------------------------------------------------------------------
+
+  test("Position is derived for a named tuple with a position field"):
+    type Vertex = (position: Vec3, uv: Vec2)
+    val v: Vertex = (position = Vec3(1, 2, 3), uv = Vec2(0.5, 0.25))
+    val p = summon[Position[Vertex]]
+    assert(p.pos(v).approxEq(Vec3(1, 2, 3)))
+
+  test("derived Position locates position field at a non-zero index"):
+    type Vertex = (uv: Vec2, color: Vec3, position: Vec3)
+    val v: Vertex =
+      (uv = Vec2(0.5, 0.25), color = Vec3(9, 9, 9), position = Vec3(1, 2, 3))
+    val p = summon[Position[Vertex]]
+    // Must read index 2, not 0 (which would be the uv → garbage).
+    assert(p.pos(v).approxEq(Vec3(1, 2, 3)))
+
+  test("derived Position welds named-tuple vertices by position"):
+    type Vertex = (position: Vec3, uv: Vec2)
+    val m = new Mesh[Vertex]()
+    def vert(x: Double, y: Double) =
+      (position = Vec3(x, y, 0), uv = Vec2(x, y))
+    // two triangles sharing the (1,0) / (0,1) edge → 4 unique positions
+    m.addFace(Triangle(vert(0, 0), vert(1, 0), vert(0, 1)))
+    m.addFace(Triangle(vert(1, 0), vert(1, 1), vert(0, 1)))
+    assertEquals(m.positions.length, 4)
 
   def makeMesh(): Mesh[Vec3] =
     val m = new Mesh[Vec3]()

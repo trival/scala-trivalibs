@@ -5,6 +5,11 @@ import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.given
 import trivalibs.utils.js.*
 
+import scala.NamedTuple.AnyNamedTuple
+import scala.NamedTuple.Elem
+import scala.NamedTuple.Names
+import scala.compiletime.constValue
+import scala.compiletime.ops.int.S
 import scala.scalajs.js
 
 // position type class and givens
@@ -14,6 +19,27 @@ trait Position[T]:
 
 given [V] => Vec3Base[V] => Position[V]:
   extension (v: V) def pos: Vec3 = Vec3(v.x, v.y, v.z)
+
+// Index of the literal "position" field within a named tuple's names. The
+// match stays stuck (a compile error) for tuples lacking such a field, so the
+// derived given below only applies to vertex types that actually carry one.
+type PositionIndex[N <: Tuple] <: Int = N match
+  case "position" *: _ => 0
+  case _ *: rest       => S[PositionIndex[rest]]
+
+// Bakes the resolved field index into a runtime instance so the abstract `.pos`
+// used inside `Mesh[T]` reads the right slot without per-call inlining.
+private def positionAtIndex[T](idx: Int): Position[T] =
+  new Position[T]:
+    extension (t: T)
+      def pos: Vec3 =
+        t.asInstanceOf[Product].productElement(idx).asInstanceOf[Vec3]
+
+// Generic Position for any named tuple / case class with a `position: Vec3`
+// field — derives the index at the (concrete) summon site via `constValue`.
+inline given [T <: AnyNamedTuple]
+  => (Elem[T, PositionIndex[Names[T]]] =:= Vec3) => Position[T] =
+  positionAtIndex[T](constValue[PositionIndex[Names[T]]])
 
 // lerp type class and givens
 

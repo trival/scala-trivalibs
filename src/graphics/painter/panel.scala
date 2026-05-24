@@ -2,8 +2,8 @@ package trivalibs.graphics.painter
 
 import trivalibs.graphics.buffers.BufferBinding
 import trivalibs.graphics.buffers.UniformValue
-import trivalibs.utils.js.*
 import trivalibs.graphics.painter.*
+import trivalibs.utils.js.*
 
 import scala.compiletime.summonFrom
 import scala.scalajs.js
@@ -120,6 +120,7 @@ class Panel(val painter: Painter):
       depthTest: Maybe[Boolean] = Maybe.Not,
       multisample: Maybe[Boolean] = Maybe.Not,
       mipLevels: Maybe[Int] = Maybe.Not,
+      mips: Maybe[Boolean] = Maybe.Not,
       format: Maybe[String] = Maybe.Not,
       formats: Maybe[Arr[String]] = Maybe.Not,
       shape: Maybe[S] = Maybe.Not,
@@ -132,7 +133,8 @@ class Panel(val painter: Painter):
     clearColor.foreach(v => this.clearColor = v)
     depthTest.foreach(v => this.depthTest = v)
     multisample.foreach(v => this.multisample = v)
-    mipLevels.foreach(v => this.mipLevels = v)
+    mips.foreach(v => if v then this.mipLevels = 0)
+    mipLevels.foreach(v => if v > 0 then this.mipLevels = v)
     formats.orMaybe(format.map(f => Arr(f))).foreach(v => this.formats = v)
     shapes
       .orMaybe(shape.map(s => Arr(s.asInstanceOf[AnyShape])))

@@ -80,7 +80,7 @@ def main(): Unit =
       width = 512,
       height = 512,
       clearColor = (0.05, 0.05, 0.15, 1.0),
-      mipLevels = 0, // full mip chain
+      mips = true, // full mip chain
       shape = sceneShape,
     )
 
@@ -178,6 +178,5 @@ def main(): Unit =
     // -----------------------------------------------------------------------
 
     animate: tpf =>
-      painter.paint(sourcePanel)
-      painter.paint(canvasPanel)
+      painter.paint(sourcePanel, canvasPanel)
       painter.show(canvasPanel)
