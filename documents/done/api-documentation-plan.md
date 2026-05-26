@@ -52,7 +52,6 @@ starts.
   (MCP-driven vs TASTY vs HTML→Markdown).
 - Migrate other consumable docs (e.g. `rust-painter/scala-port-comparison.md`)
   from `documents/` into `docs/` over time; consider renaming `documents/`.
-- Commits span two repos (submodule + parent) and haven't been made.
 
 ## Context
 
