@@ -806,8 +806,15 @@ class Painter(
     if hasPongLayers then panel.setOutputView(srcView)
     else panel.setOutputView(null)
 
-    // Generate mipmaps if configured
-    if panel.mipLevelCount > 1 then generateMipmaps(panel)
+    // Generate mipmaps if configured — but skip when any layer renders into a
+    // mip target: those layers build the mip chain by hand, so auto-generation
+    // would clobber it. Mirrors the Rust painter's `update_mips` gate.
+    var hasMipTargetLayers = false
+    var mi = 0
+    while mi < panel.layers.length do
+      if panel.layers(mi).mipTarget >= 0 then hasMipTargetLayers = true
+      mi += 1
+    if panel.mipLevelCount > 1 && !hasMipTargetLayers then generateMipmaps(panel)
 
   def paint(panels: Panel*): Unit =
     var i = 0
@@ -1098,7 +1105,9 @@ class Painter(
   private def generateMipmaps(panel: Panel): Unit =
     val mipCount = panel.mipLevelCount
     if mipCount <= 1 then return
-    val pipeline = getMipBlitPipeline(preferredFormat)
+    val fmt =
+      if panel.formats.length > 0 then panel.formats(0) else preferredFormat
+    val pipeline = getMipBlitPipeline(fmt)
 
     var i = 1
     while i < mipCount do

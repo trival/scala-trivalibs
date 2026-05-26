@@ -336,6 +336,7 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     @annotation.targetName("addScalarG")
     override def +(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} + ${scalar.wgsl})")
+    def +(scalar: Double): Vec4Expr = v + (scalar: FloatExpr)
     @annotation.targetName("negateVecG")
     override def unary_- : Vec4Expr = Vec4Expr(s"(-${v.wgsl})")
     @annotation.targetName("subVecG")
@@ -344,18 +345,21 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     @annotation.targetName("subScalarG")
     override def -(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} - ${scalar.wgsl})")
+    def -(scalar: Double): Vec4Expr = v - (scalar: FloatExpr)
     @annotation.targetName("mulVecG")
     override def *(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} * ${other.wgsl})")
     @annotation.targetName("mulScalarG")
     override def *(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} * ${scalar.wgsl})")
+    def *(scalar: Double): Vec4Expr = v * (scalar: FloatExpr)
     @annotation.targetName("divVecG")
     override def /(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} / ${other.wgsl})")
     @annotation.targetName("divScalarG")
     override def /(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} / ${scalar.wgsl})")
+    def /(scalar: Double): Vec4Expr = v / (scalar: FloatExpr)
 
     override def normalize: Vec4Expr = Vec4Expr(s"normalize(${v.wgsl})")
     override def abs: Vec4Expr = Vec4Expr(s"abs(${v.wgsl})")
