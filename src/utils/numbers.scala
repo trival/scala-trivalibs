@@ -37,6 +37,12 @@ object NumOps:
     val zero = 0.0f
     val one = 1.0f
 
+/** Scalar math extensions on `Double`/`Float` (given instances in [[NumExt]]'s
+  * companion): `.sqrt .pow .sin .cos .tan .abs .floor .ceil .fract .exp .log
+  * .min .max .clamp .clamp01 .mix .lerp .step .smoothstep .fit0111 .fit1101`,
+  * etc. Prefer these over `math.*` (`x.sin`, not `math.sin(x)`) — the same
+  * names exist on the GPU `Expr` types, so CPU and shader math read alike.
+  * `import trivalibs.utils.numbers.NumExt.given` to use them. */
 trait NumExt[P]:
   extension (p: P)
     def sqrt: P

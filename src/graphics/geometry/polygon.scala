@@ -8,9 +8,12 @@ import trivalibs.utils.js.*
 
 // Winding convention for all polygons: CCW viewed from front.
 
+/** A triangle of three vertices `T` (CCW from the front). A [[Mesh]] [[Face]].
+  * Ops (need a [[Position]]): `.a`/`.b`/`.c`, `.normal`, `.splitByPlane`. */
 opaque type Triangle[T] <: Arr[T] = Arr[T]
 
 object Triangle:
+  /** A triangle from three vertices, in CCW (front-facing) order. */
   def apply[T](a: T, b: T, c: T): Triangle[T] = Arr(a, b, c)
 
   extension [T: Position](tri: Triangle[T])
@@ -35,8 +38,14 @@ object Triangle:
       fanTriangulate(out)
 
 // Quad winding: tl(0), bl(1), br(2), tr(3) — CCW viewed from front.
+/** A quad of four vertices `T`, ordered `tl, bl, br, tr` (CCW from the front).
+  * A [[Mesh]] [[Face]]. Ops (need a [[Position]]): `.tl`/`.bl`/`.br`/`.tr`,
+  * `.normal`, `.toTriangles`, and (with [[Lerp]]) `.subdivideH`/`.subdivideV`,
+  * `.splitByPlane`. Build with [[Quad.apply]] or the `fromDimensions`/
+  * `fromCorners` helpers. */
 opaque type Quad[T] <: Arr[T] = Arr[T]
 
+/** A corner index of a [[Quad]] (`TopLeft`/`BottomLeft`/`BottomRight`/`TopRight`). */
 opaque type QuadCorner = Int
 
 object QuadCorner:
@@ -46,6 +55,8 @@ object QuadCorner:
   val TopRight: QuadCorner = 3
 
 object Quad:
+  /** A quad from its four corners in CCW order: top-left, bottom-left,
+    * bottom-right, top-right. */
   def apply[T](tl: T, bl: T, br: T, tr: T): Quad[T] = Arr(tl, bl, br, tr)
 
   // Dimensioned construction.  uvAtPivot: (0,0)=top-left, (0.5,0.5)=center, (1,1)=bottom-right.

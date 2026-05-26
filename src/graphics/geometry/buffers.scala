@@ -93,6 +93,11 @@ object VertexLayout:
 // purely a convenience for the shader-side attribs declaration.
 // ===========================================================================
 
+/** Append `(normal: Vec3)` to a vertex-attribs named tuple — the shader-side
+  * `Attribs` schema to pair with a `…WithNormal` [[MeshBufferType]]. E.g.
+  * `type V = (position: Vec3, uv: Vec2)` → shade with `WithNormal[V]` =
+  * `(position: Vec3, uv: Vec2, normal: Vec3)`.
+  */
 type WithNormal[T <: AnyNamedTuple] =
   NamedTuple.Concat[T, NamedTuple.NamedTuple[
     "normal" *: EmptyTuple,
@@ -103,6 +108,10 @@ type WithNormal[T <: AnyNamedTuple] =
 // BufferedGeometry + builders
 // ===========================================================================
 
+/** GPU-ready geometry produced by [[toBufferedGeometry]]: a vertex
+  * `StructArray` plus optional index buffer. Pass straight to
+  * `painter.form(geometry = …)`.
+  */
 class BufferedGeometry[F <: Tuple](
     val vertices: StructArray[F],
     val indices: Opt[Uint16Array | Uint32Array],
@@ -116,16 +125,28 @@ class BufferedGeometry[F <: Tuple](
 // in practice by the named vals.
 // ---------------------------------------------------------------------------
 
+/** How [[toBufferedGeometry]] turns a [[Mesh]] into vertex + index buffers.
+  * The `Extra` type param tracks any extra buffer fields (e.g. a generated
+  * normal) so the shader `Attribs` schema must match (use [[WithNormal]]).
+  */
 opaque type MeshBufferType[Extra <: Tuple] = Int
 
 object MeshBufferType:
   opaque type NoExtra <: Tuple = EmptyTuple
   opaque type WithNormal <: Tuple = Vec3Buffer *: EmptyTuple
 
+  /** One vertex per face-corner (faces don't share vertices); indexed by
+    * triangulating each face. The common default. */
   val FaceVertices: MeshBufferType[NoExtra] = 0
+  /** De-duplicated vertices shared between faces (smaller buffer, smooth
+    * shading); indexed. */
   val CompactVertices: MeshBufferType[NoExtra] = 1
+  /** [[FaceVertices]] plus a generated per-face (flat) normal appended to each
+    * vertex — pair the shader attribs with [[WithNormal]]. */
   val FaceVerticesWithFaceNormal: MeshBufferType[WithNormal] = 2
+  /** [[FaceVertices]] plus a per-vertex (smoothed) normal. */
   val FaceVerticesWithVertexNormal: MeshBufferType[WithNormal] = 3
+  /** [[CompactVertices]] plus a per-vertex normal. */
   val CompactVerticesWithNormal: MeshBufferType[WithNormal] = 4
 
 // ---------------------------------------------------------------------------
@@ -135,6 +156,19 @@ object MeshBufferType:
 // the runtime if then picks among the build* functions in that branch.
 // ---------------------------------------------------------------------------
 
+/** Convert a [[Mesh]] of `Quad`/`Triangle` faces into a [[BufferedGeometry]]
+  * (typed vertex `StructArray` + index buffer) ready for
+  * `painter.form(geometry = …)`. This is the idiomatic path for 3D geometry;
+  * `bufferType` picks the vertex strategy and optional generated normals (see
+  * [[MeshBufferType]]). The vertex type `T` must have a `Position` (any named
+  * tuple with a `position: Vec3` field qualifies):
+  * {{{
+  * type V = (position: Vec3, uv: Vec2)
+  * val mesh = Mesh(box.faces((c, uvw) => (position = c, uv = uvw.xy)))
+  * val form = painter.form(geometry =
+  *   toBufferedGeometry(mesh, MeshBufferType.FaceVertices))
+  * }}}
+  */
 transparent inline def toBufferedGeometry[T: Position, Extra <: Tuple](
     mesh: Mesh[T],
     bufferType: MeshBufferType[Extra],

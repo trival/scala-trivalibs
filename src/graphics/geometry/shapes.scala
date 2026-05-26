@@ -174,9 +174,11 @@ object Box:
 // Sphere mesh
 // ---------------------------------------------------------------------------
 
-// Builds a sphere mesh over the unit sphere.
-// f receives (pos: Vec3, uv: Vec2); pos is on the unit sphere, scale/translate in f.
-// UV: uv.x in [0,1] = longitude, uv.y in [0,1] = 0 at south pole, 1 at north pole.
+/** Build a UV-sphere [[Mesh]] over the unit sphere with the given segment
+  * counts. `f(pos, uv)` builds each vertex: `pos` is on the unit sphere
+  * (scale/translate inside `f`), `uv.x` ∈ [0,1] is longitude and `uv.y` ∈ [0,1]
+  * goes south-pole → north-pole. Feed the result to [[toBufferedGeometry]].
+  */
 def sphereMesh[T: Position](
     verticalSegments: Int,
     horizontalSegments: Int,

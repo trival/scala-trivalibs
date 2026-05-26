@@ -14,6 +14,10 @@ import scala.scalajs.js
 
 // position type class and givens
 
+/** Extracts a `Vec3` position from a vertex `T`. Given automatically for any
+  * `Vec3`-like type and for any named tuple / case class with a `position: Vec3`
+  * field (so `(position: Vec3, uv: Vec2)` just works). Required by [[Mesh]],
+  * [[toBufferedGeometry]], and the polygon ops. */
 trait Position[T]:
   extension (t: T) def pos: Vec3
 
@@ -43,6 +47,9 @@ inline given [T <: AnyNamedTuple]
 
 // lerp type class and givens
 
+/** Linear interpolation for `T` — given for `Double` and the `Vec2-4` types.
+  * Enables vertex interpolation in subdivision / plane clipping
+  * (`Quad.subdivide*`, `Grid.subdivide`, `splitByPlane`). */
 trait Lerp[T]:
   extension (a: T) def lerp(b: T, t: Double): T
 
@@ -60,6 +67,9 @@ given vec4Lerp: [V] => Vec4Base[V] => Vec4ImmutableOps[V] => Lerp[V]:
 
 // geometry types
 
+/** An infinite plane `normal · p = d`, used to clip/split polygons
+  * ([[Triangle.splitByPlane]] / [[Quad.splitByPlane]]). `signedDist` is positive
+  * on the normal's side; `flip` reverses the facing. */
 class Plane(val normal: Vec3, val d: Double):
   def signedDist(p: Vec3): Double = normal.dot(p) - d
   def flip: Plane = Plane(-normal, -d)

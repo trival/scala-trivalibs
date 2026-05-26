@@ -5,6 +5,7 @@ import trivalibs.graphics.math.cpu.given
 import scala.scalajs.js
 import trivalibs.utils.js.*
 
+/** A mesh face: either a [[Triangle]] or a [[Quad]] of vertices `T`. */
 type Face[T] = Triangle[T] | Quad[T]
 
 class PositionFaceRef(val faceIndex: Int, val vertexSlot: Int)
@@ -13,12 +14,23 @@ class VertexPosition[T](val position: Vec3, val faces: Arr[PositionFaceRef])
 
 class FaceData(var normal: Opt[Vec3], val section: Int)
 
+/** A collection of [[Face]]s (triangles/quads) with shared-position tracking —
+  * the idiomatic way to build 3D geometry. Construct from faces with
+  * `Mesh(faces)` / `Mesh.apply`, transform with [[map]] / [[flatMap]], then hand
+  * to [[toBufferedGeometry]] for `painter.form`. The vertex type `T` needs a
+  * [[Position]] (any named tuple with a `position: Vec3` field). Generators like
+  * [[Box]] and [[sphereMesh]] / [[Grid]] produce faces or meshes directly.
+  */
 class Mesh[T: Position]:
   val faces: Arr[Face[T]] = Arr()
   val faceData: Arr[FaceData] = Arr()
   val positions: Arr[VertexPosition[T]] = Arr()
   val positionMap: Dict[Int] = Dict()
 
+  /** Add a [[Face]] (triangle/quad). `normal` is **optional** — pass it only if
+    * you already know it (a cheap shortcut); otherwise [[toBufferedGeometry]]
+    * computes face/vertex normals itself when a `…WithNormal` buffer type is
+    * requested. `section` tags faces for [[newFromSection]]. */
   def addFace(face: Face[T], normal: Opt[Vec3] = null, section: Int = 0): Unit =
     val faceIdx = faces.length
     faces.push(face)
@@ -113,6 +125,8 @@ class Mesh[T: Position]:
       i += 1
     hasQuads
 
+  /** A new mesh with each face mapped by `f` (e.g. to recompute vertex
+    * attributes); section + normal are carried over. */
   def map[U: Position](f: Face[T] => Face[U]): Mesh[U] =
     val m = new Mesh[U]()
     var i = 0
@@ -121,6 +135,8 @@ class Mesh[T: Position]:
       i += 1
     m
 
+  /** A new mesh where each face expands to zero or more faces (e.g.
+    * subdivision). */
   def flatMap[U: Position](f: Face[T] => Arr[Face[U]]): Mesh[U] =
     val m = new Mesh[U]()
     var i = 0
@@ -154,6 +170,9 @@ extension [T: Position](m: Mesh[T])
       i += 1
 
 object Mesh:
+  /** Build a mesh from an array of faces (the usual constructor):
+    * `Mesh(box.faces(...))` or `Mesh(grid.quads)`. Optionally tag them with a
+    * face `normal` and a `section` id. */
   def apply[T: Position, F <: Face[T]](
       faces: Arr[F],
       normal: Opt[Vec3] = null,

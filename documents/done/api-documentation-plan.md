@@ -1,5 +1,59 @@
 # trivalibs painter — comprehensive API documentation & sketch-authoring skill
 
+## Implementation status (2026-05-26) — DONE (Phases 1 & 2); Phase 3 deferred
+
+**Phase 1 — complete.**
+- Scaladoc doc-comments across the public surface: `painter/` (factories,
+  `Panel`/`Layer`/`Shape`/`Form`/`Instance`/`Bindable`/`BindPair`, enums),
+  `shader/`+`dsl/` (`Program` class doc; rest already documented), `buffers/`
+  (`BufferBinding`, `allocateAttribs`, `AttribLayout`, `UniformValue`/`Layout`),
+  `math/gpu/` (Expr model, op families, constructors, control flow, sampling,
+  `Texture2D`/`Sampler`, int/uint), `math/cpu/` (`Vec2-4`/`Mat2-4`/`Quat` +
+  three-representation model).
+- Manuals under `docs/guide/`: `sketch-authoring-guide.md`,
+  `shader-dsl-guide.md`, `gotchas.md`.
+- Skill: `docs/skills/write-sketch/SKILL.md` (git-visible; consumption method
+  still deferred — see below).
+- Tooling: `bun run docs` → `docs/api/html/` (gitignored); CI workflow
+  `.github/workflows/deploy-docs.yml` (Scaladoc → GitHub Pages); doc conventions
+  + `docs/` vs `documents/` rule in `trivalibs/CLAUDE.md`; READMEs (root +
+  trivalibs) with setup + Metals MCP enablement; `.mcp.json` gitignored.
+- Metals MCP enabled (`.vscode/settings.json`) and validated end-to-end
+  (`get-docs` returns written prose).
+
+**Beyond-plan hardening done in Phase 1:**
+- **Encapsulation**: `Panel`/`Layer`/`Shape`/`Form`/`Shade` constructors +
+  render-state fields are `private[painter]`; public surface is the idiomatic
+  path (`set`/`bind`/`instances`/`binding`/factories). A few members stay public
+  by necessity (inline `bind`/`shade` machinery) — recorded in the memory
+  `painter-encapsulation-inline-constraint`.
+- **`TextureFormat` opaque-type enum** replaces raw format strings (enforced at
+  compile time).
+
+**Phase 2 — done (geometry-focused).**
+- `geometry/` doc-strings: `Mesh` (+ optional-normal `addFace`, `map`/`flatMap`),
+  `toBufferedGeometry`, `MeshBufferType`, `BufferedGeometry`, `WithNormal`,
+  `Triangle`/`Quad`, `sphereMesh`, `Grid`, `Position`/`Lerp`/`Plane` (`Box`
+  already documented).
+- Guide + skill rewritten to promote **`Mesh` + `toBufferedGeometry`** as the
+  default 3D-geometry path; `allocateAttribs` demoted to the simple-primitive
+  fallback.
+- `utils/`: `animate`, `NumExt` documented (`js`/`bufferdata` were already good).
+  `scene/` and `dev/` were already well-documented.
+
+**Phase 3 — deferred**: `preact` (type-safe Preact bindings, signals, HTML DSL)
+docs + examples. No interactive-UI sketches planned yet; pick up when that work
+starts.
+
+**Open follow-ups (not blockers):**
+- Skill **consumption method** still to be decided (symlink / copy / CLAUDE.md
+  pointer) so the harness loads `docs/skills/write-sketch/`.
+- Optional **Markdown API generator** (`docs/api/markdown/`) — prototype + decide
+  (MCP-driven vs TASTY vs HTML→Markdown).
+- Migrate other consumable docs (e.g. `rust-painter/scala-port-comparison.md`)
+  from `documents/` into `docs/` over time; consider renaming `documents/`.
+- Commits span two repos (submodule + parent) and haven't been made.
+
 ## Context
 
 The painter library is mostly feature-complete and we're about to write many

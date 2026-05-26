@@ -32,8 +32,12 @@ query the live API — don't read library source by default.
 2. **Write the shader(s)** with the DSL (`p.shade[A,V,U]` for geometry,
    `p.layerShade[U]` for full-screen passes). Schemas are named tuples; field
    order = layout index, field name = WGSL name.
-3. **Geometry/bindings**: `allocateAttribs[A](n)` + `p.form(...)` (or a mesh →
-   `p.form(geometry = …)`); `p.binding[T]` / `p.binding(init)` for uniforms.
+3. **Geometry**: for 3D, the default path is a **`Mesh`** of `Quad`/`Triangle`
+   faces → `p.form(geometry = toBufferedGeometry(mesh, MeshBufferType.…))`
+   (builders: `Box`, `sphereMesh`, `Grid` → `Mesh(grid.ccwQuads)`;
+   `…WithFaceNormal`/`…WithVertexNormal` generate normals). Use
+   `allocateAttribs[A](n)` + `p.form(vertices = …)` only for simple one-off
+   primitives. Then `p.binding[T]` / `p.binding(init)` for uniforms.
 4. **Compose**: `p.shape(form, shade).bind("name" := value, …)` and/or
    `p.layer(shade).bind(...)`, then
    `p.panel(shape = …, layer = …, clearColor = …)`.

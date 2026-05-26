@@ -50,35 +50,72 @@ Panel   = render target: clears, draws its shapes, then runs its layers
 paint   = render panels off-screen;  show = present one to the canvas
 ```
 
-### 2a. Geometry-based shape (3D / vertex data)
+### 2a. 3D geometry — Mesh + `toBufferedGeometry` (the default path)
+
+For anything beyond a single primitive, build a **`Mesh`** of `Quad`/`Triangle`
+faces and convert it with **`toBufferedGeometry`** — this is the idiomatic way
+to make 3D geometry. It gives you indexed buffers and optional generated
+normals, and works with the `geometry` builders (`Box`, `sphereMesh`, `Grid`).
 
 ```scala
-type Attribs  = (position: Vec3, color: Vec3)
-type Varyings = (color: Vec3)
+import trivalibs.graphics.geometry.{*, given}
+
+type Attribs  = (position: Vec3, normal: Vec3)   // normal is generated (see below)
+type Varyings = (normal: Vec3)
 type Uniforms = (mvp: Mat4)
+
+// Box → Mesh: vertices are Vec3 positions.
+val box  = Box(Vec3.zero, 1.0, 1.0, 1.0)
+val mesh = new Mesh[Vec3]()
+box.faces.foreach((face, normal) => mesh.addFace(face, normal))  // normal optional
+// (mesh.addFace(face) is fine too — normals are computed below when requested.)
+
+// FaceVerticesWithFaceNormal generates a per-face normal → matches Attribs:
+val form = p.form(geometry =
+  toBufferedGeometry(mesh, MeshBufferType.FaceVerticesWithFaceNormal))
 
 val shade = p.shade[Attribs, Varyings, Uniforms]: program =>
   program.vert: ctx =>
     Block(
       ctx.out.position := ctx.bindings.mvp * vec4(ctx.in.position, 1.0),
-      ctx.out.color    := ctx.in.color,
+      ctx.out.normal   := ctx.in.normal,
     )
   program.frag: ctx =>
-    ctx.out.color := vec4(ctx.in.color, 1.0)
+    ctx.out.color := vec4(ctx.in.normal.normalize * 0.5 + 0.5, 1.0)
 
-val verts = allocateAttribs[Attribs](3)
-verts(0).set0(0.0, 0.5, 0.0)
-verts(0).set1(1.0, 0.2, 0.2)   // set0 = field 0 (position), set1 = field 1 (color)
-// … fill the other vertices …
-val form  = p.form(vertices = verts)
 val mvp   = p.binding[Mat4]
-val shape = p.shape(form, shade).bind("mvp" := mvp)
-val panel = p.panel(shape = shape, clearColor = (0.05, 0.06, 0.1, 1.0))
+val shape = p.shape(form, shade, cullMode = CullMode.Back).bind("mvp" := mvp)
+val panel = p.panel(shape = shape, clearColor = (0.05, 0.06, 0.1, 1.0), depthTest = true)
 ```
 
-For meshes (cube, sphere, grid) use the geometry helpers and
-`p.form(geometry = toBufferedGeometry(mesh, …))` — see the `geometry3d_scene`
-example and the `rooms/base` sketch.
+- **`MeshBufferType`** picks the vertex strategy: `FaceVertices` (default, no
+  normals), `CompactVertices` (shared/de-duplicated vertices), or the
+  `…WithFaceNormal` / `…WithVertexNormal` variants that **append a generated
+  normal** to each vertex — so a trailing `normal: Vec3` appears in your
+  `Attribs` (if the mesh vertex is itself a named tuple like
+  `(position: Vec3, uv: Vec2)`, use `WithNormal[V]` for the attribs schema).
+- **Builders**: `Box` — `.faces` (each as `(quad, normal)`), or per-face
+  `.frontFace`/`.topFace`/… with a `(corner, uvw) => vertex` fn for custom
+  per-vertex attributes (UVs etc., as in `rooms/base`); `sphereMesh(vSeg, hSeg)(f)`;
+  `Grid` → `Mesh(grid.ccwQuads)`.
+- Transform meshes with `mesh.map` / `flatMap`. See the `geometry3d_scene`
+  example (box + sphere + terrain grid) and the `rooms/base` sketch.
+
+### 2a′. Simple primitives — `allocateAttribs` (raw vertices)
+
+For a one-off primitive (a single triangle / quad, a handful of vertices) where
+a mesh is overkill, write raw vertices directly:
+
+```scala
+type Attribs = (position: Vec3, color: Vec3)
+val verts = allocateAttribs[Attribs](3)
+verts(0).set0(0.0, 0.5, 0.0)   // field 0 = position
+verts(0).set1(1.0, 0.2, 0.2)   // field 1 = color
+// … fill the other vertices …
+val form = p.form(vertices = verts)
+```
+
+Reach for the `Mesh` path (2a) as soon as the geometry is non-trivial.
 
 ### 2b. Full-screen layer (post-processing / procedural)
 

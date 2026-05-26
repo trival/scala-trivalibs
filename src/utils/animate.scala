@@ -51,6 +51,12 @@ class Animator(
   def onFps(newOnFps: Opt[js.Function1[Double, Unit]]) =
     onFpsCallback = newOnFps
 
+/** Start a `requestAnimationFrame` loop calling `frame(tpf)` each frame, where
+  * `tpf` is **milliseconds** since the last frame. Returns the [[Animator]] —
+  * keep it if you want to `stop()` later (it logs FPS automatically). The
+  * standard per-frame body updates uniforms then `painter.paint(...)` /
+  * `painter.show(...)`. Note: Rust's frame callback gets seconds, not ms.
+  */
 def animate(frame: js.Function1[Double, Unit]) =
   val animator = Animator(frame)
   animator.start()
