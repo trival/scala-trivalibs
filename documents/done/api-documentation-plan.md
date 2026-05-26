@@ -3,6 +3,7 @@
 ## Implementation status (2026-05-26) — DONE (Phases 1 & 2); Phase 3 deferred
 
 **Phase 1 — complete.**
+
 - Scaladoc doc-comments across the public surface: `painter/` (factories,
   `Panel`/`Layer`/`Shape`/`Form`/`Instance`/`Bindable`/`BindPair`, enums),
   `shader/`+`dsl/` (`Program` class doc; rest already documented), `buffers/`
@@ -16,12 +17,13 @@
   still deferred — see below).
 - Tooling: `bun run docs` → `docs/api/html/` (gitignored); CI workflow
   `.github/workflows/deploy-docs.yml` (Scaladoc → GitHub Pages); doc conventions
-  + `docs/` vs `documents/` rule in `trivalibs/CLAUDE.md`; READMEs (root +
-  trivalibs) with setup + Metals MCP enablement; `.mcp.json` gitignored.
+  - `docs/` vs `documents/` rule in `trivalibs/CLAUDE.md`; READMEs (root +
+    trivalibs) with setup + Metals MCP enablement; `.mcp.json` gitignored.
 - Metals MCP enabled (`.vscode/settings.json`) and validated end-to-end
   (`get-docs` returns written prose).
 
 **Beyond-plan hardening done in Phase 1:**
+
 - **Encapsulation**: `Panel`/`Layer`/`Shape`/`Form`/`Shade` constructors +
   render-state fields are `private[painter]`; public surface is the idiomatic
   path (`set`/`bind`/`instances`/`binding`/factories). A few members stay public
@@ -31,25 +33,27 @@
   compile time).
 
 **Phase 2 — done (geometry-focused).**
-- `geometry/` doc-strings: `Mesh` (+ optional-normal `addFace`, `map`/`flatMap`),
-  `toBufferedGeometry`, `MeshBufferType`, `BufferedGeometry`, `WithNormal`,
-  `Triangle`/`Quad`, `sphereMesh`, `Grid`, `Position`/`Lerp`/`Plane` (`Box`
-  already documented).
+
+- `geometry/` doc-strings: `Mesh` (+ optional-normal `addFace`,
+  `map`/`flatMap`), `toBufferedGeometry`, `MeshBufferType`, `BufferedGeometry`,
+  `WithNormal`, `Triangle`/`Quad`, `sphereMesh`, `Grid`,
+  `Position`/`Lerp`/`Plane` (`Box` already documented).
 - Guide + skill rewritten to promote **`Mesh` + `toBufferedGeometry`** as the
   default 3D-geometry path; `allocateAttribs` demoted to the simple-primitive
   fallback.
-- `utils/`: `animate`, `NumExt` documented (`js`/`bufferdata` were already good).
-  `scene/` and `dev/` were already well-documented.
+- `utils/`: `animate`, `NumExt` documented (`js`/`bufferdata` were already
+  good). `scene/` and `dev/` were already well-documented.
 
 **Phase 3 — deferred**: `preact` (type-safe Preact bindings, signals, HTML DSL)
 docs + examples. No interactive-UI sketches planned yet; pick up when that work
 starts.
 
 **Open follow-ups (not blockers):**
+
 - Skill **consumption method** still to be decided (symlink / copy / CLAUDE.md
   pointer) so the harness loads `docs/skills/write-sketch/`.
-- Optional **Markdown API generator** (`docs/api/markdown/`) — prototype + decide
-  (MCP-driven vs TASTY vs HTML→Markdown).
+- Optional **Markdown API generator** (`docs/api/markdown/`) — prototype +
+  decide (MCP-driven vs TASTY vs HTML→Markdown).
 - Migrate other consumable docs (e.g. `rust-painter/scala-port-comparison.md`)
   from `documents/` into `docs/` over time; consider renaming `documents/`.
 
@@ -160,13 +164,14 @@ layer — so we need both.
 ## Deliverables
 
 > **`docs/` vs `documents/` — placement rule.** All **consumable** documentation
-> (the public reference for *using* the lib: guides, generated API, skills) lives
-> under `trivalibs/docs/`. `trivalibs/documents/` is reserved for **internal**
-> feature-planning / contribution docs (writing/extending the lib) — including
-> this plan. Existing consumable material currently under `documents/` (e.g.
-> `rust-painter/scala-port-comparison.md`) should migrate to `docs/` over time.
-> **Consideration**: rename `documents/` to something that states intent better
-> (e.g. `dev-docs/`, `design/`, `contributing/`) — deferred, not part of Phase 1.
+> (the public reference for _using_ the lib: guides, generated API, skills)
+> lives under `trivalibs/docs/`. `trivalibs/documents/` is reserved for
+> **internal** feature-planning / contribution docs (writing/extending the lib)
+> — including this plan. Existing consumable material currently under
+> `documents/` (e.g. `rust-painter/scala-port-comparison.md`) should migrate to
+> `docs/` over time. **Consideration**: rename `documents/` to something that
+> states intent better (e.g. `dev-docs/`, `design/`, `contributing/`) —
+> deferred, not part of Phase 1.
 
 ### 1. Scaladoc doc-comments (Phase 1 scope: painter + shader DSL + all math)
 
