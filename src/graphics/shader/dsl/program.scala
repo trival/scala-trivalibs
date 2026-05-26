@@ -24,6 +24,21 @@ import scala.scalajs.js
 //     )
 // ---------------------------------------------------------------------------
 
+/** DSL builder for a vertex+fragment shader, passed to the `build` lambda of
+  * [[trivalibs.graphics.painter.Painter.shade]]. Call [[vert]] and [[frag]] with
+  * a function of the typed context `ctx`, which exposes:
+  *   - `ctx.in` — inputs (`A` attributes in vert, `V` varyings in frag), read-only
+  *   - `ctx.out` — outputs (`V` varyings + `out.position` in vert; `FO` color in
+  *     frag); assign with `:=`
+  *   - `ctx.bindings` — the `U` uniforms, by field name
+  *   - `ctx.textures` — the `P` panel textures, by field name (`.sample(...)`)
+  *   - `ctx.locals` — typed local `var`/`let` declared via the `[L]` type param
+  *
+  * Each `vert`/`frag` body returns a [[trivalibs.graphics.math.gpu.Block]] of
+  * statements. Register reusable helpers with [[fn]] (also auto-collected when a
+  * `WgslFn` is referenced in a body). The type params `A,V,U,P,FO` are the same
+  * named-tuple schemas described on `Painter.shade`.
+  */
 class Program[A, V, U, P, FO]:
   var vertBody: Block = Block.empty
   var fragBody: Block = Block.empty

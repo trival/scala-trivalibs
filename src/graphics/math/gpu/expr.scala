@@ -8,6 +8,17 @@ import trivalibs.utils.js.Arr
 // interpolation works naturally.
 // ---------------------------------------------------------------------------
 
+/** A typed GPU shader expression — a thin wrapper over the WGSL string it
+  * generates. The DSL builds a tree of these and emits WGSL at shade-build time.
+  * Subtypes carry the element type (`FloatExpr`, `Vec3Expr`, `Mat4Expr`, …) so
+  * operators and methods (`+`, `.dot`, `.normalize`, `.sin`, swizzles, …) are
+  * type-checked in Scala. You rarely construct these directly — they come from
+  * `ctx.in`/`bindings`/`locals`, the `vec2/3/4` constructors, and the math ops.
+  *
+  * Gotcha: a `Double` literal on the **left** of an operator won't auto-convert
+  * (e.g. `0.5 * vExpr` fails); put the expression first (`vExpr * 0.5`) or
+  * ascribe (`(0.5: FloatExpr) * x`).
+  */
 class Expr(val wgsl: String):
   override def toString: String = wgsl
 
@@ -16,9 +27,14 @@ class Expr(val wgsl: String):
 // Extends Expr so runtime values created by selectDynamic are compatible.
 // ---------------------------------------------------------------------------
 
+/** A named local backed by a WGSL `let` (immutable). `name := expr` emits the
+  * declaration. Declared in a `vert`/`frag` body via the `[L]` locals schema, or
+  * ad-hoc with `LetFloat("n")`, `LetVec2("p")`, etc. */
 class LetExpr(val name: String) extends Expr(name):
   def :=(value: Expr): Stmt = Stmt.let(name, value)
 
+/** A mutable WGSL `var` local: the first `:=` declares it, later `:=` reassign.
+  * Use for accumulation (e.g. `VarVec3("col")`). */
 class VarExpr(name: String) extends LetExpr(name):
   private var declared = false
   override def :=(value: Expr): Stmt =
@@ -27,6 +43,7 @@ class VarExpr(name: String) extends LetExpr(name):
       Stmt.varDecl(name, value)
     else Stmt.varAssign(name, value)
 
+/** A WGSL `const` local (compile-time constant). */
 class ConstExpr(name: String) extends LetExpr(name):
   override def :=(value: Expr): Stmt = Stmt.constDecl(name, value)
 
@@ -68,9 +85,15 @@ object Expr:
   // GPU resource expression types — opaque wrappers used in shader DSL
   // for texture and sampler bindings. No CPU-side representation.
 
+  /** A 2D texture in the shader DSL, obtained from `ctx.textures.<name>`. Sample
+    * it with `.sample(uv, sampler)` / `(uv, sampler)` / `.sampleLevel(...)`. As a
+    * uniform/panel field type it's written via the panel markers (`FragmentPanel`). */
   opaque type Texture2D <: Expr = Expr
   object Texture2D { def apply(s: String): Texture2D = new Expr(s) }
 
+  /** A texture sampler in the shader DSL. Declare as a uniform field of type
+    * `Sampler` (e.g. `samp: Sampler`) and bind a `GPUSampler`
+    * (`painter.samplerLinear`); pass it to `texture.sample(uv, sampler)`. */
   opaque type Sampler <: Expr = Expr
   object Sampler { def apply(s: String): Sampler = new Expr(s) }
 
@@ -208,11 +231,17 @@ object Expr:
   opaque type LetUVec4 <: UVec4Expr & LetExpr = LetExpr
   object LetUVec4 { def apply(s: String): LetUVec4 = new LetExpr(s) }
 
+/** Texture sampling ops on a panel texture (`ctx.textures.<name>`). */
 extension (tex: Expr.Texture2D)
+  /** Sample at `uv` with `sampler` (auto LOD): `tex.sample(ctx.in.uv, samp)`.
+    * `tex(uv, samp)` is shorthand for the same. */
   def sample(uv: Expr.Vec2Expr, sampler: Expr.Sampler): Expr.Vec4Expr =
     Expr.Vec4Expr(s"textureSample(${tex.wgsl}, ${sampler.wgsl}, ${uv.wgsl})")
+  /** Shorthand for [[sample]]: `tex(uv, sampler)`. */
   def apply(uv: Expr.Vec2Expr, sampler: Expr.Sampler): Expr.Vec4Expr =
     Expr.Vec4Expr(s"textureSample(${tex.wgsl}, ${sampler.wgsl}, ${uv.wgsl})")
+  /** Sample an explicit mip `level` (e.g. to show a chosen mip, or read a
+    * mip-mapped panel at a fixed LOD). */
   def sampleLevel(
       uv: Expr.Vec2Expr,
       sampler: Expr.Sampler,
@@ -221,6 +250,7 @@ extension (tex: Expr.Texture2D)
     Expr.Vec4Expr(
       s"textureSampleLevel(${tex.wgsl}, ${sampler.wgsl}, ${uv.wgsl}, ${level.wgsl})",
     )
+  /** Number of mip levels in the bound texture, as a `Float`. */
   def numLevels: Expr.FloatExpr =
     Expr.FloatExpr(s"f32(textureNumLevels(${tex.wgsl}))")
 
@@ -277,7 +307,12 @@ export Expr.{
 // Stmt and Block opaque types
 // ---------------------------------------------------------------------------
 
+/** A single WGSL statement (an assignment, declaration, or `if`). Produced by
+  * `:=`, the control-flow helpers, or `Stmt.raw`. */
 opaque type Stmt = String
+
+/** A sequence of [[Stmt]]s — the body returned by a `vert`/`frag` block. Build
+  * with `Block(stmt1, stmt2, …)`; a single `Stmt` also converts to a `Block`. */
 opaque type Block = String
 
 object Stmt:
@@ -303,6 +338,7 @@ object Stmt:
 given Conversion[Stmt, Block] = s => s
 
 object Block:
+  /** Combine statements into a shader body: `Block(out.color := …, …)`. */
   def apply(stmts: Stmt*): Block = stmts.mkString("\n")
   def empty: Block = ""
   def unwrap(b: Block): String = b.asInstanceOf[String]

@@ -2,6 +2,10 @@ package trivalibs.graphics.painter
 
 import trivalibs.utils.js.*
 
+/** Per-draw-call binding overrides for one instance of a [[Shape]] or [[Layer]].
+  * Fields not overridden fall back to the shape/layer bindings. Mutate later via
+  * `shape.instances(i).bind(...)`.
+  */
 class Instance[U, P](
     val shade: Shade[U, P],
     val painter: Painter,
@@ -9,15 +13,29 @@ class Instance[U, P](
   var bindings: BindingSlots = Arr()
   var panelBindings: Arr[Opt[PanelBinding]] = Arr()
 
+/** The ordered list of [[Instance]]s on a [[Shape]] or [[Layer]] — one rendered
+  * draw per instance. Build it with `add("name" := value, …)` (1–8 pairs per
+  * call), e.g. one draw per light or per transform:
+  * {{{
+  * for i <- 0 until n do
+  *   shape.instances.add("model" := models(i), "tint" := tints(i))
+  * }}}
+  */
 class InstanceList[U, P](val shade: Shade[U, P], val painter: Painter):
   val items: Arr[Instance[U, P]] = Arr()
 
+  /** The instance at index `i` (e.g. to re-`bind` it per frame). */
   def apply(i: Int): Instance[U, P] = items(i)
 
+  /** Number of instances. */
   def length: Int = items.length
 
+  /** Remove all instances. */
   def clear(): Unit = items.length = 0
 
+  /** Add an empty instance; returns its index. Overloads take 1–8 [[BindPair]]s
+    * to bind in one call.
+    */
   def add(): Int =
     val inst = Instance(shade, painter)
     items.push(inst)

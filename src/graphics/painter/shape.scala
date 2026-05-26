@@ -15,11 +15,22 @@ type AnyShape = Shape[?, ?]
 type BindingSlots =
   Arr[BufferBinding[?, ?] | GPUSampler | Null] // Null = empty slot
 
+/** A name→value binding pair produced by the `"name" := value` syntax and
+  * consumed by [[Bindable.bind]] / [[Panel.bind]] / instance `add`. `name` must
+  * match a uniform or panel field of the shade's schema.
+  */
 class BindPair[N <: String & Singleton, V](val name: N, val value: V)
 
+/** Sugar to build a [[BindPair]]: `"mvp" := mat4Binding`. */
 extension [N <: String & Singleton](name: N)
   inline def :=[V](value: V): BindPair[N, V] = BindPair(name, value)
 
+/** Mixin for things that carry shader bindings — [[Shape]], [[Layer]],
+  * [[Instance]]. Provides the `bind(...)` overloads (1–8 [[BindPair]]s; chain
+  * for more) that assign uniform/panel values by field name. Accepted values:
+  * a `BufferBinding`, a raw uniform value (auto-boxed into a `BufferBinding`),
+  * a `GPUSampler`, a `Panel`, or a `PanelBinding`.
+  */
 trait Bindable[U, P]:
   val shade: Shade[U, P]
   val painter: Painter
@@ -253,17 +264,30 @@ trait Bindable[U, P]:
         "Name not found in Uniforms or Panel bindings",
       )
 
-class Shape[U, P](
+/** A drawable: a [[Form]] (geometry) rendered with a [[Shade]], plus its bound
+  * uniforms/panels and optional per-instance draws. Create via
+  * [[Painter.shape]], bind with `.bind("name" := value, …)`, and add it to a
+  * [[Panel]]. Use `instances.add(...)` for instanced draws (e.g. many transforms
+  * sharing one form).
+  */
+class Shape[U, P] private[painter] (
     val painter: Painter,
-    val form: Form,
+    private[painter] val form: Form,
     val shade: Shade[U, P],
 ) extends Bindable[U, P]:
-  var cullMode: CullMode = CullMode.None
-  var blendState: Opt[BlendState] = null
+  /** Internal: cull mode, set via [[set]] / [[Painter.shape]]. */
+  private[painter] var cullMode: CullMode = CullMode.None
+  /** Internal: blend mode, set via [[set]] / [[Painter.shape]]. */
+  private[painter] var blendState: Opt[BlendState] = null
   var bindings: BindingSlots = Arr()
   var panelBindings: Arr[Opt[PanelBinding]] = Arr()
+
+  /** Per-draw-call binding overrides — one rendered instance per added entry,
+    * sharing this shape's form/shade. See [[InstanceList]].
+    */
   val instances: InstanceList[U, P] = InstanceList[U, P](shade, painter)
 
+  /** Set [[cullMode]] / [[blendState]]; returns `this`. */
   def set(
       cullMode: Maybe[CullMode] = Maybe.Not,
       blendState: Maybe[Opt[BlendState]] = Maybe.Not,

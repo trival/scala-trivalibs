@@ -17,6 +17,10 @@ import scala.NamedTuple.AnyNamedTuple
 // implicit search.
 // =============================================================================
 
+/** Type class deriving a GPU vertex buffer layout `Fields` from an attribute
+  * schema `Attribs` (a named tuple like `(position: Vec3, uv: Vec2)`). Summoned
+  * by [[allocateAttribs]]; not referenced directly.
+  */
 // Fields is a second type parameter so it appears concretely in signatures
 trait AttribLayout[Attribs, Fields <: Tuple]
 
@@ -44,6 +48,19 @@ object AttribLayoutHelper:
 // type to the call site, so field access compiles correctly.
 // =============================================================================
 
+/** Allocate a typed vertex buffer of `count` vertices for the attribute schema
+  * `Attribs` (a named tuple, e.g. `(position: Vec2, uv: Vec2)`). Returns a
+  * `StructArray` whose concrete element type is derived from `Attribs`; write
+  * vertices by index with `.set0(...)`, `.set1(...)`, … (one setter per field,
+  * in declaration order), then pass it to `painter.form(vertices = …)`:
+  * {{{
+  * val v = allocateAttribs[(position: Vec2, uv: Vec2)](3)
+  * v(0).set0(-0.7, -0.7)
+  * v(0).set1(0.0, 1.0)
+  * }}}
+  * (Return type is `Any` so the compiler can substitute the concrete
+  * `StructArray[F]` at each call site via `transparent inline`.)
+  */
 transparent inline def allocateAttribs[Attribs](count: Int): Any =
   import scala.compiletime.summonFrom
   summonFrom:

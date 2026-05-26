@@ -185,6 +185,12 @@ trait QuatMutableOps[Q]:
 // Concrete Quat — mutable class with both op sets + operator aliases
 // ---------------------------------------------------------------------------
 
+/** Mutable quaternion `(x, y, z, w)` (imaginary first, real last) for 3D
+  * rotations. Companion: `Quat.identity`, `.fromAxisAngle`, `.fromRotationX/Y/Z`,
+  * `.fromLookRotation`, `.fromMat4`. Ops: `*` (compose), `.rotate(vec3)`,
+  * `.conjugate`, `.inverse`, `.slerp`, `.normalize`, `.toMat4`. Note: WGSL has no
+  * quaternion type — upload a rotation `Mat3`/`Mat4` to shaders. Siblings
+  * `QuatTuple`/`QuatBuffer`. */
 class Quat(
     var x: Double = 0.0,
     var y: Double = 0.0,

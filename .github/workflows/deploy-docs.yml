@@ -1,0 +1,52 @@
+name: Deploy Scaladoc
+
+# Build the Scaladoc API site and publish it to GitHub Pages.
+# The generated HTML (docs/api/html) is gitignored and never committed — it is
+# produced fresh here on each change to the library sources.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "project.scala"
+      - ".github/workflows/deploy-docs.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; cancel in-progress runs on new pushes.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Scala CLI
+        uses: VirtusLab/scala-cli-setup@v1
+
+      - name: Generate Scaladoc
+        run: scala-cli doc src project.scala -o docs/api/html -f
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/api/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

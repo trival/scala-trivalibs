@@ -52,6 +52,9 @@ object Vec2Tuple extends Vec2ImmutableOps[Vec2Tuple]:
       inline def x = v._1
       inline def y = v._2
 
+/** Mutable 2D vector. `Vec2(x, y)`; `+ - * /`, `.dot`, `.length`, `.normalize`,
+  * `.mix`, in-place variants, swizzles; companion `zero`/`one`/`X`/`Y`. Siblings:
+  * `Vec2Tuple` (immutable), `Vec2Buffer` (GPU). */
 class Vec2(var x: Double = 0.0, var y: Double = 0.0)
 
 object Vec2 extends Vec2ImmutableOps[Vec2]:

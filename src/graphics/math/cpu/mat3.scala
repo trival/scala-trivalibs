@@ -96,6 +96,10 @@ object Mat3Tuple extends Mat3ImmutableOps[Mat3Tuple]:
 
 
 // format: off
+/** Mutable 3×3 matrix — rotation / normal matrices and 2D affine transforms.
+  * `*` (matrix or vector), `.inverse`, `.transpose`, `.determinant`. Column-major;
+  * siblings `Mat3Tuple`/`Mat3Buffer` (the GPU buffer is padded — `Mat3PaddedBuffer`
+  * — for std140 alignment). */
 class Mat3(
     var m00: Double = 1.0, var m01: Double = 0.0, var m02: Double = 0.0,
     var m10: Double = 0.0, var m11: Double = 1.0, var m12: Double = 0.0,

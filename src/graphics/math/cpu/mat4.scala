@@ -96,6 +96,11 @@ object Mat4Tuple extends Mat4ImmutableOps[Mat4Tuple]:
 
 
 // format: off
+/** Mutable 4×4 matrix — the main transform type for 3D (model/view/projection).
+  * Companion factories: `Mat4.identity`, `.fromTranslation`, `.fromScale`,
+  * `.fromTranslationRotationScale`, `.perspective`, `.lookAt`. Ops: `*` (matrix
+  * or vector), `.inverse`, `.transpose`, `.toMat3`. Stored column-major (WGSL
+  * convention); siblings `Mat4Tuple`/`Mat4Buffer`. */
 class Mat4(
     var m00: Double = 1.0, var m01: Double = 0.0, var m02: Double = 0.0, var m03: Double = 0.0,
     var m10: Double = 0.0, var m11: Double = 1.0, var m12: Double = 0.0, var m13: Double = 0.0,

@@ -64,6 +64,10 @@ object Vec4Tuple extends Vec4ImmutableOps[Vec4Tuple]:
       inline def z = v._3
       inline def w = v._4
 
+/** Mutable 4D vector (also used for RGBA colors). `Vec4(x, y, z, w)`; `+ - * /`,
+  * `.dot`, `.length`, `.normalize`, `.mix`, in-place variants, swizzles
+  * (`.xyz`, `.rgb`, …); companion `zero`/`one`. Siblings: `Vec4Tuple`
+  * (immutable), `Vec4Buffer` (GPU). */
 class Vec4(
     var x: Double = 0.0,
     var y: Double = 0.0,

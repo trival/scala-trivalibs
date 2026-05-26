@@ -10,6 +10,14 @@ import scala.scalajs.js
 
 type ClearColor = (Double, Double, Double, Double)
 
+/** A reference to one texture view of a [[Panel]], used as a shader input. Pick
+  * which view via `panel.binding(index = …, mipLevel = …, depth = …)`:
+  *   - `index` — render-target index (for MRT panels with multiple `formats`).
+  *   - `mipLevel` — a specific mip (`-1` = the full sampling view / base).
+  *   - `depth = true` — bind the panel's depth texture instead of color.
+  *
+  * A bare `Panel` passed as a binding value is shorthand for `panel.binding()`.
+  */
 class PanelBinding(
     val panel: Panel,
     val index: Int = 0,
@@ -19,16 +27,24 @@ class PanelBinding(
 
 type PanelBindingValue = BufferBinding[?, ?] | GPUSampler | Panel | PanelBinding
 
-class Panel(val painter: Painter):
-  var specWidth: Int = 0
-  var specHeight: Int = 0
-  var clearColor: Opt[ClearColor] = null
-  var depthTest: Boolean = false
-  var multisample: Boolean = false
-  var mipLevels: Int = 1
-  var formats: Arr[String] = Arr()
-  var shapes: Arr[AnyShape] = Arr()
-  var layers: Arr[AnyLayer] = Arr()
+/** A render target (Rust `Layer`): owns one or more GPU textures and renders its
+  * ordered [[shapes]] then ordered [[layers]] into them when passed to
+  * [[Painter.paint]]. Create via [[Painter.panel]]; mutate later with [[set]].
+  * Its output texture can be sampled by other passes (bind the panel itself, or
+  * [[binding]] for a specific view). Present it with [[Painter.show]].
+  */
+class Panel private[painter] (val painter: Painter):
+  private[painter] var specWidth: Int = 0
+  private[painter] var specHeight: Int = 0
+  private[painter] var clearColor: Opt[ClearColor] = null
+  private[painter] var depthTest: Boolean = false
+  private[painter] var multisample: Boolean = false
+  private[painter] var mipLevels: Int = 1
+  private[painter] var formats: Arr[TextureFormat] = Arr()
+  private[painter] var shapes: Arr[AnyShape] = Arr()
+  private[painter] var layers: Arr[AnyLayer] = Arr()
+  // Public (not private[painter]) because the inline `bind` expands into
+  // sketch code and references this field directly.
   var runtimeBindings: Dict[PanelBindingValue] = Dict[PanelBindingValue]()
 
   private var _textures: Arr[GPUTexture] = Arr()
@@ -46,29 +62,36 @@ class Panel(val painter: Painter):
   private var _height: Int = 0
   private val _mipViews: Dict[GPUTextureView] = Dict[GPUTextureView]()
 
-  def panelWidth: Int = _width
-  def panelHeight: Int = _height
+  private[painter] def panelWidth: Int = _width
+  private[painter] def panelHeight: Int = _height
 
-  def mipLevelCount: Int =
+  /** Effective number of mip levels: an explicit `mipLevels`, or — when
+    * `mipLevels == 0` (set via `mips = true`) — the full chain computed from the
+    * panel size.
+    */
+  private[painter] def mipLevelCount: Int =
     if mipLevels == 0 then
       val maxDim = Math.max(_width, _height)
       if maxDim <= 0 then 1
       else (Math.log(maxDim.toDouble) / Math.log(2.0)).toInt + 1
     else mipLevels
 
-  def effectiveFormats: Arr[String] =
+  private[painter] def effectiveFormats: Arr[TextureFormat] =
     if formats.length == 0 then Arr(painter.preferredFormat) else formats
 
-  def targetCount: Int = effectiveFormats.length
+  private[painter] def targetCount: Int = effectiveFormats.length
 
-  def textureView: GPUTextureView = _textureViews(0)
-  def pongView: GPUTextureView = _pongViews(0)
-  def depthView: GPUTextureView = _depthView.get
-  def msaaView: GPUTextureView = _msaaViews(0)
-  def outputView: GPUTextureView =
+  private[painter] def textureView: GPUTextureView = _textureViews(0)
+  private[painter] def pongView: GPUTextureView = _pongViews(0)
+  private[painter] def depthView: GPUTextureView = _depthView.get
+  private[painter] def msaaView: GPUTextureView = _msaaViews(0)
+  private[painter] def outputView: GPUTextureView =
     if _outputView.notNull then _outputView.get else _textureViews(0)
 
-  def textureViewAt(index: Int = 0, mipLevel: Int = -1): GPUTextureView =
+  private[painter] def textureViewAt(
+      index: Int = 0,
+      mipLevel: Int = -1,
+  ): GPUTextureView =
     if mipLevel < 0 then
       val sv = _samplingViews(index)
       if sv.notNull then sv.get else _textureViews(index)
@@ -82,11 +105,11 @@ class Panel(val painter: Painter):
         _mipViews.set(key, view)
         view
 
-  def renderViewAt(index: Int): GPUTextureView = _textureViews(index)
-  def pongViewAt(index: Int): GPUTextureView = _pongViews(index)
-  def msaaViewAt(index: Int): GPUTextureView = _msaaViews(index)
+  private[painter] def renderViewAt(index: Int): GPUTextureView = _textureViews(index)
+  private[painter] def pongViewAt(index: Int): GPUTextureView = _pongViews(index)
+  private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(index)
 
-  def depthSamplingView: GPUTextureView =
+  private[painter] def depthSamplingView: GPUTextureView =
     if !_depthSamplable && _depthTexture.notNull then
       _depthTexture.get.destroy()
       val depthTex = painter.device.createTexture(
@@ -103,6 +126,10 @@ class Panel(val painter: Painter):
       _depthSamplable = true
     _depthView
 
+  /** Make a [[PanelBinding]] selecting one view of this panel to feed another
+    * pass as a texture: a render-target `index`, a specific `mipLevel` (`-1` =
+    * sampling view), or the `depth` texture. A bare panel binds `binding()`.
+    */
   def binding(
       index: Int = 0,
       mipLevel: Int = -1,
@@ -113,6 +140,11 @@ class Panel(val painter: Painter):
   private[painter] def setOutputView(view: GPUTextureView): Unit =
     _outputView = view
 
+  /** Reconfigure this panel (same options as [[Painter.panel]]); returns `this`
+    * for chaining. Only provided args change. `mips = true` sets `mipLevels = 0`
+    * (full auto chain); the singular `shape`/`layer`/`format` are sugar and the
+    * plural forms take precedence.
+    */
   def set[S <: AnyShape, L <: AnyLayer](
       width: Maybe[Int] = Maybe.Not,
       height: Maybe[Int] = Maybe.Not,
@@ -121,8 +153,8 @@ class Panel(val painter: Painter):
       multisample: Maybe[Boolean] = Maybe.Not,
       mipLevels: Maybe[Int] = Maybe.Not,
       mips: Maybe[Boolean] = Maybe.Not,
-      format: Maybe[String] = Maybe.Not,
-      formats: Maybe[Arr[String]] = Maybe.Not,
+      format: Maybe[TextureFormat] = Maybe.Not,
+      formats: Maybe[Arr[TextureFormat]] = Maybe.Not,
       shape: Maybe[S] = Maybe.Not,
       shapes: Maybe[Arr[S]] = Maybe.Not,
       layer: Maybe[L] = Maybe.Not,
@@ -171,6 +203,12 @@ class Panel(val painter: Painter):
                 BufferBinding[V, f](painter.device, rawValue)(using uv)
               runtimeBindings.set(pair.name, bb)
 
+  /** Bind values shared by all of this panel's shapes/layers, by uniform/panel
+    * field name: `panel.bind("name" := value, …)`. Values may be a
+    * `BufferBinding`, a raw uniform value (auto-boxed), a `GPUSampler`, a
+    * `Panel`, or a [[PanelBinding]]. Overloads take 1–8 pairs; chain `.bind`
+    * for more. (Per-shape bindings still go on the shape; these are defaults.)
+    */
   inline def bind[N1 <: String & Singleton, V1](
       e1: BindPair[N1, V1],
   ): this.type =
@@ -405,7 +443,7 @@ class Panel(val painter: Painter):
         val tex = painter.device.createTexture(
           Obj.literal(
             size = Obj.literal(width = targetW, height = targetH),
-            format = fmt,
+            format = fmt.toJs,
             usage = colorUsage,
             mipLevelCount = mipCount,
           ),
@@ -422,7 +460,7 @@ class Panel(val painter: Painter):
           val pongTex = painter.device.createTexture(
             Obj.literal(
               size = Obj.literal(width = targetW, height = targetH),
-              format = fmt,
+              format = fmt.toJs,
               usage = colorUsage,
               mipLevelCount = mipCount,
             ),
@@ -438,7 +476,7 @@ class Panel(val painter: Painter):
           val msaaTex = painter.device.createTexture(
             Obj.literal(
               size = Obj.literal(width = targetW, height = targetH),
-              format = fmt,
+              format = fmt.toJs,
               sampleCount = 4,
               usage = GPUTextureUsage.RENDER_ATTACHMENT,
             ),

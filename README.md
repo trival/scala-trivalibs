@@ -172,11 +172,46 @@ bun run test             # run all tests
 bun run examples:build   # build all examples → examples/out/
 bun run examples:watch   # incremental examples build with file watching
 bun run examples:dev     # static dev server for the examples
+bun run docs             # generate the Scaladoc API site → docs/api/html/
 bun run publish:local    # publish a Scala artifact to ~/.ivy2/local
 ```
 
 Run `examples:watch` and `examples:dev` side-by-side to iterate on the library
 and its examples together.
+
+## Documentation
+
+Consumable docs (for *using* the library) live under [`docs/`](docs/); internal
+feature-planning docs (for *extending* it) live under `documents/`.
+
+- **Guides** — [`docs/guide/`](docs/guide/): the
+  [sketch authoring guide](docs/guide/sketch-authoring-guide.md) (end-to-end
+  flow + render model), the [shader DSL guide](docs/guide/shader-dsl-guide.md)
+  (schemas, ctx, ops, `WgslFn`), and [gotchas](docs/guide/gotchas.md).
+- **API reference** — `bun run docs` generates the full Scaladoc site to
+  `docs/api/html/` (gitignored; published to GitHub Pages by CI). Public
+  doc-comments cover the painter, shader DSL, buffers, and CPU/GPU math. The
+  painter entities (`Panel`/`Layer`/`Shape`/`Form`) are opaque handles —
+  construct them via `painter.*` factories and configure via `set`/`bind`.
+- **AI authoring skill** — [`docs/skills/write-sketch/`](docs/skills/write-sketch/)
+  is a Claude Code skill for writing sketches against this library.
+
+### Metals MCP (live API for editors & AI agents)
+
+Doc-comments are surfaced three ways: IDE hover, the generated Scaladoc site,
+and the **Metals MCP server** — so an AI agent can query signatures + docstrings
+live instead of reading source. To enable it (these settings live in the
+gitignored `.vscode/settings.json`, so each dev sets them):
+
+```jsonc
+// .vscode/settings.json
+{ "metals.startMcpServer": true, "metals.mcpClient": "claude" }
+```
+
+Metals then writes `.mcp.json` (gitignored, dynamic port) exposing tools like
+`get-docs`, `inspect`, `get-source`, `glob-search`. A Claude Code session
+started *after* `.mcp.json` exists picks it up and prompts to approve the
+`metals` server.
 
 ## License
 

@@ -230,6 +230,20 @@ mode.
 - When writing new shader code in examples, prefer the scala shader DSL over raw
   WGSL strings.
 
+## Documentation
+
+- **`docs/` vs `documents/`**: `docs/` holds **consumable** documentation for
+  _using_ the library (the public reference — `docs/guide/` manuals, `docs/api/`
+  generated/reference, `docs/skills/`). `documents/` holds **internal**
+  feature-planning / contribution docs for _extending_ the library.
+- **Doc-comments**: write Scaladoc (`/** … */`) on public APIs — one-line
+  purpose, params, and any non-obvious behaviour / gotcha. Comments are stripped
+  before JS bundling — document freely. Group-level comments (one per op family)
+  are fine where per-method comments would be noise. Use `[[Symbol]]` wiki-links
+  only for symbols Scaladoc can resolve in scope.
+- **Generate the API site**: `bun run docs`. Output (`docs/api/html/`) is
+  gitignored and published by CI; never commit it.
+
 ## Scala Conventions
 
 - make use of named tuples @documents/scala-reference/named-tuples.md

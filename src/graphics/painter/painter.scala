@@ -49,17 +49,42 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
 }
 """
 
+/** Central registry and frame driver for WebGPU rendering.
+  *
+  * A `Painter` owns the GPU device and the canvas, and is the factory for every
+  * rendering resource: [[shade]]/[[layerShade]] (shaders), [[form]] (geometry),
+  * [[shape]] (drawable), [[layer]] (full-screen post-processing pass),
+  * [[panel]] (render target), [[binding]] (uniform buffers) and samplers. Per
+  * frame you call [[paint]] to render panels off-screen and [[show]] to present
+  * one to the canvas.
+  *
+  * Don't construct directly — use [[Painter.init]], which sets up the device and
+  * runs your code inside a ready painter:
+  * {{{
+  * Painter.init(canvas): p =>
+  *   val shade = p.layerShade[(time: Float)]: program => ...
+  *   val panel = p.panel(layer = p.layer(shade).bind("time" := t))
+  *   animate: tpf =>
+  *     p.paint(panel)
+  *     p.show(panel)
+  * }}}
+  */
 class Painter(
     val device: GPUDevice,
     val queue: GPUQueue,
     val canvas: HTMLCanvasElement,
     val context: GPUCanvasContext,
-    val preferredFormat: String,
+    val preferredFormat: TextureFormat,
 ):
   private val pipelineCache = Dict[GPURenderPipeline]()
   private var nextShadeId = 0
   private val resizeCallbacks = Arr[(Double, Double) => Unit]()
 
+  /** Register a callback invoked with `(width, height)` **immediately** (with
+    * the current canvas size) and again on every canvas resize. Use it to update
+    * aspect-dependent uniforms (camera aspect, resolution bindings). Replaces the
+    * Rust `CanvasApp::resize` hook.
+    */
   def onResize(cb: (Double, Double) => Unit): Unit =
     resizeCallbacks.push(cb)
     cb(canvas.width, canvas.height)
@@ -70,12 +95,15 @@ class Painter(
       resizeCallbacks(k)(w, h)
       k += 1
 
+  /** Current canvas width in physical pixels. */
   def width: Int = canvas.width
+
+  /** Current canvas height in physical pixels. */
   def height: Int = canvas.height
 
-  /** Convenience: set up an [[InputState]] for this painter's canvas with the
+  /** Convenience: set up an `InputState` for this painter's canvas with the
     * interactive-canvas defaults (focusable, cleared outline, focus on
-    * pointer-down, initial focus). See [[interactiveCanvas]].
+    * pointer-down, initial focus). See `interactiveCanvas`.
     */
   def input(
       initialFocus: Boolean = true,
@@ -97,16 +125,25 @@ class Painter(
   // Shared samplers
   // =========================================================================
 
+  /** Shared nearest-filter sampler. Pass directly as a binding value
+    * (`"samp" := painter.samplerNearest`).
+    */
   lazy val samplerNearest: GPUSampler =
     device.createSampler(
       Obj.literal(magFilter = "nearest", minFilter = "nearest"),
     )
 
+  /** Shared linear-filter sampler. Pass directly as a binding value
+    * (`"samp" := painter.samplerLinear`).
+    */
   lazy val samplerLinear: GPUSampler =
     device.createSampler(
       Obj.literal(magFilter = "linear", minFilter = "linear"),
     )
 
+  /** Create a custom sampler. Use a `mipmapFilter` of `Linear` when sampling a
+    * mip-mapped panel texture with trilinear filtering.
+    */
   def sampler(
       magFilter: FilterMode = FilterMode.Nearest,
       minFilter: FilterMode = FilterMode.Nearest,
@@ -124,7 +161,19 @@ class Painter(
   // Shade factory
   // =========================================================================
 
-  // DSL overload — accepts a Program builder lambda (no panels)
+  /** Build a vertex+fragment shader from the DSL.
+    *
+    * Type params are named-tuple schemas (field order = layout index, field
+    * name = WGSL variable name):
+    *   - `A` — vertex attributes, e.g. `(position: Vec3, uv: Vec2)`
+    *   - `V` — varyings passed vertex→fragment
+    *   - `U` — uniforms; wrap fields in `VertexUniform[T]`/`FragmentUniform[T]`
+    *     to restrict stage visibility (bare `T` = both stages)
+    *
+    * Provide the body via the `program` builder (`program.vert`/`program.frag`).
+    * Overloads add `P` (panel-texture bindings) and `FO` (custom fragment output
+    * / MRT); a separate overload takes raw WGSL strings instead of the DSL.
+    */
   inline def shade[A, V, U](
       build: Program[A, V, U, EmptyTuple, FragOut] => Unit,
   ): Shade[U, EmptyTuple] =
@@ -136,7 +185,10 @@ class Painter(
       program.helperFnsStr,
     )
 
-  // DSL overload — with panels P
+  /** [[shade]] with panel-texture bindings `P` (a named tuple of
+    * `FragmentPanel`/`VertexPanel` markers), read in the shader via
+    * `ctx.textures.<name>`.
+    */
   inline def shade[A, V, U, P](
       build: Program[A, V, U, P, FragOut] => Unit,
   ): Shade[U, P] =
@@ -148,7 +200,10 @@ class Painter(
       program.helperFnsStr,
     )
 
-  // DSL overload — with panels P and custom fragment output FO
+  /** [[shade]] with panels `P` and a custom fragment-output schema `FO` (a named
+    * tuple of multiple `Vec4` targets) for multiple-render-target (MRT) passes,
+    * e.g. a deferred G-buffer. Each `FO` field maps to a panel format.
+    */
   inline def shade[A, V, U, P, FO](
       build: Program[A, V, U, P, FO] => Unit,
   ): Shade[U, P] =
@@ -160,7 +215,11 @@ class Painter(
       program.helperFnsStr,
     )
 
-  // Raw WGSL string overload
+  /** [[shade]] from raw WGSL strings instead of the DSL. The `@group`/`@binding`/
+    * `@location` decorations and the `in`/`out`/uniform struct declarations are
+    * still generated from the `A`/`V`/`U` schemas — write only the body, using
+    * `in.<field>`, `out.<field>`, and each uniform field by name.
+    */
   inline def shade[A, V, U](
       vertWgsl: String,
       fragWgsl: String,
@@ -316,6 +375,15 @@ class Painter(
   // LayerShade factory — fullscreen triangle with user fragment shader
   // =========================================================================
 
+  /** Build a fragment-only shader for a full-screen pass (used by [[layer]]).
+    *
+    * There is no user vertex stage — Metals supplies a built-in full-screen
+    * triangle and the fragment context exposes `ctx.in.uv` (a `Vec2` in `[0,1]`
+    * screen space). Because every uniform is fragment-stage by construction, the
+    * `U` fields need no `FragmentUniform[_]` wrapper — bare types are
+    * auto-wrapped. Overloads add `P` (panel-texture inputs) and `FO` (custom
+    * output). This is the Scala equivalent of Rust's `shade_effect`.
+    */
   inline def layerShade[U](
       build: LayerProgram[U, EmptyTuple, FragOut] => Unit,
   ): Shade[U, EmptyTuple] =
@@ -323,6 +391,10 @@ class Painter(
     build(program)
     layerShadeFromWgsl[U, EmptyTuple](program.fragBodyStr, program.helperFnsStr)
 
+  /** [[layerShade]] with panel-texture inputs `P` (named tuple of
+    * `FragmentPanel`), sampled via `ctx.textures.<name>`. The common
+    * post-processing shape: read one or more panels, write a color.
+    */
   inline def layerShade[U, P](
       build: LayerProgram[U, P, FragOut] => Unit,
   ): Shade[U, P] =
@@ -330,6 +402,8 @@ class Painter(
     build(program)
     layerShadeFromWgsl[U, P](program.fragBodyStr, program.helperFnsStr)
 
+  /** [[layerShade]] with panels `P` and a custom multi-target output schema `FO`.
+    */
   inline def layerShade[U, P, FO](
       build: LayerProgram[U, P, FO] => Unit,
   ): Shade[U, P] =
@@ -500,6 +574,12 @@ class Painter(
   // Form factory
   // =========================================================================
 
+  /** Create a [[Form]] (vertex buffer + topology). Provide geometry as either a
+    * `BufferedGeometry` (from the geometry/mesh helpers, supports indices) or a
+    * raw `StructArray` of vertices (from `allocateAttribs`). `topology` defaults
+    * to triangle-list and `frontFace` to CCW. Reassign later with `form.set(...)`
+    * (reallocates the GPU buffer).
+    */
   def form[F <: Tuple](
       geometry: Maybe[BufferedGeometry[F]] = Maybe.Not,
       vertices: Maybe[StructArray[F]] = Maybe.Not,
@@ -511,11 +591,20 @@ class Painter(
   // Binding factory
   // =========================================================================
 
+  /** Create a uniform `BufferBinding` pre-set to `value` (e.g.
+    * `painter.binding(Vec3(1, 0, 0))`, `painter.binding(0.0f)`). Update later
+    * with `b.set(v)` / `b := v` / `b.update(ref => …)`; "const-ness" is by
+    * convention. Supports any `T` with a `UniformLayout` (Float, Double, Vec2-4,
+    * Mat2-4).
+    */
   inline def binding[T: UniformLayout as ul](
       value: T,
   ): BufferBinding[T, ul.Fields] =
     BufferBinding[T](device, value)
 
+  /** Create an uninitialised uniform `BufferBinding` of type `T`, e.g.
+    * `painter.binding[Mat4]`. Set its value before first render.
+    */
   inline def binding[T: UniformLayout as ul]: BufferBinding[T, ul.Fields] =
     BufferBinding[T](device)
 
@@ -523,6 +612,10 @@ class Painter(
   // Shape factory
   // =========================================================================
 
+  /** Create a drawable [[Shape]] from a [[Form]] and a [[Shade]]. Bind its
+    * uniforms/panels with `.bind("name" := value, …)` and add per-draw overrides
+    * via `shape.instances.add(...)`. `cullMode`/`blendState` are optional.
+    */
   def shape[U, P](
       form: Form,
       shade: Shade[U, P],
@@ -535,6 +628,17 @@ class Painter(
   // Layer factory
   // =========================================================================
 
+  /** Create a [[Layer]] — a full-screen post-processing pass (Rust `Effect`)
+    * built from a [[layerShade]]. Attach layers to a [[panel]]; they run in
+    * order after the panel's shapes, each reading the previous pass's output.
+    *
+    *   - `blendState` — e.g. `BlendState.Additive` to accumulate (bloom upsample,
+    *     deferred lights).
+    *   - `mipSource`/`mipTarget` — render this pass into a specific mip level of
+    *     the panel's texture (`-1` = disabled). When any layer on a panel sets
+    *     `mipTarget`, the painter skips automatic mipmap generation for that
+    *     panel, so the layers build the mip chain by hand (downsample/upsample).
+    */
   def layer[U, P](
       shade: Shade[U, P],
       blendState: Maybe[Opt[BlendState]] = Maybe.Not,
@@ -547,6 +651,24 @@ class Painter(
   // Panel factory
   // =========================================================================
 
+  /** Create a [[Panel]] — a render target (Rust `Layer`) holding ordered shapes
+    * then ordered layers, rendered by [[paint]]. Defaults to the canvas size and
+    * the preferred format; all options are also settable later via `panel.set`.
+    *
+    *   - `clearColor` — `(r, g, b, a)`; omit to load (not clear) previous contents.
+    *   - `shape`/`shapes`, `layer`/`layers` — singular sugar for one item; the
+    *     plural form takes precedence.
+    *   - `width`/`height` — fixed size; omit to track the canvas.
+    *   - `format`/`formats` — a [[TextureFormat]] (e.g. `TextureFormat.Rgba16Float`
+    *     for HDR); `formats` (multiple) declares an MRT target matching a
+    *     shader's `FO` output.
+    *   - `mips = true` (or `mipLevels = N`) — allocate a mip chain (see
+    *     [[layer]] for hand-built chains vs auto-generation).
+    *   - `depthTest`, `multisample` — enable depth buffering / MSAA.
+    *
+    * Bind panel textures as inputs to other passes via `otherPanel`/`layer`
+    * bindings and `panel.binding(index/mipLevel/depth)`.
+    */
   def panel[S <: AnyShape, L <: AnyLayer](
       width: Maybe[Int] = Maybe.Not,
       height: Maybe[Int] = Maybe.Not,
@@ -555,8 +677,8 @@ class Painter(
       multisample: Maybe[Boolean] = Maybe.Not,
       mipLevels: Maybe[Int] = Maybe.Not,
       mips: Maybe[Boolean] = Maybe.Not,
-      format: Maybe[String] = Maybe.Not,
-      formats: Maybe[Arr[String]] = Maybe.Not,
+      format: Maybe[TextureFormat] = Maybe.Not,
+      formats: Maybe[Arr[TextureFormat]] = Maybe.Not,
       shape: Maybe[S] = Maybe.Not,
       shapes: Maybe[Arr[S]] = Maybe.Not,
       layer: Maybe[L] = Maybe.Not,
@@ -581,6 +703,15 @@ class Painter(
   // draw() — direct-to-canvas rendering
   // =========================================================================
 
+  /** Render a single [[Shape]] straight to the canvas, bypassing panels — a
+    * shortcut for simple demos. Pass `clearColor` to clear first; omit it on
+    * subsequent calls to blend on top of what's already there:
+    * {{{
+    * painter.draw(shape1, clearColor = (0.1, 0.1, 0.1, 1.0))
+    * painter.draw(shape2) // blends over shape1
+    * }}}
+    * For multi-pass / off-screen rendering use [[panel]] + [[paint]] + [[show]].
+    */
   def draw(
       shape: AnyShape,
       clearColor: Opt[(Double, Double, Double, Double)] = null,
@@ -816,6 +947,13 @@ class Painter(
       mi += 1
     if panel.mipLevelCount > 1 && !hasMipTargetLayers then generateMipmaps(panel)
 
+  /** Render one or more [[Panel]]s off-screen, in argument order. Each panel
+    * draws its shapes then runs its layers into its own texture(s); nothing is
+    * presented to the canvas — call [[show]] for that. Pass panels in dependency
+    * order when later panels sample earlier ones (e.g.
+    * `paint(scene, bloom, canvas)`). This is the varargs form; concrete-arity
+    * overloads (1–12) exist for the hot path to avoid varargs allocation.
+    */
   def paint(panels: Panel*): Unit =
     var i = 0
     while i < panels.length do
@@ -986,6 +1124,10 @@ class Painter(
     paintPanel(k)
     paintPanel(l)
 
+  /** Present an already-[[paint]]ed panel's output to the canvas (blits its
+    * texture to the swap chain). Typically the last call each frame:
+    * `paint(...)` then `show(finalPanel)`.
+    */
   def show(panel: Panel): Unit =
     val encoder = device.createCommandEncoder()
     val swapChainView = context.getCurrentTexture().createView()
@@ -1019,6 +1161,9 @@ class Painter(
 
     queue.submit(Arr(encoder.finish()))
 
+  /** Convenience: [[paint]] then [[show]] a single panel. Use the separate calls
+    * when you paint several panels before presenting one.
+    */
   def paintAndShow(p: Panel): Unit =
     paint(p)
     show(p)
@@ -1062,7 +1207,7 @@ class Painter(
         fragment = Obj.literal(
           module = module,
           entryPoint = "fs_main",
-          targets = Arr(Obj.literal(format = preferredFormat)),
+          targets = Arr(Obj.literal(format = preferredFormat.toJs)),
         ),
         primitive = Obj.literal(topology = "triangle-list"),
       ),
@@ -1080,8 +1225,9 @@ class Painter(
   private val mipBlitPipelines: Dict[GPURenderPipeline] =
     Dict[GPURenderPipeline]()
 
-  private def getMipBlitPipeline(format: String): GPURenderPipeline =
-    if mipBlitPipelines.has(format) then mipBlitPipelines.at(format)
+  private def getMipBlitPipeline(format: TextureFormat): GPURenderPipeline =
+    val key = format.asString
+    if mipBlitPipelines.has(key) then mipBlitPipelines.at(key)
     else
       val module = device.createShaderModule(Obj.literal(code = BLIT_WGSL))
       val pl = device.createPipelineLayout(
@@ -1094,12 +1240,12 @@ class Painter(
           fragment = Obj.literal(
             module = module,
             entryPoint = "fs_main",
-            targets = Arr(Obj.literal(format = format)),
+            targets = Arr(Obj.literal(format = format.toJs)),
           ),
           primitive = Obj.literal(topology = "triangle-list"),
         ),
       )
-      mipBlitPipelines.set(format, p)
+      mipBlitPipelines.set(key, p)
       p
 
   private def generateMipmaps(panel: Panel): Unit =
@@ -1280,7 +1426,7 @@ class Painter(
       shape: AnyShape,
       depthTest: Boolean = false,
       multisample: Boolean = false,
-      formats: Arr[String] = null,
+      formats: Arr[TextureFormat] = null,
       panel: Opt[Panel] = null,
   ): Unit =
     val fmts = if formats != null then formats else Arr(preferredFormat)
@@ -1350,7 +1496,7 @@ class Painter(
       layer: AnyLayer,
       depthTest: Boolean = false,
       multisample: Boolean = false,
-      formats: Arr[String] = null,
+      formats: Arr[TextureFormat] = null,
       srcView: Opt[GPUTextureView] = null,
       panel: Opt[Panel] = null,
   ): Unit =
@@ -1433,7 +1579,7 @@ class Painter(
   private def getPipeline(
       shade: Shade[?, ?],
       blendState: Opt[BlendState],
-      formats: Arr[String],
+      formats: Arr[TextureFormat],
       depthTest: Boolean,
       multisample: Boolean,
       topology: PrimitiveTopology = PrimitiveTopology.TriangleList,
@@ -1441,15 +1587,15 @@ class Painter(
       frontFace: FrontFace = FrontFace.CCW,
   ): GPURenderPipeline =
     val key =
-      s"${shade.id}|${blendKeyStr(blendState)}|${formats.join(",")}|$depthTest|$multisample|${topology}|${cullMode}|${frontFace}"
+      s"${shade.id}|${blendKeyStr(blendState)}|${formats.asInstanceOf[Arr[String]].join(",")}|$depthTest|$multisample|${topology}|${cullMode}|${frontFace}"
     if pipelineCache.has(key) then pipelineCache.at(key)
     else
       val targets = Arr[js.Dynamic]()
       var ti = 0
       while ti < formats.length do
         val target =
-          if blendState.isNull then Obj.literal(format = formats(ti))
-          else Obj.literal(format = formats(ti), blend = blendState)
+          if blendState.isNull then Obj.literal(format = formats(ti).toJs)
+          else Obj.literal(format = formats(ti).toJs, blend = blendState)
         targets.push(target)
         ti += 1
 
@@ -1508,6 +1654,13 @@ class Painter(
     else Obj.literal(binding = i, resource = b.asInstanceOf[GPUSampler])
 
 object Painter:
+  /** Initialise WebGPU for `canvas` and resolve a ready [[Painter]]. Requests an
+    * adapter + device, configures the context with the preferred format, sizes
+    * the canvas to its client rect, and installs a `ResizeObserver` that drives
+    * [[Painter.onResize]]. Rejects if WebGPU is unavailable. Prefer the
+    * `init(canvas)(setup)` overload, which runs your setup inside the ready
+    * painter.
+    */
   def init(canvas: HTMLCanvasElement): js.Promise[Painter] =
     val maybeGpu = WebGPU.getGPU()
     if maybeGpu.isEmpty then
@@ -1531,7 +1684,8 @@ object Painter:
           ),
         )
 
-        val painter = Painter(device, queue, canvas, context, format)
+        val painter =
+          Painter(device, queue, canvas, context, TextureFormat.of(format))
 
         // Set initial canvas size
         val w = canvas.clientWidth
@@ -1556,6 +1710,15 @@ object Painter:
 
         painter
 
+  /** Initialise WebGPU and run `setup` with the ready [[Painter]] — the standard
+    * sketch entry point. All resource creation, `onResize`, and the `animate`
+    * loop go inside the `setup` closure:
+    * {{{
+    * Painter.init(canvas): p =>
+    *   // create shades, forms, shapes, panels, bindings here
+    *   animate: tpf => p.paint(panel); p.show(panel)
+    * }}}
+    */
   def init(canvas: HTMLCanvasElement)(
       setup: Painter => Unit,
   ): js.Promise[Unit] =

@@ -99,7 +99,7 @@ def main(): Unit =
 
     val gBuffer = painter.panel(
       clearColor = (0.0, 0.0, 0.0, 1.0),
-      formats = Arr("rgba8unorm", "rgba16float"),
+      formats = Arr(TextureFormat.Rgba8Unorm, TextureFormat.Rgba16Float),
       shape = sceneShape,
     )
 

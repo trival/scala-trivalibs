@@ -3,6 +3,7 @@
 	"type": "module",
 	"scripts": {
 		"check": "scala-cli compile src project.scala",
+		"docs": "scala-cli doc src project.scala -o docs/api/html -f",
 		"examples:build": "scala-cli --power package src examples project.scala --js -o examples/out -f",
 		"examples:watch": "scala-cli --power package src examples project.scala --js -o examples/out -f -w",
 		"examples:dev": "bun --bun serve.ts",

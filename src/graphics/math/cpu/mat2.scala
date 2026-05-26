@@ -41,6 +41,9 @@ object Mat2Tuple extends Mat2ImmutableOps[Mat2Tuple]:
 
 
 // format: off
+/** Mutable 2×2 matrix — 2D rotation/scale. `*` (matrix or vector),
+  * `.determinant`, `.inverse`, `.transpose`. Column-major; siblings
+  * `Mat2Tuple`/`Mat2Buffer`. */
 class Mat2(
     var m00: Double = 1.0, var m01: Double = 0.0,
     var m10: Double = 0.0, var m11: Double = 1.0

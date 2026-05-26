@@ -275,7 +275,11 @@ rather than duplicating them.
   _and_ CPU — they're critical and highly integrated for 3D scenes) +
   buffers/bindings. Manuals (3 files), the skill, and the tooling wiring.
 - **Phase 2 (later)**: geometry, scene (camera/transform/controllers already
-  good), utils, dev, preact — add doc-strings + extend the guide.
+  good), utils, dev — add doc-strings + extend the guide.
+- **Phase 3 (deferred)**: `preact` (type-safe Preact bindings, signals, HTML
+  DSL) — docs + examples. Deferred because foreseeable sketches focus on painter
+  WebGPU canvases only; no interactive UI is planned for now. Pick this up when
+  we actually start building interactive UI on top of the canvases.
 
 ## Critical files
 

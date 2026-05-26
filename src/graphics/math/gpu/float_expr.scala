@@ -22,6 +22,9 @@ given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
 // LocalFloat <: FloatExpr, so these apply to LocalFloat too.
 // ---------------------------------------------------------------------------
 
+/** Arithmetic on `FloatExpr` (`+ - * /`, unary `-`). A `Double`/`Int`/`Float`
+  * converts to `FloatExpr` as the **right** operand only (see the `Expr`
+  * left-operand gotcha). */
 given NumOps[FloatExpr]:
   extension (a: FloatExpr)
     def +(b: FloatExpr): FloatExpr = FloatExpr(s"(${a.wgsl} + ${b.wgsl})")
@@ -31,6 +34,11 @@ given NumOps[FloatExpr]:
     def unary_- : FloatExpr = FloatExpr(s"(-${a.wgsl})")
   def zero: FloatExpr = FloatExpr("0.0")
   def one: FloatExpr = FloatExpr("1.0")
+
+/** Scalar math on `FloatExpr` mapping to WGSL builtins: `.sqrt .pow .sin .cos
+  * .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix
+  * .step .smoothstep .fit0111 .fit1101` and comparisons (`<`, `>`, … →
+  * `BoolExpr`). Mirrors the CPU `NumExt`, so shader math reads like CPU math. */
 
 given NumExt[FloatExpr]:
   extension (a: FloatExpr)
@@ -110,6 +118,12 @@ given Vec2BaseG[FloatExpr, Vec2Expr] =
         s"distance(${v.wgsl}, ${other.wgsl})",
       )
 
+/** Vector ops for `Vec2Expr` / `Vec3Expr` / `Vec4Expr` (this and the analogous
+  * `Vec3`/`Vec4` givens below): component-wise `+ - * /` (vector or scalar),
+  * `.dot`, `.length`, `.distance`, `.normalize`, `.cross` (Vec3), `.mix`,
+  * `.clamp`, `.min`/`.max`, `.abs`/`.floor`/`.fract`/`.sqrt`, `.fit0111`/
+  * `.fit1101`, and swizzles (`.xy`, `.xyz`, `.rgb`, `.wzyx`, …). Same surface as
+  * the GPU `Expr[T]` so shader code reads like the CPU `Vec*` API. */
 given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
   def create(x: FloatExpr, y: FloatExpr): Vec2Expr =
     Vec2Expr(s"vec2<f32>(${x.wgsl}, ${y.wgsl})")
@@ -577,6 +591,8 @@ extension (v: Vec4Expr)
 // Vector constructors (lowercase, matching WGSL syntax)
 // ---------------------------------------------------------------------------
 
+/** GPU `vec2<f32>` constructor: `vec2(x, y)` or `vec2(scalar)` (broadcast).
+  * Lowercase to match WGSL; the CPU-side counterpart is `Vec2(...)`. */
 object vec2:
   def apply(x: FloatExpr, y: FloatExpr): Vec2Expr =
     Vec2Expr(s"vec2<f32>(${x.wgsl}, ${y.wgsl})")
@@ -584,6 +600,8 @@ object vec2:
     s"vec2<f32>(${scalar.wgsl})",
   )
 
+/** GPU `vec3<f32>` constructor: `vec3(x, y, z)`, `vec3(xy, z)`, or
+  * `vec3(scalar)`. */
 object vec3:
   def apply(x: FloatExpr, y: FloatExpr, z: FloatExpr): Vec3Expr =
     Vec3Expr(s"vec3<f32>(${x.wgsl}, ${y.wgsl}, ${z.wgsl})")
@@ -593,6 +611,8 @@ object vec3:
   def apply(xy: Vec2Expr, z: FloatExpr): Vec3Expr =
     Vec3Expr(s"vec3<f32>(${xy.wgsl}, ${z.wgsl})")
 
+/** GPU `vec4<f32>` constructor: `vec4(x,y,z,w)`, `vec4(xyz, w)`, `vec4(xy, z,
+  * w)`, or `vec4(scalar)`. Common for colors: `vec4(rgb, 1.0)`. */
 object vec4:
   def apply(x: FloatExpr, y: FloatExpr, z: FloatExpr, w: FloatExpr): Vec4Expr =
     Vec4Expr(s"vec4<f32>(${x.wgsl}, ${y.wgsl}, ${z.wgsl}, ${w.wgsl})")

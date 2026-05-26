@@ -10,11 +10,15 @@ import trivalibs.utils.numbers.NumOps
 // U32 is a GPU / WGSL concept with no general Scala utility.
 // ---------------------------------------------------------------------------
 
+/** A 32-bit unsigned value for the shader DSL (WGSL `u32`). Bit-identical to
+  * `Int` at runtime but distinct in the type system so DSL `u32` expressions and
+  * `WgslFn` signatures stay unambiguous. Make one with `UInt(v)` or `v.u`. */
 final class UInt(val toInt: Int) extends AnyVal
 
 object UInt:
   inline def apply(v: Int): UInt = new UInt(v)
 
+/** `v.u` — lift an `Int` literal to a `UInt` (WGSL `u32`). */
 extension (v: Int) inline def u: UInt = UInt(v)
 
 // ---------------------------------------------------------------------------

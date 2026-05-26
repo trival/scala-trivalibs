@@ -18,6 +18,11 @@ import trivalibs.graphics.painter.GPUDevice
 // object so they are found via implicit search without explicit imports.
 // =============================================================================
 
+/** Type class mapping a CPU value `T` to/from its GPU buffer layout `F`
+  * (handles std140 padding, e.g. `Vec3` → `Vec4Buffer`). Given instances exist
+  * for `Float`, `Double`, `Vec2-4`, `Mat2-4`; you rarely reference it directly —
+  * it's summoned by [[trivalibs.graphics.painter.Painter.binding]].
+  */
 trait UniformValue[T, F <: Tuple]:
   def write(ref: StructRef[F], value: T): Unit
   def read(ref: StructRef[F]): T
@@ -80,6 +85,10 @@ object UniformValue:
 // so makeBinding[T] can be called without spelling out F explicitly.
 // =============================================================================
 
+/** Convenience type class that pairs a `T` with its inferred buffer layout so
+  * `Painter.binding[T]` needs only one type argument. Derived automatically from
+  * a [[UniformValue]]; not usually referenced directly.
+  */
 trait UniformLayout[T]:
   type Fields <: Tuple
   def uniformValue: UniformValue[T, Fields]
@@ -93,12 +102,21 @@ object UniformLayout:
 // BufferBinding[T, F] — holds CPU array + GPU buffer + device
 // =============================================================================
 
+/** A typed uniform buffer: a CPU-side value plus its GPU buffer, kept in sync.
+  * Create via [[trivalibs.graphics.painter.Painter.binding]], then update with
+  * [[set]] / [[:=]] / [[update]] (each re-uploads to the GPU). Pass the binding
+  * directly as a shape/layer binding value (`"mvp" := binding`). `T` is the CPU
+  * value type (e.g. `Mat4`, `Vec3`, `Float`); `F` is its GPU buffer layout.
+  */
 final class BufferBinding[T, F <: Tuple](
     private val buffer: StructRef[F],
     private val device: GPUDevice,
     private val uv: UniformValue[T, F],
 ):
 
+  /** The underlying GPU uniform buffer. Exposed for advanced raw-WebGPU interop
+    * (e.g. building a bind group by hand); idiomatic code passes the
+    * `BufferBinding` itself as a binding value instead. */
   val gpuBuffer = device.createBuffer(
     Obj.literal(
       size = Math.max(16, buffer.dataView.byteLength),
@@ -111,6 +129,7 @@ final class BufferBinding[T, F <: Tuple](
     uv.write(buffer, value)
     upload()
 
+  /** Alias for [[set]]: `binding := value`. */
   inline def :=(value: T): Unit = set(value)
 
   /** Mutate the CPU buffer via a lambda, then upload to GPU. Use this to
