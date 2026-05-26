@@ -106,6 +106,15 @@ layer — so we need both.
 
 ## Deliverables
 
+> **`docs/` vs `documents/` — placement rule.** All **consumable** documentation
+> (the public reference for *using* the lib: guides, generated API, skills) lives
+> under `trivalibs/docs/`. `trivalibs/documents/` is reserved for **internal**
+> feature-planning / contribution docs (writing/extending the lib) — including
+> this plan. Existing consumable material currently under `documents/` (e.g.
+> `rust-painter/scala-port-comparison.md`) should migrate to `docs/` over time.
+> **Consideration**: rename `documents/` to something that states intent better
+> (e.g. `dev-docs/`, `design/`, `contributing/`) — deferred, not part of Phase 1.
+
 ### 1. Scaladoc doc-comments (Phase 1 scope: painter + shader DSL + all math)
 
 Add `/** … */` to public APIs, prioritised by what a sketch author touches. Each
@@ -141,7 +150,7 @@ Group-level doc-comments (one good comment per op family) are acceptable where
 per-method comments would be noise, as long as Metals hover still shows
 something useful for the family's representative methods.
 
-### 2. Manuals (Markdown, under `trivalibs/documents/guide/`)
+### 2. Manuals (Markdown, under `trivalibs/docs/guide/`)
 
 Conceptual + task-first; link into source and into the Scaladoc site. Keep these
 small and stable:
@@ -276,7 +285,7 @@ rather than duplicating them.
   `trivalibs/src/graphics/math/cpu/*.scala`,
   `trivalibs/src/graphics/buffers/*.scala`.
 - Manuals:
-  `trivalibs/documents/guide/{sketch-authoring-guide,shader-dsl-guide,gotchas}.md`.
+  `trivalibs/docs/guide/{sketch-authoring-guide,shader-dsl-guide,gotchas}.md`.
 - README setup instructions: root `README.md` (+ `trivalibs/README.md`).
 - Skill: `trivalibs/docs/skills/write-sketch/SKILL.md` (git-visible; consumption
   method deferred).
