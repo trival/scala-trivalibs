@@ -164,7 +164,9 @@ given Vec2BaseG[FloatExpr, Vec2Expr] =
 /** Vector ops for `Vec2Expr` / `Vec3Expr` / `Vec4Expr` (this and the analogous
   * `Vec3`/`Vec4` givens below): component-wise `+ - * /` (vector or scalar),
   * `.dot`, `.length`, `.distance`, `.normalize`, `.cross` (Vec3), `.mix`,
-  * `.clamp`, `.min`/`.max`, `.abs`/`.floor`/`.fract`/`.sqrt`, `.fit0111`/
+  * `.clamp`/`.clamp01`, `.min`/`.max`, `.abs`/`.floor`/`.fract`/`.sqrt`/
+  * `.inverseSqrt`/`.trunc`/`.exp2`, `.pow` (vector or scalar exponent),
+  * `.smoothstep` (vector or scalar edges), `.fit0111`/
   * `.fit1101`, and swizzles (`.xy`, `.xyz`, `.rgb`, `.wzyx`, …). Same surface as
   * the GPU `Expr[T]` so shader code reads like the CPU `Vec*` API. */
 given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
@@ -214,12 +216,22 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def log: Vec2Expr = Vec2Expr(s"log(${v.wgsl})")
     override def log2: Vec2Expr = Vec2Expr(s"log2(${v.wgsl})")
     override def sqrt: Vec2Expr = Vec2Expr(s"sqrt(${v.wgsl})")
+    override def inverseSqrt: Vec2Expr = Vec2Expr(s"inverseSqrt(${v.wgsl})")
+    override def trunc: Vec2Expr = Vec2Expr(s"trunc(${v.wgsl})")
+    override def exp2: Vec2Expr = Vec2Expr(s"exp2(${v.wgsl})")
+    @annotation.targetName("powVecG")
+    override def pow(e: Vec2Expr): Vec2Expr = Vec2Expr(s"pow(${v.wgsl}, ${e.wgsl})")
+    @annotation.targetName("powScalarG")
+    override def pow(e: FloatExpr): Vec2Expr =
+      Vec2Expr(s"pow(${v.wgsl}, vec2<f32>(${e.wgsl}))")
+    def pow(scalar: Double): Vec2Expr = v.pow(scalar: FloatExpr)
     override def min(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"min(${v.wgsl}, ${other.wgsl})")
     override def max(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"max(${v.wgsl}, ${other.wgsl})")
     override def clamp(lo: FloatExpr, hi: FloatExpr): Vec2Expr =
       Vec2Expr(s"clamp(${v.wgsl}, ${lo.wgsl}, ${hi.wgsl})")
+    override def clamp01: Vec2Expr = Vec2Expr(s"saturate(${v.wgsl})")
     override def fit0111: Vec2Expr = Vec2Expr(s"(${v.wgsl} * 2.0 - 1.0)")
     override def fit1101: Vec2Expr = Vec2Expr(s"(${v.wgsl} * 0.5 + 0.5)")
     @annotation.targetName("mixVecG")
@@ -234,8 +246,14 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     @annotation.targetName("stepScalarG")
     override def step(edge: FloatExpr): Vec2Expr =
       Vec2Expr(s"step(${edge.wgsl}, ${v.wgsl})")
+    @annotation.targetName("smoothstepVecG")
     override def smoothstep(edge0: Vec2Expr, edge1: Vec2Expr): Vec2Expr =
       Vec2Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
+    @annotation.targetName("smoothstepScalarG")
+    override def smoothstep(edge0: FloatExpr, edge1: FloatExpr): Vec2Expr =
+      Vec2Expr(s"smoothstep(vec2<f32>(${edge0.wgsl}), vec2<f32>(${edge1.wgsl}), ${v.wgsl})")
+    def smoothstep(edge0: Double, edge1: Double): Vec2Expr =
+      v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
     override def <(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"(1.0 - step(${other.wgsl}, ${v.wgsl}))")
@@ -322,12 +340,22 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def log: Vec3Expr = Vec3Expr(s"log(${v.wgsl})")
     override def log2: Vec3Expr = Vec3Expr(s"log2(${v.wgsl})")
     override def sqrt: Vec3Expr = Vec3Expr(s"sqrt(${v.wgsl})")
+    override def inverseSqrt: Vec3Expr = Vec3Expr(s"inverseSqrt(${v.wgsl})")
+    override def trunc: Vec3Expr = Vec3Expr(s"trunc(${v.wgsl})")
+    override def exp2: Vec3Expr = Vec3Expr(s"exp2(${v.wgsl})")
+    @annotation.targetName("powVecG")
+    override def pow(e: Vec3Expr): Vec3Expr = Vec3Expr(s"pow(${v.wgsl}, ${e.wgsl})")
+    @annotation.targetName("powScalarG")
+    override def pow(e: FloatExpr): Vec3Expr =
+      Vec3Expr(s"pow(${v.wgsl}, vec3<f32>(${e.wgsl}))")
+    def pow(scalar: Double): Vec3Expr = v.pow(scalar: FloatExpr)
     override def min(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"min(${v.wgsl}, ${other.wgsl})")
     override def max(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"max(${v.wgsl}, ${other.wgsl})")
     override def clamp(lo: FloatExpr, hi: FloatExpr): Vec3Expr =
       Vec3Expr(s"clamp(${v.wgsl}, ${lo.wgsl}, ${hi.wgsl})")
+    override def clamp01: Vec3Expr = Vec3Expr(s"saturate(${v.wgsl})")
     override def fit0111: Vec3Expr = Vec3Expr(s"(${v.wgsl} * 2.0 - 1.0)")
     override def fit1101: Vec3Expr = Vec3Expr(s"(${v.wgsl} * 0.5 + 0.5)")
     @annotation.targetName("mixVecG")
@@ -342,8 +370,14 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     @annotation.targetName("stepScalarG")
     override def step(edge: FloatExpr): Vec3Expr =
       Vec3Expr(s"step(${edge.wgsl}, ${v.wgsl})")
+    @annotation.targetName("smoothstepVecG")
     override def smoothstep(edge0: Vec3Expr, edge1: Vec3Expr): Vec3Expr =
       Vec3Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
+    @annotation.targetName("smoothstepScalarG")
+    override def smoothstep(edge0: FloatExpr, edge1: FloatExpr): Vec3Expr =
+      Vec3Expr(s"smoothstep(vec3<f32>(${edge0.wgsl}), vec3<f32>(${edge1.wgsl}), ${v.wgsl})")
+    def smoothstep(edge0: Double, edge1: Double): Vec3Expr =
+      v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
     override def <(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"(1.0 - step(${other.wgsl}, ${v.wgsl}))")
@@ -429,12 +463,22 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def log: Vec4Expr = Vec4Expr(s"log(${v.wgsl})")
     override def log2: Vec4Expr = Vec4Expr(s"log2(${v.wgsl})")
     override def sqrt: Vec4Expr = Vec4Expr(s"sqrt(${v.wgsl})")
+    override def inverseSqrt: Vec4Expr = Vec4Expr(s"inverseSqrt(${v.wgsl})")
+    override def trunc: Vec4Expr = Vec4Expr(s"trunc(${v.wgsl})")
+    override def exp2: Vec4Expr = Vec4Expr(s"exp2(${v.wgsl})")
+    @annotation.targetName("powVecG")
+    override def pow(e: Vec4Expr): Vec4Expr = Vec4Expr(s"pow(${v.wgsl}, ${e.wgsl})")
+    @annotation.targetName("powScalarG")
+    override def pow(e: FloatExpr): Vec4Expr =
+      Vec4Expr(s"pow(${v.wgsl}, vec4<f32>(${e.wgsl}))")
+    def pow(scalar: Double): Vec4Expr = v.pow(scalar: FloatExpr)
     override def min(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"min(${v.wgsl}, ${other.wgsl})")
     override def max(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"max(${v.wgsl}, ${other.wgsl})")
     override def clamp(lo: FloatExpr, hi: FloatExpr): Vec4Expr =
       Vec4Expr(s"clamp(${v.wgsl}, ${lo.wgsl}, ${hi.wgsl})")
+    override def clamp01: Vec4Expr = Vec4Expr(s"saturate(${v.wgsl})")
     override def fit0111: Vec4Expr = Vec4Expr(s"(${v.wgsl} * 2.0 - 1.0)")
     override def fit1101: Vec4Expr = Vec4Expr(s"(${v.wgsl} * 0.5 + 0.5)")
     @annotation.targetName("mixVecG")
@@ -449,8 +493,14 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     @annotation.targetName("stepScalarG")
     override def step(edge: FloatExpr): Vec4Expr =
       Vec4Expr(s"step(${edge.wgsl}, ${v.wgsl})")
+    @annotation.targetName("smoothstepVecG")
     override def smoothstep(edge0: Vec4Expr, edge1: Vec4Expr): Vec4Expr =
       Vec4Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
+    @annotation.targetName("smoothstepScalarG")
+    override def smoothstep(edge0: FloatExpr, edge1: FloatExpr): Vec4Expr =
+      Vec4Expr(s"smoothstep(vec4<f32>(${edge0.wgsl}), vec4<f32>(${edge1.wgsl}), ${v.wgsl})")
+    def smoothstep(edge0: Double, edge1: Double): Vec4Expr =
+      v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
     override def <(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"(1.0 - step(${other.wgsl}, ${v.wgsl}))")

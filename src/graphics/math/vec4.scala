@@ -56,10 +56,18 @@ trait Vec4ImmutableOpsG[Num, Vec]:
     def log: Vec
     def log2: Vec
     def sqrt: Vec
+    def inverseSqrt: Vec
+    def trunc: Vec
+    def exp2: Vec
+    @scala.annotation.targetName("powVecG")
+    def pow(e: Vec): Vec
+    @scala.annotation.targetName("powScalarG")
+    def pow(e: Num): Vec
 
     def min(other: Vec): Vec
     def max(other: Vec): Vec
     def clamp(lo: Num, hi: Num): Vec
+    def clamp01: Vec
     def fit0111: Vec
     def fit1101: Vec
     @scala.annotation.targetName("mixVecG")
@@ -82,7 +90,10 @@ trait Vec4ImmutableOpsG[Num, Vec]:
     def step(edge: Vec): Vec
     @scala.annotation.targetName("stepScalarG")
     def step(edge: Num): Vec
+    @scala.annotation.targetName("smoothstepVecG")
     def smoothstep(edge0: Vec, edge1: Vec): Vec
+    @scala.annotation.targetName("smoothstepScalarG")
+    def smoothstep(edge0: Num, edge1: Num): Vec
 
     /** Reflects incident vector `v` about the surface normal `n`. `n` must be
       * unit length. Computed as `v - 2 * dot(n, v) * n`.
@@ -159,11 +170,19 @@ trait Vec4ImmutableOps[Vec]:
     def log: Vec = create(v.x.log, v.y.log, v.z.log, v.w.log)
     def log2: Vec = create(v.x.log2, v.y.log2, v.z.log2, v.w.log2)
     def sqrt: Vec = create(v.x.sqrt, v.y.sqrt, v.z.sqrt, v.w.sqrt)
+    def inverseSqrt: Vec = create(v.x.inverseSqrt, v.y.inverseSqrt, v.z.inverseSqrt, v.w.inverseSqrt)
+    def trunc: Vec = create(v.x.trunc, v.y.trunc, v.z.trunc, v.w.trunc)
+    def exp2: Vec = create(v.x.exp2, v.y.exp2, v.z.exp2, v.w.exp2)
+    @scala.annotation.targetName("powVec")
+    def pow(e: Vec): Vec = create(v.x.pow(e.x), v.y.pow(e.y), v.z.pow(e.z), v.w.pow(e.w))
+    @scala.annotation.targetName("powScalar")
+    def pow(e: Double): Vec = create(v.x.pow(e), v.y.pow(e), v.z.pow(e), v.w.pow(e))
 
     def min(other: Vec): Vec =
       create(v.x.min(other.x), v.y.min(other.y), v.z.min(other.z), v.w.min(other.w))
     def max(other: Vec): Vec =
       create(v.x.max(other.x), v.y.max(other.y), v.z.max(other.z), v.w.max(other.w))
+    def clamp01: Vec = create(v.x.clamp01, v.y.clamp01, v.z.clamp01, v.w.clamp01)
     def clamp(lo: Double, hi: Double): Vec =
       create(v.x.clamp(lo, hi), v.y.clamp(lo, hi), v.z.clamp(lo, hi), v.w.clamp(lo, hi))
     def fit0111: Vec = create(v.x.fit0111, v.y.fit0111, v.z.fit0111, v.w.fit0111)
@@ -196,12 +215,21 @@ trait Vec4ImmutableOps[Vec]:
     @scala.annotation.targetName("stepScalar")
     def step(edge: Double): Vec =
       create(v.x.step(edge), v.y.step(edge), v.z.step(edge), v.w.step(edge))
+    @scala.annotation.targetName("smoothstepVec")
     def smoothstep(edge0: Vec, edge1: Vec): Vec =
       create(
         v.x.smoothstep(edge0.x, edge1.x),
         v.y.smoothstep(edge0.y, edge1.y),
         v.z.smoothstep(edge0.z, edge1.z),
         v.w.smoothstep(edge0.w, edge1.w),
+      )
+    @scala.annotation.targetName("smoothstepScalar")
+    def smoothstep(edge0: Double, edge1: Double): Vec =
+      create(
+        v.x.smoothstep(edge0, edge1),
+        v.y.smoothstep(edge0, edge1),
+        v.z.smoothstep(edge0, edge1),
+        v.w.smoothstep(edge0, edge1),
       )
 
     def reflect(n: Vec): Vec =

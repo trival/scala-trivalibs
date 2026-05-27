@@ -224,6 +224,10 @@ CPU traits: `Vec*Base`, `Vec*ImmutableOps`. GPU: `Vec*Expr` extensions in
 | `v.floor`              | `v.floor`              | `floor(v)`            | ✅ Done             |
 | `v.ceil`               | `v.ceil`               | `ceil(v)`             | ✅ Done             |
 | `v.fract`              | `v.fract`              | `fract(v)`            | ✅ Done             |
+| `v.trunc`              | `v.trunc`              | `trunc(v)`            | ✅ Done             |
+| `v.exp2`               | `v.exp2`               | `exp2(v)`             | ✅ Done             |
+| `v.inverseSqrt`        | `v.inverseSqrt`        | `inverseSqrt(v)`      | ✅ Done             |
+| `v.pow(e)`             | `v.pow(e)`             | `pow(v, e)`           | ✅ Done (vec/scalar)|
 | `v.sin`                | `v.sin`                | `sin(v)`              | ✅ Done             |
 | `v.cos`                | `v.cos`                | `cos(v)`              | ✅ Done             |
 | `v.clamp(lo, hi)`      | `v.clamp(lo, hi)`      | `clamp(v, lo, hi)`    | ✅ Done             |
