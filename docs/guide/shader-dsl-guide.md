@@ -101,9 +101,43 @@ GPU expressions mirror the CPU math surface, so shader code reads like CPU code:
 - **textures**: `tex.sample(uv, samp)`, `tex.sampleLevel(uv, samp, lod)`,
   `tex.numLevels`.
 
-> Gotcha: a `Double` on the **left** of an operator doesn't auto-convert. Write
-> `expr * 0.5` not `0.5 * expr`; for a leading constant use
-> `(0.5: FloatExpr) * expr`. See [gotchas.md](gotchas.md).
+### Numeric literals
+
+Plain Scala number literals double as GPU expressions — you rarely need to wrap
+them. A literal works on **either** side of an operator, with the same result
+type as the expression it's combined with:
+
+```scala
+expr * 0.5            // FloatExpr
+0.5 * expr            // FloatExpr — left side works too
+uv + 1.0              // Vec2Expr  — broadcast scalar
+2 - uv                // Vec2Expr  — (f32(2) - uv)
+0.5 < expr            // BoolExpr  — scalar comparison, either side
+```
+
+This covers arithmetic (`+ - * /`) on `FloatExpr` and `Vec2/3/4Expr`, and the
+scalar comparisons (`< <= > >= === !==`) on `FloatExpr`.
+
+**A bare literal is always a float.** Both `Double` and `Int` literals convert to
+`f32` (an `Int` emits `f32(n)`). This matches WGSL, where most math is `f32`. For
+an actual integer expression, opt in explicitly:
+
+- `n.i` → `IntExpr` (WGSL `i32`)
+- `n.u` → `UInt` → `UIntExpr` (WGSL `u32`)
+
+```scala
+count.i + 1.i         // i32 arithmetic — keep both sides explicit
+idx.u * 2.u           // u32 arithmetic
+```
+
+Integer expressions don't mix with the float-literal sugar: write `1.i`, not a
+bare `1`, when the other operand is an `IntExpr`/`UIntExpr`.
+
+**Vector comparison is not a literal case.** `v < w` is *component-wise* and
+returns a `Vec` mask (1.0 / 0.0 per lane, lowered to WGSL `step`) rather than a
+`BoolExpr`, and it takes another vector only — there's no scalar-literal form on
+either side. Use a scalar `FloatExpr` comparison when you want a `BoolExpr` for
+control flow.
 
 ## Control flow
 

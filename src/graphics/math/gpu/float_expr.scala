@@ -18,6 +18,49 @@ given Conversion[Float, FloatExpr] = v => FloatExpr(floatToWgsl(v.toDouble))
 given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
 
 // ---------------------------------------------------------------------------
+// Left-operand arithmetic for numeric literals.
+//
+// A literal converts to a `FloatExpr` only as the *right* operand (via the
+// conversions above). These extensions cover the left side so `0.5 * expr`,
+// `2 - vExpr`, etc. work without reordering or ascription.
+//
+// A bare `Int` literal is treated as a *float* here, mirroring
+// `Conversion[Int, FloatExpr]` (emits `f32(n)`) — int/uint expressions are
+// opted into explicitly with `.i` / `.u`, never inferred from a left operand.
+// ---------------------------------------------------------------------------
+
+// `FloatExpr`/`Vec*Expr` are opaque aliases that all erase to `Expr`. Defining
+// one operator as several arg-type overloads (e.g. `*(FloatExpr)` and
+// `*(Vec2Expr)`) confuses operator resolution for an `Int` receiver — the
+// erasure-identical candidates get discarded and member `Int.*` is reported as
+// the failure. So instead each operator is a single *generic* method dispatched
+// by the `LeftScalar` witness, which both rebuilds the right expr subtype and
+// keeps one unambiguous `*`/`+`/… per receiver.
+
+/** Witness that wraps a WGSL string back into the GPU expr type `E`, used to
+  * give a numeric literal on the left of an operator the same result type as the
+  * expression on the right. */
+trait LeftScalar[E <: Expr]:
+  def wrap(s: String): E
+
+given LeftScalar[FloatExpr] = FloatExpr(_)
+given LeftScalar[Vec2Expr] = Vec2Expr(_)
+given LeftScalar[Vec3Expr] = Vec3Expr(_)
+given LeftScalar[Vec4Expr] = Vec4Expr(_)
+
+extension (d: Double)
+  inline def +[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} + ${e.wgsl})")
+  inline def -[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} - ${e.wgsl})")
+  inline def *[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} * ${e.wgsl})")
+  inline def /[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} / ${e.wgsl})")
+
+extension (n: Int)
+  inline def +[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) + ${e.wgsl})")
+  inline def -[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) - ${e.wgsl})")
+  inline def *[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) * ${e.wgsl})")
+  inline def /[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) / ${e.wgsl})")
+
+// ---------------------------------------------------------------------------
 // NumOps / NumExt for FloatExpr
 // LocalFloat <: FloatExpr, so these apply to LocalFloat too.
 // ---------------------------------------------------------------------------

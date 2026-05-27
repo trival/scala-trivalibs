@@ -15,9 +15,10 @@ import trivalibs.utils.js.Arr
   * type-checked in Scala. You rarely construct these directly — they come from
   * `ctx.in`/`bindings`/`locals`, the `vec2/3/4` constructors, and the math ops.
   *
-  * Gotcha: a `Double` literal on the **left** of an operator won't auto-convert
-  * (e.g. `0.5 * vExpr` fails); put the expression first (`vExpr * 0.5`) or
-  * ascribe (`(0.5: FloatExpr) * x`).
+  * A numeric literal works on either side of an arithmetic operator
+  * (`0.5 * vExpr` and `vExpr * 0.5`) and of a scalar `FloatExpr` comparison
+  * (`0.5 < x`); a bare `Int` counts as a float. (Vector comparison is
+  * component-wise and vector-only — no scalar-literal form on either side.)
   */
 class Expr(val wgsl: String):
   override def toString: String = wgsl
@@ -465,3 +466,23 @@ extension (a: UIntExpr)
   def ===(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} == ${b.wgsl})")
   @annotation.targetName("uintNe")
   def !==(b: UIntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} != ${b.wgsl})")
+
+// Numeric literal on the **left** of a scalar comparison against a `FloatExpr`
+// (mirrors the left-operand arithmetic support). A bare `Int` counts as a float.
+// Each block compares against a single arg type, so there is no erasure-overload
+// ambiguity (unlike the vector arithmetic case).
+extension (d: Double)
+  @annotation.targetName("dLtF") inline def <(e: FloatExpr): BoolExpr = (d: FloatExpr) < e
+  @annotation.targetName("dLteF") inline def <=(e: FloatExpr): BoolExpr = (d: FloatExpr) <= e
+  @annotation.targetName("dGtF") inline def >(e: FloatExpr): BoolExpr = (d: FloatExpr) > e
+  @annotation.targetName("dGteF") inline def >=(e: FloatExpr): BoolExpr = (d: FloatExpr) >= e
+  @annotation.targetName("dEqF") inline def ===(e: FloatExpr): BoolExpr = (d: FloatExpr) === e
+  @annotation.targetName("dNeF") inline def !==(e: FloatExpr): BoolExpr = (d: FloatExpr) !== e
+
+extension (n: Int)
+  @annotation.targetName("iLtF") inline def <(e: FloatExpr): BoolExpr = (n: FloatExpr) < e
+  @annotation.targetName("iLteF") inline def <=(e: FloatExpr): BoolExpr = (n: FloatExpr) <= e
+  @annotation.targetName("iGtF") inline def >(e: FloatExpr): BoolExpr = (n: FloatExpr) > e
+  @annotation.targetName("iGteF") inline def >=(e: FloatExpr): BoolExpr = (n: FloatExpr) >= e
+  @annotation.targetName("iEqF") inline def ===(e: FloatExpr): BoolExpr = (n: FloatExpr) === e
+  @annotation.targetName("iNeF") inline def !==(e: FloatExpr): BoolExpr = (n: FloatExpr) !== e

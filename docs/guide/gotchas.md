@@ -5,24 +5,6 @@ message, so they're worth knowing up front.
 
 ## Shader DSL
 
-### `Double` on the left of an operator doesn't convert
-
-A `Double`/`Int` literal converts to a GPU `FloatExpr` only as the **right**
-operand. With an expression on the right, overload resolution fails (cryptic
-"value \* is not a member …").
-
-```scala
-expr * 0.5            // ok
-0.5 * expr            // ERROR
-(0.5: FloatExpr) * expr   // ok — ascribe the literal
-vec2(t.sin * 0.1 + 0.3, …)  // put the expr first inside constructors too
-```
-
-### Vector ops mirror CPU, but constants stay on the right
-
-Same rule for vectors: `v * 0.25`, `uv + offset`, `uv - o`. Use unary minus for
-mixed signs: `vec2(o.x, -o.y)`.
-
 ### One statement per line in raw WGSL
 
 In `WgslFn.raw` / raw-string shade bodies, never put two statements on one line
@@ -58,9 +40,9 @@ constants — not raw strings.
 
 `Vec3Buffer`/`Mat4Buffer` (what the GPU sees) are 32-bit floats; the mutable
 `Vec3`/`Mat4` classes and tuples are `Double`. Uniform/attribute upload narrows
-to F32 automatically. **WGSL has no f64 type** (render *or* compute), so anything
-bound to a shader is F32 — the `…dBuffer` (F64) variants are CPU-side only
-(double-precision packed storage), never uploaded to the GPU.
+to F32 automatically. **WGSL has no f64 type** (render _or_ compute), so
+anything bound to a shader is F32 — the `…dBuffer` (F64) variants are CPU-side
+only (double-precision packed storage), never uploaded to the GPU.
 
 ### No quaternion on the GPU
 
