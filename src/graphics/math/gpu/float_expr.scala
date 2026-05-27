@@ -37,28 +37,43 @@ given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
 // by the `LeftScalar` witness, which both rebuilds the right expr subtype and
 // keeps one unambiguous `*`/`+`/… per receiver.
 
-/** Witness that wraps a WGSL string back into the GPU expr type `E`, used to
-  * give a numeric literal on the left of an operator the same result type as the
-  * expression on the right. */
+/** Maps a left-scalar operand expr type `E` to the result type `Out` of
+  * `literal OP expr`. `Out` is always the base value type (`FloatExpr`,
+  * `Vec2Expr`, …), never a `Let`/`Var`/`Const` binding subtype — the result is a
+  * computed expression, not a binding. The subtype-bounded givens below let any
+  * binding subtype (`LetFloat`, `VarVec3`, …) resolve to its base, so e.g.
+  * `0.15 + letFloat` type-checks and yields a `FloatExpr`. */
 trait LeftScalar[E <: Expr]:
-  def wrap(s: String): E
+  type Out <: Expr
+  def wrap(s: String): Out
 
-given LeftScalar[FloatExpr] = FloatExpr(_)
-given LeftScalar[Vec2Expr] = Vec2Expr(_)
-given LeftScalar[Vec3Expr] = Vec3Expr(_)
-given LeftScalar[Vec4Expr] = Vec4Expr(_)
+object LeftScalar:
+  type Aux[E <: Expr, O <: Expr] = LeftScalar[E] { type Out = O }
+
+  private def inst[E <: Expr, O <: Expr](f: String => O): Aux[E, O] =
+    new LeftScalar[E]:
+      type Out = O
+      def wrap(s: String): O = f(s)
+
+  // Bounds are mutually disjoint (no expr is a subtype of two base value
+  // types), so resolution is unambiguous — and each base also covers its own
+  // Let/Var/Const subtypes.
+  given [E <: FloatExpr] => Aux[E, FloatExpr] = inst(FloatExpr(_))
+  given [E <: Vec2Expr] => Aux[E, Vec2Expr] = inst(Vec2Expr(_))
+  given [E <: Vec3Expr] => Aux[E, Vec3Expr] = inst(Vec3Expr(_))
+  given [E <: Vec4Expr] => Aux[E, Vec4Expr] = inst(Vec4Expr(_))
 
 extension (d: Double)
-  inline def +[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} + ${e.wgsl})")
-  inline def -[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} - ${e.wgsl})")
-  inline def *[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} * ${e.wgsl})")
-  inline def /[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(${floatToWgsl(d)} / ${e.wgsl})")
+  inline def +[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} + ${e.wgsl})")
+  inline def -[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} - ${e.wgsl})")
+  inline def *[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} * ${e.wgsl})")
+  inline def /[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} / ${e.wgsl})")
 
 extension (n: Int)
-  inline def +[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) + ${e.wgsl})")
-  inline def -[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) - ${e.wgsl})")
-  inline def *[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) * ${e.wgsl})")
-  inline def /[E <: Expr](e: E)(using L: LeftScalar[E]): E = L.wrap(s"(f32($n) / ${e.wgsl})")
+  inline def +[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) + ${e.wgsl})")
+  inline def -[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) - ${e.wgsl})")
+  inline def *[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) * ${e.wgsl})")
+  inline def /[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) / ${e.wgsl})")
 
 // ---------------------------------------------------------------------------
 // NumOps / NumExt for FloatExpr

@@ -428,6 +428,14 @@ class ShaderDslTest extends FunSuite:
     // Second := → reassign
     assertEquals((acc := (acc + delta)).toString, "  acc = (acc + delta);")
 
+  test("VarExpr compound assignment emits native WGSL compound ops"):
+    val acc = VarVec3("col")
+    val delta = Vec3Expr("delta")
+    assertEquals((acc += delta).toString, "  col += delta;")
+    assertEquals((acc -= delta).toString, "  col -= delta;")
+    assertEquals((acc *= delta).toString, "  col *= delta;")
+    assertEquals((acc /= delta).toString, "  col /= delta;")
+
   test("ConstFloat supports arithmetic and const decl"):
     val s = ConstFloat("scale")
     assertEquals(

@@ -35,7 +35,9 @@ class LetExpr(val name: String) extends Expr(name):
   def :=(value: Expr): Stmt = Stmt.let(name, value)
 
 /** A mutable WGSL `var` local: the first `:=` declares it, later `:=` reassign.
-  * Use for accumulation (e.g. `VarVec3("col")`). */
+  * Use for accumulation (e.g. `VarVec3("col")`). The compound forms `+= -= *=
+  * /=` emit WGSL compound assignment (`col += …;`) and require the `var` to be
+  * already declared (i.e. used after the initial `:=`). */
 class VarExpr(name: String) extends LetExpr(name):
   private var declared = false
   override def :=(value: Expr): Stmt =
@@ -43,6 +45,11 @@ class VarExpr(name: String) extends LetExpr(name):
       declared = true
       Stmt.varDecl(name, value)
     else Stmt.varAssign(name, value)
+
+  def +=(value: Expr): Stmt = Stmt.compound(name, "+", value)
+  def -=(value: Expr): Stmt = Stmt.compound(name, "-", value)
+  def *=(value: Expr): Stmt = Stmt.compound(name, "*", value)
+  def /=(value: Expr): Stmt = Stmt.compound(name, "/", value)
 
 /** A WGSL `const` local (compile-time constant). */
 class ConstExpr(name: String) extends LetExpr(name):
@@ -329,6 +336,8 @@ object Stmt:
     s"  var $name: $wgslType = ${value.wgsl};"
   inline def varAssign(name: String, value: Expr): Stmt =
     s"  $name = ${value.wgsl};"
+  inline def compound(name: String, op: String, value: Expr): Stmt =
+    s"  $name $op= ${value.wgsl};"
   inline def raw(s: String): Stmt = s
 
   def ifBlock(cond: BoolExpr, body: Block): Stmt =

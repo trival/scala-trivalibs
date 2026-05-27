@@ -52,6 +52,23 @@ class LeftScalarTest extends FunSuite:
     assertEquals((2 * v4).toString, "(f32(2) * rgba)")
 
   // ---------------------------------------------------------------------------
+  // Binding subtypes (Let/Var) on the right resolve via their base value type,
+  // and the result is the base expr — not the binding subtype.
+  // ---------------------------------------------------------------------------
+
+  test("0.15 + letFloat resolves and yields a FloatExpr"):
+    val r: FloatExpr = 0.15 + LetFloat("uvDelta")
+    assertEquals(r.toString, "(0.15 + uvDelta)")
+
+  test("2 * varFloat lifts the Int and yields a FloatExpr"):
+    val r: FloatExpr = 2 * VarFloat("t")
+    assertEquals(r.toString, "(f32(2) * t)")
+
+  test("0.5 * letVec3 yields a Vec3Expr"):
+    val r: Vec3Expr = 0.5 * LetVec3("col")
+    assertEquals(r.toString, "(0.5 * col)")
+
+  // ---------------------------------------------------------------------------
   // Numeric literal on the left of a scalar comparison
   // ---------------------------------------------------------------------------
 

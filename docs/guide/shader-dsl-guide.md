@@ -84,6 +84,46 @@ program.vert[(pos: Vec2)]: ctx =>
   )
 ```
 
+### Assignment statements (`:=` and `+= -= *= /=`)
+
+`:=` produces an assignment `Stmt`. Its WGSL depends on the target:
+
+| target                                    | first `:=`     | later `:=`     |
+| ----------------------------------------- | -------------- | -------------- |
+| `LetFloat` / `LetVec*` … , `ctx.locals.*` | `let n = …;`   | `let n = …;`   |
+| `VarFloat` / `VarVec*` …                  | `var n = …;`   | `n = …;`       |
+| `ConstFloat` / `ConstVec*` …              | `const n = …;` | `const n = …;` |
+| `ctx.out.*`                               | `n = …;`       | `n = …;`       |
+
+A `Var*` local is stateful: the **first** `:=` it sees emits the `var`
+declaration, every subsequent `:=` emits a plain reassignment. So declare-then-
+mutate just works:
+
+```scala
+val col = VarVec3("col")
+Block(
+  col := vec3(0.1),        // var col = vec3<f32>(0.1);
+  col := col + vec3(0.2),  // col = (col + vec3<f32>(0.2));
+)
+```
+
+**Compound assignment** — `Var*` targets also support `+= -= *= /=`, which emit
+native WGSL compound assignment and read better for accumulation:
+
+```scala
+col += circle(...)         // col += …;   (same as  col := col + …)
+col *= falloff             // col *= …;
+```
+
+Only reassignable targets (`Var*`) have the compound forms; `let`/`const` are
+immutable so they're `:=`-only. A compound op requires the `var` to be **already
+declared** — use it after the initial `:=`, never as the variable's first
+statement (WGSL has no `col += …` without a prior `var col`).
+
+Like `:=`, the compound ops are unchecked on the value's category (mirroring the
+WGSL it lowers to): `vec3Var += floatExpr` compiles in Scala but WGSL will
+reject the type mismatch — keep the operands in the same value category.
+
 ## Expressions & ops
 
 GPU expressions mirror the CPU math surface, so shader code reads like CPU code:
@@ -118,9 +158,9 @@ uv + 1.0              // Vec2Expr  — broadcast scalar
 This covers arithmetic (`+ - * /`) on `FloatExpr` and `Vec2/3/4Expr`, and the
 scalar comparisons (`< <= > >= === !==`) on `FloatExpr`.
 
-**A bare literal is always a float.** Both `Double` and `Int` literals convert to
-`f32` (an `Int` emits `f32(n)`). This matches WGSL, where most math is `f32`. For
-an actual integer expression, opt in explicitly:
+**A bare literal is always a float.** Both `Double` and `Int` literals convert
+to `f32` (an `Int` emits `f32(n)`). This matches WGSL, where most math is `f32`.
+For an actual integer expression, opt in explicitly:
 
 - `n.i` → `IntExpr` (WGSL `i32`)
 - `n.u` → `UInt` → `UIntExpr` (WGSL `u32`)
@@ -133,7 +173,7 @@ idx.u * 2.u           // u32 arithmetic
 Integer expressions don't mix with the float-literal sugar: write `1.i`, not a
 bare `1`, when the other operand is an `IntExpr`/`UIntExpr`.
 
-**Vector comparison is not a literal case.** `v < w` is *component-wise* and
+**Vector comparison is not a literal case.** `v < w` is _component-wise_ and
 returns a `Vec` mask (1.0 / 0.0 per lane, lowered to WGSL `step`) rather than a
 `BoolExpr`, and it takes another vector only — there's no scalar-literal form on
 either side. Use a scalar `FloatExpr` comparison when you want a `BoolExpr` for
