@@ -97,16 +97,16 @@ import trivalibs.preact.component.*
 import trivalibs.preact.signals.Var
 
 trait CounterProps extends Props:
-  val key: Maybe[String]
+  val initialCount: Int
 
-val Counter = component[CounterProps]: _ =>
-  val count = Var(0)
+val Counter = component[CounterProps]: props =>
+  val count = Var(props.initialCount)
   div(
-    button("onClick" := (() => count(count() + 1)), "increment"),
+    button("onClick" := (() => count(_ + 1)), "increment"),
     span(s"count: ${count()}"),
   )
 
-// Usage: Counter() — modifier types are derived from CounterProps
+// Usage: Counter("initialCount" := 2) — modifier types are derived from CounterProps
 ```
 
 `Var(initial)` creates a reactive variable; `v()` reads, `v(x)` / `v(f)` write.
@@ -116,8 +116,8 @@ Signals automatically pick global vs. component context at runtime.
 
 - **graphics/** — the GPU rendering stack
   - `math/` — Vec2–4, Mat2–4 (mutable / immutable / buffer representations)
-  - `shader/` — `ShaderDef`, WGSL generation, the Scala shader DSL, `shader/lib/`
-    function libraries (noise, color, blur, hashing, coords)
+  - `shader/` — `ShaderDef`, WGSL generation, the Scala shader DSL,
+    `shader/lib/` function libraries (noise, color, blur, hashing, coords)
   - `buffers/` — `BufferBinding`, typed vertex attributes
   - `geometry/` — mesh, plane, grid, polygon, shape geometry
   - `scene/` — transform, camera, scene graph
@@ -181,8 +181,8 @@ and its examples together.
 
 ## Documentation
 
-Consumable docs (for *using* the library) live under [`docs/`](docs/); internal
-feature-planning docs (for *extending* it) live under `documents/`.
+Consumable docs (for _using_ the library) live under [`docs/`](docs/); internal
+feature-planning docs (for _extending_ it) live under `documents/`.
 
 - **Guides** — [`docs/guide/`](docs/guide/): the
   [sketch authoring guide](docs/guide/sketch-authoring-guide.md) (end-to-end
@@ -193,8 +193,9 @@ feature-planning docs (for *extending* it) live under `documents/`.
   doc-comments cover the painter, shader DSL, buffers, and CPU/GPU math. The
   painter entities (`Panel`/`Layer`/`Shape`/`Form`) are opaque handles —
   construct them via `painter.*` factories and configure via `set`/`bind`.
-- **AI authoring skill** — [`docs/skills/write-sketch/`](docs/skills/write-sketch/)
-  is a Claude Code skill for writing sketches against this library.
+- **AI authoring skill** —
+  [`docs/skills/write-sketch/`](docs/skills/write-sketch/) is a Claude Code
+  skill for writing sketches against this library.
 
 ### Metals MCP (live API for editors & AI agents)
 
@@ -210,7 +211,7 @@ gitignored `.vscode/settings.json`, so each dev sets them):
 
 Metals then writes `.mcp.json` (gitignored, dynamic port) exposing tools like
 `get-docs`, `inspect`, `get-source`, `glob-search`. A Claude Code session
-started *after* `.mcp.json` exists picks it up and prompts to approve the
+started _after_ `.mcp.json` exists picks it up and prompts to approve the
 `metals` server.
 
 ## License
