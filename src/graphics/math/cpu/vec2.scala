@@ -1,9 +1,9 @@
 package trivalibs.graphics.math.cpu
 
-import trivalibs.graphics.math.*
 import trivalibs.bufferdata.F32
 import trivalibs.bufferdata.F64
 import trivalibs.bufferdata.StructRef
+import trivalibs.graphics.math.*
 
 // === implementations for common vector types ===
 
@@ -53,8 +53,9 @@ object Vec2Tuple extends Vec2ImmutableOps[Vec2Tuple]:
       inline def y = v._2
 
 /** Mutable 2D vector. `Vec2(x, y)`; `+ - * /`, `.dot`, `.length`, `.normalize`,
-  * `.mix`, in-place variants, swizzles; companion `zero`/`one`/`X`/`Y`. Siblings:
-  * `Vec2Tuple` (immutable), `Vec2Buffer` (GPU). */
+  * `.mix`, in-place variants, swizzles; companion `zero`/`one`/`X`/`Y`.
+  * Siblings: `Vec2Tuple` (immutable), `Vec2Buffer` (GPU).
+  */
 class Vec2(var x: Double = 0.0, var y: Double = 0.0)
 
 object Vec2 extends Vec2ImmutableOps[Vec2]:

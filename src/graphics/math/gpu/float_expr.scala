@@ -8,6 +8,15 @@ import trivalibs.utils.numbers.NumOps
 // Implicit conversions from numeric literals
 // ---------------------------------------------------------------------------
 
+/** Formats a `Double` literal as WGSL — appends `.0` if it would otherwise look
+  * like an integer, so the WGSL parser picks `f32`. Also used by the `Double`
+  * left-scalar arithmetic extensions in expr.scala.
+  */
+private[gpu] def floatToWgsl(v: Double): String =
+  val s = v.toString
+  if s.indexOf('.') >= 0 || s.indexOf('E') >= 0 || s.indexOf('e') >= 0 then s
+  else s + ".0"
+
 given Conversion[Double, FloatExpr] = v => FloatExpr(floatToWgsl(v))
 given Conversion[Float, FloatExpr] = v => FloatExpr(floatToWgsl(v.toDouble))
 given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
@@ -19,7 +28,8 @@ given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
 
 /** Arithmetic on `FloatExpr` (`+ - * /`, unary `-`). A `Double`/`Int`/`Float`
   * converts to `FloatExpr` as the **right** operand only (see the `Expr`
-  * left-operand gotcha). */
+  * left-operand gotcha).
+  */
 given NumOps[FloatExpr]:
   extension (a: FloatExpr)
     def +(b: FloatExpr): FloatExpr = FloatExpr(s"(${a.wgsl} + ${b.wgsl})")
@@ -31,9 +41,10 @@ given NumOps[FloatExpr]:
   def one: FloatExpr = FloatExpr("1.0")
 
 /** Scalar math on `FloatExpr` mapping to WGSL builtins: `.sqrt .pow .sin .cos
-  * .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix
-  * .step .smoothstep .fit0111 .fit1101` and comparisons (`<`, `>`, … →
-  * `BoolExpr`). Mirrors the CPU `NumExt`, so shader math reads like CPU math. */
+  * .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix .step
+  * .smoothstep .fit0111 .fit1101` and comparisons (`<`, `>`, … → `BoolExpr`).
+  * Mirrors the CPU `NumExt`, so shader math reads like CPU math.
+  */
 
 given NumExt[FloatExpr]:
   extension (a: FloatExpr)
@@ -118,9 +129,10 @@ given Vec2BaseG[FloatExpr, Vec2Expr] =
   * `.dot`, `.length`, `.distance`, `.normalize`, `.cross` (Vec3), `.mix`,
   * `.clamp`/`.clamp01`, `.min`/`.max`, `.abs`/`.floor`/`.fract`/`.sqrt`/
   * `.inverseSqrt`/`.trunc`/`.exp2`, `.pow` (vector or scalar exponent),
-  * `.smoothstep` (vector or scalar edges), `.fit0111`/
-  * `.fit1101`, and swizzles (`.xy`, `.xyz`, `.rgb`, `.wzyx`, …). Same surface as
-  * the GPU `Expr[T]` so shader code reads like the CPU `Vec*` API. */
+  * `.smoothstep` (vector or scalar edges), `.fit0111`/ `.fit1101`, and swizzles
+  * (`.xy`, `.xyz`, `.rgb`, `.wzyx`, …). Same surface as the GPU `Expr[T]` so
+  * shader code reads like the CPU `Vec*` API.
+  */
 given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
   def create(x: FloatExpr, y: FloatExpr): Vec2Expr =
     Vec2Expr(s"vec2<f32>(${x.wgsl}, ${y.wgsl})")
@@ -172,7 +184,9 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def trunc: Vec2Expr = Vec2Expr(s"trunc(${v.wgsl})")
     override def exp2: Vec2Expr = Vec2Expr(s"exp2(${v.wgsl})")
     @annotation.targetName("powVecG")
-    override def pow(e: Vec2Expr): Vec2Expr = Vec2Expr(s"pow(${v.wgsl}, ${e.wgsl})")
+    override def pow(e: Vec2Expr): Vec2Expr = Vec2Expr(
+      s"pow(${v.wgsl}, ${e.wgsl})",
+    )
     @annotation.targetName("powScalarG")
     override def pow(e: FloatExpr): Vec2Expr =
       Vec2Expr(s"pow(${v.wgsl}, vec2<f32>(${e.wgsl}))")
@@ -203,7 +217,9 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
       Vec2Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
     @annotation.targetName("smoothstepScalarG")
     override def smoothstep(edge0: FloatExpr, edge1: FloatExpr): Vec2Expr =
-      Vec2Expr(s"smoothstep(vec2<f32>(${edge0.wgsl}), vec2<f32>(${edge1.wgsl}), ${v.wgsl})")
+      Vec2Expr(
+        s"smoothstep(vec2<f32>(${edge0.wgsl}), vec2<f32>(${edge1.wgsl}), ${v.wgsl})",
+      )
     def smoothstep(edge0: Double, edge1: Double): Vec2Expr =
       v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
@@ -296,7 +312,9 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def trunc: Vec3Expr = Vec3Expr(s"trunc(${v.wgsl})")
     override def exp2: Vec3Expr = Vec3Expr(s"exp2(${v.wgsl})")
     @annotation.targetName("powVecG")
-    override def pow(e: Vec3Expr): Vec3Expr = Vec3Expr(s"pow(${v.wgsl}, ${e.wgsl})")
+    override def pow(e: Vec3Expr): Vec3Expr = Vec3Expr(
+      s"pow(${v.wgsl}, ${e.wgsl})",
+    )
     @annotation.targetName("powScalarG")
     override def pow(e: FloatExpr): Vec3Expr =
       Vec3Expr(s"pow(${v.wgsl}, vec3<f32>(${e.wgsl}))")
@@ -327,7 +345,9 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
       Vec3Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
     @annotation.targetName("smoothstepScalarG")
     override def smoothstep(edge0: FloatExpr, edge1: FloatExpr): Vec3Expr =
-      Vec3Expr(s"smoothstep(vec3<f32>(${edge0.wgsl}), vec3<f32>(${edge1.wgsl}), ${v.wgsl})")
+      Vec3Expr(
+        s"smoothstep(vec3<f32>(${edge0.wgsl}), vec3<f32>(${edge1.wgsl}), ${v.wgsl})",
+      )
     def smoothstep(edge0: Double, edge1: Double): Vec3Expr =
       v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
@@ -419,7 +439,9 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def trunc: Vec4Expr = Vec4Expr(s"trunc(${v.wgsl})")
     override def exp2: Vec4Expr = Vec4Expr(s"exp2(${v.wgsl})")
     @annotation.targetName("powVecG")
-    override def pow(e: Vec4Expr): Vec4Expr = Vec4Expr(s"pow(${v.wgsl}, ${e.wgsl})")
+    override def pow(e: Vec4Expr): Vec4Expr = Vec4Expr(
+      s"pow(${v.wgsl}, ${e.wgsl})",
+    )
     @annotation.targetName("powScalarG")
     override def pow(e: FloatExpr): Vec4Expr =
       Vec4Expr(s"pow(${v.wgsl}, vec4<f32>(${e.wgsl}))")
@@ -450,7 +472,9 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
       Vec4Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
     @annotation.targetName("smoothstepScalarG")
     override def smoothstep(edge0: FloatExpr, edge1: FloatExpr): Vec4Expr =
-      Vec4Expr(s"smoothstep(vec4<f32>(${edge0.wgsl}), vec4<f32>(${edge1.wgsl}), ${v.wgsl})")
+      Vec4Expr(
+        s"smoothstep(vec4<f32>(${edge0.wgsl}), vec4<f32>(${edge1.wgsl}), ${v.wgsl})",
+      )
     def smoothstep(edge0: Double, edge1: Double): Vec4Expr =
       v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
@@ -603,8 +627,7 @@ given Mat4ImmutableOpsG[FloatExpr, Mat4Expr]:
 // Swizzles — consecutive sub-vector splits + full-arity reverse.
 // ---------------------------------------------------------------------------
 
-extension (v: Vec2Expr)
-  def yx: Vec2Expr = Vec2Expr(s"${v.wgsl}.yx")
+extension (v: Vec2Expr) def yx: Vec2Expr = Vec2Expr(s"${v.wgsl}.yx")
 
 extension (v: Vec3Expr)
   @annotation.targetName("vec3_xy")
@@ -612,8 +635,10 @@ extension (v: Vec3Expr)
   @annotation.targetName("vec3_yz")
   def yz: Vec2Expr = Vec2Expr(s"${v.wgsl}.yz")
   def zyx: Vec3Expr = Vec3Expr(s"${v.wgsl}.zyx")
-  @annotation.targetName("vec3_rg") inline def rg: Vec2Expr = v.xy
-  @annotation.targetName("vec3_gb") inline def gb: Vec2Expr = v.yz
+  @annotation.targetName("vec3_rg")
+  inline def rg: Vec2Expr = v.xy
+  @annotation.targetName("vec3_gb")
+  inline def gb: Vec2Expr = v.yz
   inline def bgr: Vec3Expr = v.zyx
 
 extension (v: Vec4Expr)
@@ -625,8 +650,10 @@ extension (v: Vec4Expr)
   def xyz: Vec3Expr = Vec3Expr(s"${v.wgsl}.xyz")
   def yzw: Vec3Expr = Vec3Expr(s"${v.wgsl}.yzw")
   def wzyx: Vec4Expr = Vec4Expr(s"${v.wgsl}.wzyx")
-  @annotation.targetName("vec4_rg") inline def rg: Vec2Expr = v.xy
-  @annotation.targetName("vec4_gb") inline def gb: Vec2Expr = v.yz
+  @annotation.targetName("vec4_rg")
+  inline def rg: Vec2Expr = v.xy
+  @annotation.targetName("vec4_gb")
+  inline def gb: Vec2Expr = v.yz
   inline def ba: Vec2Expr = v.zw
   inline def rgb: Vec3Expr = v.xyz
   inline def gba: Vec3Expr = v.yzw
@@ -637,7 +664,8 @@ extension (v: Vec4Expr)
 // ---------------------------------------------------------------------------
 
 /** GPU `vec2<f32>` constructor: `vec2(x, y)` or `vec2(scalar)` (broadcast).
-  * Lowercase to match WGSL; the CPU-side counterpart is `Vec2(...)`. */
+  * Lowercase to match WGSL; the CPU-side counterpart is `Vec2(...)`.
+  */
 object vec2:
   def apply(x: FloatExpr, y: FloatExpr): Vec2Expr =
     Vec2Expr(s"vec2<f32>(${x.wgsl}, ${y.wgsl})")
@@ -646,7 +674,8 @@ object vec2:
   )
 
 /** GPU `vec3<f32>` constructor: `vec3(x, y, z)`, `vec3(xy, z)`, or
-  * `vec3(scalar)`. */
+  * `vec3(scalar)`.
+  */
 object vec3:
   def apply(x: FloatExpr, y: FloatExpr, z: FloatExpr): Vec3Expr =
     Vec3Expr(s"vec3<f32>(${x.wgsl}, ${y.wgsl}, ${z.wgsl})")
@@ -657,7 +686,8 @@ object vec3:
     Vec3Expr(s"vec3<f32>(${xy.wgsl}, ${z.wgsl})")
 
 /** GPU `vec4<f32>` constructor: `vec4(x,y,z,w)`, `vec4(xyz, w)`, `vec4(xy, z,
-  * w)`, or `vec4(scalar)`. Common for colors: `vec4(rgb, 1.0)`. */
+  * w)`, or `vec4(scalar)`. Common for colors: `vec4(rgb, 1.0)`.
+  */
 object vec4:
   def apply(x: FloatExpr, y: FloatExpr, z: FloatExpr, w: FloatExpr): Vec4Expr =
     Vec4Expr(s"vec4<f32>(${x.wgsl}, ${y.wgsl}, ${z.wgsl}, ${w.wgsl})")

@@ -1,7 +1,7 @@
 package trivalibs.graphics.math.cpu
 
-import trivalibs.graphics.math.*
 import trivalibs.bufferdata.StructRef
+import trivalibs.graphics.math.*
 import trivalibs.utils.numbers.NumExt.given
 
 // ---------------------------------------------------------------------------
@@ -79,18 +79,18 @@ trait QuatImmutableOps[Q]:
       val y = q.y
       val z = q.z
       val w = q.w
-      val x2 = x+x
-      val y2 = y+y
-      val z2 = z+z
-      val xx = x*x2
-      val xy = x*y2
-      val xz = x*z2
-      val yy = y*y2
-      val yz = y*z2
-      val zz = z*z2
-      val wx = w*x2
-      val wy = w*y2
-      val wz = w*z2
+      val x2 = x + x
+      val y2 = y + y
+      val z2 = z + z
+      val xx = x * x2
+      val xy = x * y2
+      val xz = x * z2
+      val yy = y * y2
+      val yz = y * z2
+      val zz = z * z2
+      val wx = w * x2
+      val wy = w * y2
+      val wz = w * z2
       // format: off
       Mat4.create(
         1-(yy+zz), xy+wz,     xz-wy,     0.0,
@@ -186,11 +186,12 @@ trait QuatMutableOps[Q]:
 // ---------------------------------------------------------------------------
 
 /** Mutable quaternion `(x, y, z, w)` (imaginary first, real last) for 3D
-  * rotations. Companion: `Quat.identity`, `.fromAxisAngle`, `.fromRotationX/Y/Z`,
-  * `.fromLookRotation`, `.fromMat4`. Ops: `*` (compose), `.rotate(vec3)`,
-  * `.conjugate`, `.inverse`, `.slerp`, `.normalize`, `.toMat4`. Note: WGSL has no
-  * quaternion type — upload a rotation `Mat3`/`Mat4` to shaders. Siblings
-  * `QuatTuple`/`QuatBuffer`. */
+  * rotations. Companion: `Quat.identity`, `.fromAxisAngle`,
+  * `.fromRotationX/Y/Z`, `.fromLookRotation`, `.fromMat4`. Ops: `*` (compose),
+  * `.rotate(vec3)`, `.conjugate`, `.inverse`, `.slerp`, `.normalize`,
+  * `.toMat4`. Note: WGSL has no quaternion type — upload a rotation
+  * `Mat3`/`Mat4` to shaders. Siblings `QuatTuple`/`QuatBuffer`.
+  */
 class Quat(
     var x: Double = 0.0,
     var y: Double = 0.0,

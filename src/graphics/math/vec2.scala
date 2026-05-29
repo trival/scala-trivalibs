@@ -15,6 +15,7 @@ trait Vec2BaseG[Num, Vec]:
     def dot(other: Vec): Num
     def length_squared: Num
     def length: Num
+
     /** Euclidean distance between `v` and `other` — `length(v - other)`. */
     def distance(other: Vec): Num
 
@@ -95,10 +96,10 @@ trait Vec2ImmutableOpsG[Num, Vec]:
       * unit length. Computed as `v - 2 * dot(n, v) * n`.
       */
     def reflect(n: Vec): Vec
-    /** Refracts incident vector `v` through a surface with normal `n` and
-      * ratio of indices of refraction `eta` (source / destination). Returns a
-      * zero vector on total internal reflection. `v` and `n` must be unit
-      * length.
+
+    /** Refracts incident vector `v` through a surface with normal `n` and ratio
+      * of indices of refraction `eta` (source / destination). Returns a zero
+      * vector on total internal reflection. `v` and `n` must be unit length.
       */
     def refract(n: Vec, eta: Num): Vec
 

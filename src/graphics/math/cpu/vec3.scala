@@ -1,19 +1,20 @@
 package trivalibs.graphics.math.cpu
 
-import trivalibs.graphics.math.*
 import trivalibs.bufferdata.F32
 import trivalibs.bufferdata.F64
 import trivalibs.bufferdata.StructRef
+import trivalibs.graphics.math.*
 
 // === implementations for common vector types ===
 
 // ==== Buffer types ====
 // Note: Vec3Buffer uses F32 (for GPU upload), Vec3dBuffer uses F64
 
-/** GPU buffer layout for a 3-component vector (3×`f32`) — the form the GPU sees,
-  * used by `StructRef`/`StructArray`. The `…dBuffer` variant is `f64`. One of the
-  * three `Vec3` representations (mutable [[Vec3]] class, immutable [[Vec3Tuple]],
-  * buffer type); they share method names and convert via givens. */
+/** GPU buffer layout for a 3-component vector (3×`f32`) — the form the GPU
+  * sees, used by `StructRef`/`StructArray`. The `…dBuffer` variant is `f64`.
+  * One of the three `Vec3` representations (mutable [[Vec3]] class, immutable
+  * [[Vec3Tuple]], buffer type); they share method names and convert via givens.
+  */
 type Vec3Buffer = (F32, F32, F32)
 
 object Vec3Buffer:
@@ -66,7 +67,8 @@ object Vec3Tuple extends Vec3ImmutableOps[Vec3Tuple]:
   * `+ - * /` (vector or scalar), `.dot`, `.cross`, `.length`, `.normalize`,
   * `.mix`, in-place variants (`.addSelf`, `.normalizeSelf`, …), and swizzles.
   * Companion has `zero`, `one`, `X`/`Y`/`Z`. Two sibling representations exist:
-  * [[Vec3Tuple]] (immutable) and [[Vec3Buffer]] (GPU). */
+  * [[Vec3Tuple]] (immutable) and [[Vec3Buffer]] (GPU).
+  */
 class Vec3(var x: Double = 0.0, var y: Double = 0.0, var z: Double = 0.0)
 
 object Vec3 extends Vec3ImmutableOps[Vec3]:
