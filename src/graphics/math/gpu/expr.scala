@@ -495,3 +495,113 @@ extension (n: Int)
   @annotation.targetName("iGteF") inline def >=(e: FloatExpr): BoolExpr = (n: FloatExpr) >= e
   @annotation.targetName("iEqF") inline def ===(e: FloatExpr): BoolExpr = (n: FloatExpr) === e
   @annotation.targetName("iNeF") inline def !==(e: FloatExpr): BoolExpr = (n: FloatExpr) !== e
+
+// ---------------------------------------------------------------------------
+// Numeric arithmetic operators (+, -, *, /).
+// Top-level operator extensions for `Double`, `Int`, `IVec*Expr`, `UVec*Expr`
+// receivers live here together for the same reason as the comparison
+// operators above — Scala 3 disallows overloaded top-level methods spread
+// across files. FloatExpr / Vec*Expr arithmetic lives inside NumOps /
+// Vec*ImmutableOpsG given instances in float_expr.scala — those don't
+// conflict because they're nested inside givens, not at the top level.
+// ---------------------------------------------------------------------------
+
+private[gpu] def floatToWgsl(v: Double): String =
+  val s = v.toString
+  if s.indexOf('.') >= 0 || s.indexOf('E') >= 0 || s.indexOf('e') >= 0 then s
+  else s + ".0"
+
+// Left-operand arithmetic for numeric literals. A literal converts to a
+// `FloatExpr` only as the *right* operand (via the `Conversion`s in
+// float_expr.scala). These extensions cover the left side so `0.5 * expr`,
+// `2 - vExpr`, etc. work without reordering or ascription.
+//
+// A bare `Int` literal is treated as a *float* here, mirroring
+// `Conversion[Int, FloatExpr]` (emits `f32(n)`) — int/uint expressions are
+// opted into explicitly with `.i` / `.u`, never inferred from a left operand.
+//
+// `FloatExpr`/`Vec*Expr` are opaque aliases that all erase to `Expr`. Defining
+// one operator as several arg-type overloads (e.g. `*(FloatExpr)` and
+// `*(Vec2Expr)`) confuses operator resolution for an `Int` receiver — the
+// erasure-identical candidates get discarded and member `Int.*` is reported as
+// the failure. So instead each operator is a single *generic* method dispatched
+// by the `LeftScalar` witness, which both rebuilds the right expr subtype and
+// keeps one unambiguous `*`/`+`/… per receiver.
+
+/** Maps a left-scalar operand expr type `E` to the result type `Out` of
+  * `literal OP expr`. `Out` is always the base value type (`FloatExpr`,
+  * `Vec2Expr`, …), never a `Let`/`Var`/`Const` binding subtype — the result is a
+  * computed expression, not a binding. The subtype-bounded givens below let any
+  * binding subtype (`LetFloat`, `VarVec3`, …) resolve to its base, so e.g.
+  * `0.15 + letFloat` type-checks and yields a `FloatExpr`. */
+trait LeftScalar[E <: Expr]:
+  type Out <: Expr
+  def wrap(s: String): Out
+
+object LeftScalar:
+  type Aux[E <: Expr, O <: Expr] = LeftScalar[E] { type Out = O }
+
+  private def inst[E <: Expr, O <: Expr](f: String => O): Aux[E, O] =
+    new LeftScalar[E]:
+      type Out = O
+      def wrap(s: String): O = f(s)
+
+  given [E <: FloatExpr] => Aux[E, FloatExpr] = inst(FloatExpr(_))
+  given [E <: Vec2Expr] => Aux[E, Vec2Expr] = inst(Vec2Expr(_))
+  given [E <: Vec3Expr] => Aux[E, Vec3Expr] = inst(Vec3Expr(_))
+  given [E <: Vec4Expr] => Aux[E, Vec4Expr] = inst(Vec4Expr(_))
+
+extension (d: Double)
+  @annotation.targetName("dAdd") inline def +[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} + ${e.wgsl})")
+  @annotation.targetName("dSub") inline def -[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} - ${e.wgsl})")
+  @annotation.targetName("dMul") inline def *[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} * ${e.wgsl})")
+  @annotation.targetName("dDiv") inline def /[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} / ${e.wgsl})")
+
+extension (n: Int)
+  @annotation.targetName("iAdd") inline def +[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) + ${e.wgsl})")
+  @annotation.targetName("iSub") inline def -[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) - ${e.wgsl})")
+  @annotation.targetName("iMul") inline def *[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) * ${e.wgsl})")
+  @annotation.targetName("iDiv") inline def /[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) / ${e.wgsl})")
+
+// Integer-vector arithmetic. Lives here, not in int_expr.scala, because all
+// top-level +/-/*// must share a file (see header).
+
+extension (v: IVec2Expr)
+  @annotation.targetName("ivec2AddVec") def +(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} + ${other.wgsl})")
+  @annotation.targetName("ivec2AddScalar") def +(s: IntExpr): IVec2Expr = IVec2Expr(s"(${v.wgsl} + ${s.wgsl})")
+  @annotation.targetName("ivec2SubVec") def -(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} - ${other.wgsl})")
+  @annotation.targetName("ivec2SubScalar") def -(s: IntExpr): IVec2Expr = IVec2Expr(s"(${v.wgsl} - ${s.wgsl})")
+  @annotation.targetName("ivec2MulVec") def *(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} * ${other.wgsl})")
+  @annotation.targetName("ivec2MulScalar") def *(s: IntExpr): IVec2Expr = IVec2Expr(s"(${v.wgsl} * ${s.wgsl})")
+  @annotation.targetName("ivec2DivVec") def /(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} / ${other.wgsl})")
+
+extension (v: IVec3Expr)
+  @annotation.targetName("ivec3AddVec") def +(other: IVec3Expr): IVec3Expr = IVec3Expr(s"(${v.wgsl} + ${other.wgsl})")
+  @annotation.targetName("ivec3SubVec") def -(other: IVec3Expr): IVec3Expr = IVec3Expr(s"(${v.wgsl} - ${other.wgsl})")
+  @annotation.targetName("ivec3MulVec") def *(other: IVec3Expr): IVec3Expr = IVec3Expr(s"(${v.wgsl} * ${other.wgsl})")
+  @annotation.targetName("ivec3MulScalar") def *(s: IntExpr): IVec3Expr = IVec3Expr(s"(${v.wgsl} * ${s.wgsl})")
+
+extension (v: IVec4Expr)
+  @annotation.targetName("ivec4AddVec") def +(other: IVec4Expr): IVec4Expr = IVec4Expr(s"(${v.wgsl} + ${other.wgsl})")
+  @annotation.targetName("ivec4SubVec") def -(other: IVec4Expr): IVec4Expr = IVec4Expr(s"(${v.wgsl} - ${other.wgsl})")
+  @annotation.targetName("ivec4MulVec") def *(other: IVec4Expr): IVec4Expr = IVec4Expr(s"(${v.wgsl} * ${other.wgsl})")
+
+extension (v: UVec2Expr)
+  @annotation.targetName("uvec2AddVec") def +(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} + ${other.wgsl})")
+  @annotation.targetName("uvec2AddScalar") def +(s: UIntExpr): UVec2Expr = UVec2Expr(s"(${v.wgsl} + ${s.wgsl})")
+  @annotation.targetName("uvec2SubVec") def -(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} - ${other.wgsl})")
+  @annotation.targetName("uvec2MulVec") def *(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} * ${other.wgsl})")
+  @annotation.targetName("uvec2MulScalar") def *(s: UIntExpr): UVec2Expr = UVec2Expr(s"(${v.wgsl} * ${s.wgsl})")
+  @annotation.targetName("uvec2DivVec") def /(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} / ${other.wgsl})")
+
+extension (v: UVec3Expr)
+  @annotation.targetName("uvec3AddVec") def +(other: UVec3Expr): UVec3Expr = UVec3Expr(s"(${v.wgsl} + ${other.wgsl})")
+  @annotation.targetName("uvec3SubVec") def -(other: UVec3Expr): UVec3Expr = UVec3Expr(s"(${v.wgsl} - ${other.wgsl})")
+  @annotation.targetName("uvec3MulVec") def *(other: UVec3Expr): UVec3Expr = UVec3Expr(s"(${v.wgsl} * ${other.wgsl})")
+  @annotation.targetName("uvec3MulScalar") def *(s: UIntExpr): UVec3Expr = UVec3Expr(s"(${v.wgsl} * ${s.wgsl})")
+
+extension (v: UVec4Expr)
+  @annotation.targetName("uvec4AddVec") def +(other: UVec4Expr): UVec4Expr = UVec4Expr(s"(${v.wgsl} + ${other.wgsl})")
+  @annotation.targetName("uvec4SubVec") def -(other: UVec4Expr): UVec4Expr = UVec4Expr(s"(${v.wgsl} - ${other.wgsl})")
+  @annotation.targetName("uvec4MulVec") def *(other: UVec4Expr): UVec4Expr = UVec4Expr(s"(${v.wgsl} * ${other.wgsl})")
+  @annotation.targetName("uvec4MulScalar") def *(s: UIntExpr): UVec4Expr = UVec4Expr(s"(${v.wgsl} * ${s.wgsl})")

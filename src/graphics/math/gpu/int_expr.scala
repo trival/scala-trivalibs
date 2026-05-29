@@ -305,25 +305,13 @@ extension (v: UVec4Expr)
 // IVec2Expr — signed integer 2-vector operations
 // ---------------------------------------------------------------------------
 
+// +/-/*// arithmetic for IVec2Expr lives in expr.scala (Scala 3 cross-file
+// overloading constraint — see the operator section there).
 extension (v: IVec2Expr)
   @annotation.targetName("ivec2X")
   def x: IntExpr = IntExpr(s"${v.wgsl}.x")
   @annotation.targetName("ivec2Y")
   def y: IntExpr = IntExpr(s"${v.wgsl}.y")
-  @annotation.targetName("ivec2AddVec")
-  def +(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} + ${other.wgsl})")
-  @annotation.targetName("ivec2AddScalar")
-  def +(s: IntExpr): IVec2Expr = IVec2Expr(s"(${v.wgsl} + ${s.wgsl})")
-  @annotation.targetName("ivec2SubVec")
-  def -(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} - ${other.wgsl})")
-  @annotation.targetName("ivec2SubScalar")
-  def -(s: IntExpr): IVec2Expr = IVec2Expr(s"(${v.wgsl} - ${s.wgsl})")
-  @annotation.targetName("ivec2MulVec")
-  def *(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} * ${other.wgsl})")
-  @annotation.targetName("ivec2MulScalar")
-  def *(s: IntExpr): IVec2Expr = IVec2Expr(s"(${v.wgsl} * ${s.wgsl})")
-  @annotation.targetName("ivec2DivVec")
-  def /(other: IVec2Expr): IVec2Expr = IVec2Expr(s"(${v.wgsl} / ${other.wgsl})")
   @annotation.targetName("ivec2Negate")
   def unary_- : IVec2Expr = IVec2Expr(s"(-${v.wgsl})")
   @annotation.targetName("ivec2Abs")
@@ -349,23 +337,12 @@ extension (v: IVec2Expr)
 // UVec2Expr — unsigned integer 2-vector operations
 // ---------------------------------------------------------------------------
 
+// +/-/*// arithmetic for UVec2Expr lives in expr.scala.
 extension (v: UVec2Expr)
   @annotation.targetName("uvec2X")
   def x: UIntExpr = UIntExpr(s"${v.wgsl}.x")
   @annotation.targetName("uvec2Y")
   def y: UIntExpr = UIntExpr(s"${v.wgsl}.y")
-  @annotation.targetName("uvec2AddVec")
-  def +(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} + ${other.wgsl})")
-  @annotation.targetName("uvec2AddScalar")
-  def +(s: UIntExpr): UVec2Expr = UVec2Expr(s"(${v.wgsl} + ${s.wgsl})")
-  @annotation.targetName("uvec2SubVec")
-  def -(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} - ${other.wgsl})")
-  @annotation.targetName("uvec2MulVec")
-  def *(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} * ${other.wgsl})")
-  @annotation.targetName("uvec2MulScalar")
-  def *(s: UIntExpr): UVec2Expr = UVec2Expr(s"(${v.wgsl} * ${s.wgsl})")
-  @annotation.targetName("uvec2DivVec")
-  def /(other: UVec2Expr): UVec2Expr = UVec2Expr(s"(${v.wgsl} / ${other.wgsl})")
   @annotation.targetName("uvec2Min")
   def min(other: UVec2Expr): UVec2Expr = UVec2Expr(
     s"min(${v.wgsl}, ${other.wgsl})",
@@ -387,6 +364,7 @@ extension (v: UVec2Expr)
 // IVec3Expr — signed integer 3-vector operations
 // ---------------------------------------------------------------------------
 
+// +/-/*// arithmetic for IVec3Expr lives in expr.scala.
 extension (v: IVec3Expr)
   @annotation.targetName("ivec3X")
   def x: IntExpr = IntExpr(s"${v.wgsl}.x")
@@ -394,14 +372,6 @@ extension (v: IVec3Expr)
   def y: IntExpr = IntExpr(s"${v.wgsl}.y")
   @annotation.targetName("ivec3Z")
   def z: IntExpr = IntExpr(s"${v.wgsl}.z")
-  @annotation.targetName("ivec3AddVec")
-  def +(other: IVec3Expr): IVec3Expr = IVec3Expr(s"(${v.wgsl} + ${other.wgsl})")
-  @annotation.targetName("ivec3SubVec")
-  def -(other: IVec3Expr): IVec3Expr = IVec3Expr(s"(${v.wgsl} - ${other.wgsl})")
-  @annotation.targetName("ivec3MulVec")
-  def *(other: IVec3Expr): IVec3Expr = IVec3Expr(s"(${v.wgsl} * ${other.wgsl})")
-  @annotation.targetName("ivec3MulScalar")
-  def *(s: IntExpr): IVec3Expr = IVec3Expr(s"(${v.wgsl} * ${s.wgsl})")
   @annotation.targetName("ivec3Negate")
   def unary_- : IVec3Expr = IVec3Expr(s"(-${v.wgsl})")
   @annotation.targetName("ivec3Abs")
@@ -427,6 +397,7 @@ extension (v: IVec3Expr)
 // UVec3Expr — unsigned integer 3-vector operations
 // ---------------------------------------------------------------------------
 
+// +/-/*// arithmetic for UVec3Expr lives in expr.scala.
 extension (v: UVec3Expr)
   @annotation.targetName("uvec3X")
   def x: UIntExpr = UIntExpr(s"${v.wgsl}.x")
@@ -434,14 +405,6 @@ extension (v: UVec3Expr)
   def y: UIntExpr = UIntExpr(s"${v.wgsl}.y")
   @annotation.targetName("uvec3Z")
   def z: UIntExpr = UIntExpr(s"${v.wgsl}.z")
-  @annotation.targetName("uvec3AddVec")
-  def +(other: UVec3Expr): UVec3Expr = UVec3Expr(s"(${v.wgsl} + ${other.wgsl})")
-  @annotation.targetName("uvec3SubVec")
-  def -(other: UVec3Expr): UVec3Expr = UVec3Expr(s"(${v.wgsl} - ${other.wgsl})")
-  @annotation.targetName("uvec3MulVec")
-  def *(other: UVec3Expr): UVec3Expr = UVec3Expr(s"(${v.wgsl} * ${other.wgsl})")
-  @annotation.targetName("uvec3MulScalar")
-  def *(s: UIntExpr): UVec3Expr = UVec3Expr(s"(${v.wgsl} * ${s.wgsl})")
   @annotation.targetName("uvec3Min")
   def min(other: UVec3Expr): UVec3Expr = UVec3Expr(
     s"min(${v.wgsl}, ${other.wgsl})",
@@ -463,6 +426,7 @@ extension (v: UVec3Expr)
 // IVec4Expr — signed integer 4-vector operations
 // ---------------------------------------------------------------------------
 
+// +/-/*// arithmetic for IVec4Expr lives in expr.scala.
 extension (v: IVec4Expr)
   @annotation.targetName("ivec4X")
   def x: IntExpr = IntExpr(s"${v.wgsl}.x")
@@ -472,12 +436,6 @@ extension (v: IVec4Expr)
   def z: IntExpr = IntExpr(s"${v.wgsl}.z")
   @annotation.targetName("ivec4W")
   def w: IntExpr = IntExpr(s"${v.wgsl}.w")
-  @annotation.targetName("ivec4AddVec")
-  def +(other: IVec4Expr): IVec4Expr = IVec4Expr(s"(${v.wgsl} + ${other.wgsl})")
-  @annotation.targetName("ivec4SubVec")
-  def -(other: IVec4Expr): IVec4Expr = IVec4Expr(s"(${v.wgsl} - ${other.wgsl})")
-  @annotation.targetName("ivec4MulVec")
-  def *(other: IVec4Expr): IVec4Expr = IVec4Expr(s"(${v.wgsl} * ${other.wgsl})")
   @annotation.targetName("ivec4Negate")
   def unary_- : IVec4Expr = IVec4Expr(s"(-${v.wgsl})")
   @annotation.targetName("ivec4Or")
@@ -493,6 +451,7 @@ extension (v: IVec4Expr)
 // UVec4Expr — unsigned integer 4-vector operations
 // ---------------------------------------------------------------------------
 
+// +/-/*// arithmetic for UVec4Expr lives in expr.scala.
 extension (v: UVec4Expr)
   @annotation.targetName("uvec4X")
   def x: UIntExpr = UIntExpr(s"${v.wgsl}.x")
@@ -502,14 +461,6 @@ extension (v: UVec4Expr)
   def z: UIntExpr = UIntExpr(s"${v.wgsl}.z")
   @annotation.targetName("uvec4W")
   def w: UIntExpr = UIntExpr(s"${v.wgsl}.w")
-  @annotation.targetName("uvec4AddVec")
-  def +(other: UVec4Expr): UVec4Expr = UVec4Expr(s"(${v.wgsl} + ${other.wgsl})")
-  @annotation.targetName("uvec4SubVec")
-  def -(other: UVec4Expr): UVec4Expr = UVec4Expr(s"(${v.wgsl} - ${other.wgsl})")
-  @annotation.targetName("uvec4MulVec")
-  def *(other: UVec4Expr): UVec4Expr = UVec4Expr(s"(${v.wgsl} * ${other.wgsl})")
-  @annotation.targetName("uvec4MulScalar")
-  def *(s: UIntExpr): UVec4Expr = UVec4Expr(s"(${v.wgsl} * ${s.wgsl})")
   @annotation.targetName("uvec4Or")
   def |(other: UVec4Expr): UVec4Expr = UVec4Expr(s"(${v.wgsl} | ${other.wgsl})")
   @annotation.targetName("uvec4And")

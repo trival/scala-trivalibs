@@ -8,72 +8,9 @@ import trivalibs.utils.numbers.NumOps
 // Implicit conversions from numeric literals
 // ---------------------------------------------------------------------------
 
-private def floatToWgsl(v: Double): String =
-  val s = v.toString
-  if s.indexOf('.') >= 0 || s.indexOf('E') >= 0 || s.indexOf('e') >= 0 then s
-  else s + ".0"
-
 given Conversion[Double, FloatExpr] = v => FloatExpr(floatToWgsl(v))
 given Conversion[Float, FloatExpr] = v => FloatExpr(floatToWgsl(v.toDouble))
 given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
-
-// ---------------------------------------------------------------------------
-// Left-operand arithmetic for numeric literals.
-//
-// A literal converts to a `FloatExpr` only as the *right* operand (via the
-// conversions above). These extensions cover the left side so `0.5 * expr`,
-// `2 - vExpr`, etc. work without reordering or ascription.
-//
-// A bare `Int` literal is treated as a *float* here, mirroring
-// `Conversion[Int, FloatExpr]` (emits `f32(n)`) — int/uint expressions are
-// opted into explicitly with `.i` / `.u`, never inferred from a left operand.
-// ---------------------------------------------------------------------------
-
-// `FloatExpr`/`Vec*Expr` are opaque aliases that all erase to `Expr`. Defining
-// one operator as several arg-type overloads (e.g. `*(FloatExpr)` and
-// `*(Vec2Expr)`) confuses operator resolution for an `Int` receiver — the
-// erasure-identical candidates get discarded and member `Int.*` is reported as
-// the failure. So instead each operator is a single *generic* method dispatched
-// by the `LeftScalar` witness, which both rebuilds the right expr subtype and
-// keeps one unambiguous `*`/`+`/… per receiver.
-
-/** Maps a left-scalar operand expr type `E` to the result type `Out` of
-  * `literal OP expr`. `Out` is always the base value type (`FloatExpr`,
-  * `Vec2Expr`, …), never a `Let`/`Var`/`Const` binding subtype — the result is a
-  * computed expression, not a binding. The subtype-bounded givens below let any
-  * binding subtype (`LetFloat`, `VarVec3`, …) resolve to its base, so e.g.
-  * `0.15 + letFloat` type-checks and yields a `FloatExpr`. */
-trait LeftScalar[E <: Expr]:
-  type Out <: Expr
-  def wrap(s: String): Out
-
-object LeftScalar:
-  type Aux[E <: Expr, O <: Expr] = LeftScalar[E] { type Out = O }
-
-  private def inst[E <: Expr, O <: Expr](f: String => O): Aux[E, O] =
-    new LeftScalar[E]:
-      type Out = O
-      def wrap(s: String): O = f(s)
-
-  // Bounds are mutually disjoint (no expr is a subtype of two base value
-  // types), so resolution is unambiguous — and each base also covers its own
-  // Let/Var/Const subtypes.
-  given [E <: FloatExpr] => Aux[E, FloatExpr] = inst(FloatExpr(_))
-  given [E <: Vec2Expr] => Aux[E, Vec2Expr] = inst(Vec2Expr(_))
-  given [E <: Vec3Expr] => Aux[E, Vec3Expr] = inst(Vec3Expr(_))
-  given [E <: Vec4Expr] => Aux[E, Vec4Expr] = inst(Vec4Expr(_))
-
-extension (d: Double)
-  inline def +[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} + ${e.wgsl})")
-  inline def -[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} - ${e.wgsl})")
-  inline def *[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} * ${e.wgsl})")
-  inline def /[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(${floatToWgsl(d)} / ${e.wgsl})")
-
-extension (n: Int)
-  inline def +[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) + ${e.wgsl})")
-  inline def -[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) - ${e.wgsl})")
-  inline def *[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) * ${e.wgsl})")
-  inline def /[E <: Expr, O <: Expr](e: E)(using L: LeftScalar.Aux[E, O]): O = L.wrap(s"(f32($n) / ${e.wgsl})")
 
 // ---------------------------------------------------------------------------
 // NumOps / NumExt for FloatExpr
