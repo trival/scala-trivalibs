@@ -171,7 +171,7 @@ bun run check            # type-check the library in isolation
 bun run test             # run all tests
 bun run examples:build   # build all examples → examples/out/
 bun run examples:watch   # incremental examples build with file watching
-bun run examples:dev     # static dev server for the examples
+bun run examples:dev     # static dev server for the examples (port 5000)
 bun run docs             # generate the Scaladoc API site → docs/api/html/
 bun run publish:local    # publish a Scala artifact to ~/.ivy2/local
 ```

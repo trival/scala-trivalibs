@@ -23,7 +23,7 @@ for (const entry of readdirSync(examplesDir)) {
 }
 
 const server = serve({
-	port: Number(process.env.PORT) || 3000,
+	port: Number(process.env.PORT) || 5000,
 	routes,
 	async fetch(req) {
 		const url = new URL(req.url)
