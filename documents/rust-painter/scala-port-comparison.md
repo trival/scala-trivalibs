@@ -279,6 +279,22 @@ Values may be: `BufferBinding[T, F]`, `GPUSampler`, a raw value matching a
 uniform field (auto-boxed into a `BufferBinding`), a `Panel`, or a
 `PanelBinding`.
 
+**Pitfall — typed-shape erasure.** `Shape.bind` / `shape.instances.add` look
+up the named field at compile time against the shape's `Uniforms` schema. If
+you put shapes into a helper with a generic-erased type (e.g.
+`def addInstance(s: Shape[?, ?], …)`), the named lookup loses the schema and
+fails with *"Name not found in Uniforms or Panel bindings"*. Either keep
+shapes typed concretely (one helper per shape, or `inline def` closing over
+the concrete `val`), or write the bindings at the call site.
+
+**Panel-level shared bindings.** Uniforms that every shape on a panel needs
+(e.g. `viewProj`) can be bound on the **panel** with `panel.bind("viewProj" := …)`
+— the value flows into each shape's bind group. Per-shape `shape.bind("tex" := otherPanel)`
+or per-instance overrides win over the panel-level value. See
+`examples/instances/Instances.scala` (panel-level `viewProj`, per-instance
+`model`/`tint`) and `sketches/rooms/grid-ceiling/GridCeiling.scala` (panel-level
+`tex = rowTex`, per-shape `tex = colTex` override).
+
 ### Panel (Rust `Layer`)
 
 Rust `Layer` constructor options:
@@ -782,7 +798,9 @@ the same surface (`+`, `-`, `*`, `.normalize`, `.dot`, `.length`, `.sin`,
 | `Mat4::perspective(fov, a, n, f)`                                 | `Mat4.perspective(fov, a, near, far)`                                                                                                                                                       |
 | `Mat4::look_at_rh`                                                | `Mat4.lookAt(...)`                                                                                                                                                                          |
 | `Transform::from_translation(v)`                                  | `Transform.fromTranslation(v)`                                                                                                                                                              |
+| `Transform::from_xyz(...).with_rotation(q).with_scale(s)`         | `Transform(translation = Vec3(...), rotation = q, scale = s)` — direct named-arg construction; no `.with_*` chain.                                                                          |
 | `Transform::rotate_y(angle)`                                      | `t.rotation.setFromRotationY(angle)` on the mutable `Transform`                                                                                                                             |
+| `t.model_normal_mat()`                                            | `normalMat(t.matrix): Mat3` — top-level fn in `trivalibs.graphics.scene` (inverse-transpose 3×3 of a `Mat4`)                                                                                |
 | `PerspectiveCamera::create(CamProps {...})`                       | `PerspectiveCamera(fov = ..., aspect = ..., pos = Vec3(...))`                                                                                                                               |
 | `cam.view_proj_mat()`                                             | `cam.viewProjMat`                                                                                                                                                                           |
 | `cam.set_aspect_ratio(a)`                                         | `cam(aspect = a)` — `PerspectiveCamera.apply` is a setter                                                                                                                                   |
@@ -839,11 +857,19 @@ and the procedural builders Rust sketches reach for:
   ([shapes.scala](../../src/graphics/geometry/shapes.scala)).
 - **`Grid[V]`** ([grid.scala](../../src/graphics/geometry/grid.scala)) →
   `Mesh(grid.ccwQuads)`. Used in `examples/geometry3d_scene/`.
+- **`Quad.fromDimensionsCenter[T](w, h, normal, center)((pos, uv) => v)`**
+  ([polygon.scala](../../src/graphics/geometry/polygon.scala)) — the direct
+  Rust `Quad3D::from_dimensions_center_f` analog. Builds an arbitrary-orientation
+  quad from a normal + centre. Wrap in `Mesh(Arr(quad))` for `toBufferedGeometry`.
+  Prefer this over a thin `Box` for single-quad planes (ground, walls).
 
 Mesh → form pipeline:
 `p.form(geometry = toBufferedGeometry(mesh, MeshBufferType.…))`.
 `MeshBufferType.FaceVerticesWithFaceNormal` / `…WithVertexNormal` append a
 generated normal — matches the Rust `face_normal` / `face_props` pattern.
+**You don't need to pass `normal=` to `mesh.addFace` / `Mesh(faces)` when using
+a `…WithNormal` buffer type** — `toBufferedGeometry` computes the normal from
+the face geometry itself.
 
 2D-line builders are not yet ported.
 
@@ -864,7 +890,7 @@ noise, blur) are now ported as `WgslFn` libraries under
 | `trivalibs::rendering::scene::SceneObject`                                  | [scene/scene_object.scala](../../src/graphics/scene/scene_object.scala)         | Ported  | Scala typeclass: `given SceneObject[T]` with `.modelMat`, `.modelViewProjMat(cam)`.                                                                                                            |
 | `trivalibs_nostd::color::{hsv2rgb, hsl2rgb, rgb2hsv, rgb2hsl}`              | [shader/lib/color.scala](../../src/graphics/shader/lib/color.scala)             | Ported  | `Color.hsv2rgb` / `hsl2rgb` / `rgb2hsv` / `rgb2hsl` as `WgslFn`s, plus `hsv2rgbSmooth` / `Smoother` / `Smoothest` variants.                                                                    |
 | `trivalibs_nostd::random::hash::*`                                          | [shader/lib/random/hash.scala](../../src/graphics/shader/lib/random/hash.scala) | Ported  | Hash WgslFns available alongside the noise modules.                                                                                                                                            |
-| `trivalibs_nostd::random::simplex` (3D/4D simplex, rot_noise_3d, psrdnoise) | [shader/lib/random/](../../src/graphics/shader/lib/random/)                     | Ported  | `Simplex.simplexNoise3d` (used in `sketches/rooms/base/`), `psrdnoise2`/`psrdnoise3`. See `examples/noise_tests/`.                                                                             |
+| `trivalibs_nostd::random::simplex` (3D/4D simplex, rot_noise_3d, psrdnoise) | [shader/lib/random/](../../src/graphics/shader/lib/random/)                     | Ported  | `Simplex.simplexNoise3d` (used in `sketches/rooms/base/`), `psrdnoise2`/`psrdnoise3`, `Psrdnoise.rotNoise3d` (used in `sketches/rooms/grid-ceiling/`). **Return packing:** value+gradient WgslFns (`rotNoise3d`, `tilingRotNoise3d`, `psrdnoise3`) are typed `Vec4` = `vec4(value, gradX, gradY, gradZ)`. Rust `NG3.0` → Scala `.x`. |
 | `trivalibs_nostd::num_ext::NumExt`                                          | [trivalibs/utils/numbers.scala](../../trivalibs/src/utils/numbers.scala)        | Ported  | CPU-side scalar `NumExt` (incl. `fract`, `fit0111`, `fit1101`). GPU DSL has the same ops on `Float/Vec2/Vec3/Vec4` Exprs. Integer GPU ops (`IntExpr`/`UIntExpr`) deferred to integer DSL work. |
 | `trivalibs_nostd::vec_ext::VecExt`                                          | [math/gpu/float_expr.scala](../../src/graphics/math/gpu/float_expr.scala)       | Ported  | `Vec2Expr` / `Vec3Expr` / `Vec4Expr` carry `.fract`, `.fit0111`, `.fit1101`, `.clamp01`, `.normalize`, `.length`, swizzles, etc.                                                               |
 | `trivalibs_nostd::blur::{gaussian_blur, gaussian_blur_9, gaussian_blur_13}` | [shader/lib/blur.scala](../../src/graphics/shader/lib/blur.scala)               | Ported  | `Blur.gaussianBlur` / `gaussianBlur5` / `gaussianBlur9` / `gaussianBlur13` / `boxBlur` as `WgslFn`s. Used by `sketches/post/bloom/`.                                                           |
