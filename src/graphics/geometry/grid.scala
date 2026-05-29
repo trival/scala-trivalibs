@@ -78,16 +78,12 @@ class Grid[T](val coordOps: CoordOps = CoordOps.ClampToEdge):
 
   def addCol(vals: Arr[T]): Unit =
     if width > 0 && vals.length != height then
-      throw new IllegalArgumentException(
-        s"addCol: length ${vals.length} != height $height",
-      )
+      throw jsError(s"addCol: length ${vals.length} != height $height")
     _cols.push(vals)
 
   def addRow(vals: Arr[T]): Unit =
     if vals.length != width then
-      throw new IllegalArgumentException(
-        s"addRow: length ${vals.length} != width $width",
-      )
+      throw jsError(s"addRow: length ${vals.length} != width $width")
     var i = 0
     while i < width do
       _cols(i).push(vals(i))

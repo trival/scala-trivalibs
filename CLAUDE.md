@@ -158,6 +158,13 @@ minimal JS:
   of optimisations. If we observe compile size regressions or need runtime field
   names, we can resolve to js.Object extension.
 - **`js.Dynamic` / `Obj.literal`** fine internally; user-facing API typed.
+- **No Scala/Java exceptions**: never `throw new NoSuchElementException`,
+  `IllegalArgumentException`, `RuntimeException`, etc. — Scala.js renders these
+  with their Java namespace (e.g. `java.util.NoSuchElementException`) in the JS
+  console, leaking implementation details to consumers. Throw a plain JS
+  `Error` instead via `throw jsError(message)` (`jsError` from `utils/js.scala`
+  only constructs the throwable — always pair it with `throw`). Use
+  `js.Error(...)` directly when rejecting a `js.Promise`.
 - **Trivalibs helpers everywhere**: `Arr`, `Dict`, `Obj.literal`, `Opt`,
   `Maybe`, `maybe()`.
 

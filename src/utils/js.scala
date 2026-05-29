@@ -116,7 +116,7 @@ extension [A](promise: js.Promise[A])
     promise.`then`[A]: a =>
       if p(a) then a
       else
-        throw new NoSuchElementException("Promise.withFilter predicate failed")
+        throw jsError("Promise.withFilter predicate failed")
 
   inline def recover[B >: A](pf: PartialFunction[Any, B]): js.Promise[B] =
     promise.`catch`[B]: (err: Any) =>
@@ -137,7 +137,7 @@ extension [A](promise: js.Promise[A | Null])
 
   inline def orError(message: String): js.Promise[A] =
     promise.`then`[A]: value =>
-      if value == null then throw new NoSuchElementException(message)
+      if value == null then throw jsError(message)
       else value.asInstanceOf[A]
 
   inline def orElse(default: => A): js.Promise[A] =
@@ -145,3 +145,13 @@ extension [A](promise: js.Promise[A | Null])
       (value: Opt[A]).getOr(default)
 
 inline def log(args: js.Any*) = js.Dynamic.global.console.log(args*)
+
+/** Constructs a throwable that surfaces as a plain JavaScript `Error` with the
+  * given message when thrown — use as `throw jsError(message)`.
+  *
+  * Scala.js unwraps the [[scala.scalajs.js.JavaScriptException]] at the throw
+  * site, so consumers see a native `Error` in the console rather than a leaked
+  * Java/Scala exception namespace (e.g. `java.util.NoSuchElementException`).
+  */
+inline def jsError(message: String): js.JavaScriptException =
+  js.JavaScriptException(js.Error(message))
