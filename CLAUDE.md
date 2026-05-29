@@ -124,7 +124,7 @@ site. Used in `allocateAttribs`.
   for reference when writing new code or reviewing PRs. Advanced recent features
   not yet present in general language model knowledge.
 - `documents/rust-painter/*.md` — Reference of the Rust Painter implementation,
-  that the Scala port follows. Our scala implementation has mostly reached
+  that the Scala port followed. Our scala implementation has mostly reached
   feature parity.
 
 ## JS Bundle Size Rules

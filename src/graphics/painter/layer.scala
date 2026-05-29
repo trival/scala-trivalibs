@@ -4,11 +4,11 @@ import trivalibs.utils.js.*
 
 type AnyLayer = Layer[?, ?]
 
-/** A full-screen post-processing pass (Rust `Effect`) attached to a [[Panel]],
-  * built from a [[Painter.layerShade]]. Layers run in order after the panel's
-  * shapes, each reading the previous pass's output (the panel auto-injects it as
-  * the first panel-texture slot unless you bind that slot to an external panel).
-  * Bind uniforms/panels with `.bind(...)`; add per-draw overrides via
+/** A full-screen post-processing pass attached to a [[Panel]], built from a
+  * [[Painter.layerShade]]. Layers run in order after the panel's shapes, each
+  * reading the previous pass's output (the panel auto-injects it as the first
+  * panel-texture slot unless you bind that slot to an external panel). Bind
+  * uniforms/panels with `.bind(...)`; add per-draw overrides via
   * `instances.add(...)`. Create through [[Painter.layer]]. See [[mipSource]] /
   * [[mipTarget]] / [[blendState]] for mip-chain and accumulation passes.
   */
@@ -27,8 +27,8 @@ class Layer[U, P] private[painter] (
   var bindings: BindingSlots = Arr()
   var panelBindings: Arr[Opt[PanelBinding]] = Arr()
 
-  /** Per-draw-call binding overrides; one rendered draw per added instance (e.g.
-    * one additive draw per light). See [[InstanceList]].
+  /** Per-draw-call binding overrides; one rendered draw per added instance
+    * (e.g. one additive draw per light). See [[InstanceList]].
     */
   val instances: InstanceList[U, P] = InstanceList[U, P](shade, painter)
 

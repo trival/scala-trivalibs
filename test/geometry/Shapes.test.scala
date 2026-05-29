@@ -128,7 +128,6 @@ class ShapesTest extends FunSuite:
   // ---------------------------------------------------------------------------
 
   test("fromDimensionsCenter normal=(0,0,1) center=(0,3,0) width=4 height=2"):
-    // Mirrors Rust test at lines 5793-5808
     val q =
       Quad.fromDimensionsCenter[Vec3](4.0, 2.0, Vec3(0, 0, 1), Vec3(0, 3, 0)):
         (pos, _) => pos
@@ -150,7 +149,6 @@ class ShapesTest extends FunSuite:
     assertEqualsDouble(quv(2)._2.y, 1.0, eps)
 
   test("fromDimensions with uvAtPivot=(1,1) bottom-right pivot"):
-    // Mirrors Rust test at lines 5810-5829
     // normal=(0,3.3,0) ≈ (0,1,0), pivot=(0,0,0), uvAtPivot=(1,1), w=h=1
     val q = Quad.fromDimensions[Vec3](
       1.0,

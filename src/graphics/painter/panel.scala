@@ -27,8 +27,8 @@ class PanelBinding(
 
 type PanelBindingValue = BufferBinding[?, ?] | GPUSampler | Panel | PanelBinding
 
-/** A render target (Rust `Layer`): owns one or more GPU textures and renders its
-  * ordered [[shapes]] then ordered [[layers]] into them when passed to
+/** A render target: owns one or more GPU textures and renders its ordered
+  * [[shapes]] then ordered [[layers]] into them when passed to
   * [[Painter.paint]]. Create via [[Painter.panel]]; mutate later with [[set]].
   * Its output texture can be sampled by other passes (bind the panel itself, or
   * [[binding]] for a specific view). Present it with [[Painter.show]].
@@ -66,8 +66,8 @@ class Panel private[painter] (val painter: Painter):
   private[painter] def panelHeight: Int = _height
 
   /** Effective number of mip levels: an explicit `mipLevels`, or — when
-    * `mipLevels == 0` (set via `mips = true`) — the full chain computed from the
-    * panel size.
+    * `mipLevels == 0` (set via `mips = true`) — the full chain computed from
+    * the panel size.
     */
   private[painter] def mipLevelCount: Int =
     if mipLevels == 0 then
@@ -105,9 +105,15 @@ class Panel private[painter] (val painter: Painter):
         _mipViews.set(key, view)
         view
 
-  private[painter] def renderViewAt(index: Int): GPUTextureView = _textureViews(index)
-  private[painter] def pongViewAt(index: Int): GPUTextureView = _pongViews(index)
-  private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(index)
+  private[painter] def renderViewAt(index: Int): GPUTextureView = _textureViews(
+    index,
+  )
+  private[painter] def pongViewAt(index: Int): GPUTextureView = _pongViews(
+    index,
+  )
+  private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(
+    index,
+  )
 
   private[painter] def depthSamplingView: GPUTextureView =
     if !_depthSamplable && _depthTexture.notNull then
@@ -141,9 +147,9 @@ class Panel private[painter] (val painter: Painter):
     _outputView = view
 
   /** Reconfigure this panel (same options as [[Painter.panel]]); returns `this`
-    * for chaining. Only provided args change. `mips = true` sets `mipLevels = 0`
-    * (full auto chain); the singular `shape`/`layer`/`format` are sugar and the
-    * plural forms take precedence.
+    * for chaining. Only provided args change. `mips = true` sets
+    * `mipLevels = 0` (full auto chain); the singular `shape`/`layer`/`format`
+    * are sugar and the plural forms take precedence.
     */
   def set[S <: AnyShape, L <: AnyLayer](
       width: Maybe[Int] = Maybe.Not,

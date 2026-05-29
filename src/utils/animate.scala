@@ -1,6 +1,7 @@
 package trivalibs.utils.animation
 
 import trivalibs.utils.js.*
+
 import scala.scalajs.js
 import scala.scalajs.js.JSNumberOps.*
 
@@ -55,7 +56,7 @@ class Animator(
   * `tpf` is **milliseconds** since the last frame. Returns the [[Animator]] —
   * keep it if you want to `stop()` later (it logs FPS automatically). The
   * standard per-frame body updates uniforms then `painter.paint(...)` /
-  * `painter.show(...)`. Note: Rust's frame callback gets seconds, not ms.
+  * `painter.show(...)`.
   */
 def animate(frame: js.Function1[Double, Unit]) =
   val animator = Animator(frame)

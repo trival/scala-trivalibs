@@ -89,8 +89,7 @@ object Color:
 
   /** HSV → RGB with cosine-based smoothing. Experimental — visually almost
     * identical to [[hsv2rgbSmooth]] but evaluates three `cos`es per fragment.
-    * Prefer [[hsv2rgbSmooth]] in practice; kept for parity with the Rust
-    * source.
+    * Prefer [[hsv2rgbSmooth]] in practice;
     */
   val hsv2rgbSmoothest: WgslFn[(c: Vec3), Vec3] =
     WgslFn.raw("hsv2rgb_smoothest"):
