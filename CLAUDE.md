@@ -236,6 +236,22 @@ mode.
   Previous examples are never deleted and must keep compiling.
 - When writing new shader code in examples, prefer the scala shader DSL over raw
   WGSL strings.
+- **Shader DSL: no type-ascription casts in user-facing code.** Write shader
+  expressions naturally — `0.5`, `(1.0 - uv.y)`, `band * vec3(...)`,
+  `lod.min(4.0)` etc. — without `: FloatExpr` (or similar) annotations. If a
+  natural-looking expression fails to compile, that's a **library-API gap**:
+  it usually points to a missing overload, conversion, or scalar/vector
+  broadcast. Ask the user whether to fix it library-side (add the missing
+  overload / conversion / extension) or accept the annotation locally; default
+  is the library fix. Common gap shapes:
+  - missing left-operand overloads (e.g. `FloatExpr * Vec3Expr` — fixed by
+    sibling overloads in the same NumOps extension block, see
+    `gpu/float_expr.scala`);
+  - missing `Double`/`Int` literal overloads when introducing more parameter
+    overloads on the same operator (Scala won't apply implicit conversions
+    through an overloaded method set);
+  - missing scalar form of an existing vector op (e.g. `.min(0.5)` next to
+    `.min(floatExpr)`).
 
 ## Documentation
 

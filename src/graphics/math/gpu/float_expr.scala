@@ -37,6 +37,51 @@ given NumOps[FloatExpr]:
     def *(b: FloatExpr): FloatExpr = FloatExpr(s"(${a.wgsl} * ${b.wgsl})")
     def /(b: FloatExpr): FloatExpr = FloatExpr(s"(${a.wgsl} / ${b.wgsl})")
     def unary_- : FloatExpr = FloatExpr(s"(-${a.wgsl})")
+
+    // Numeric-literal overloads. Adding vector overloads below disables the
+    // Conversion[Double|Int, FloatExpr] path for the right operand (Scala
+    // won't apply implicit conversions through an overloaded method set), so
+    // these explicit overloads land literals directly.
+    def +(b: Double): FloatExpr = a + (b: FloatExpr)
+    def -(b: Double): FloatExpr = a - (b: FloatExpr)
+    def *(b: Double): FloatExpr = a * (b: FloatExpr)
+    def /(b: Double): FloatExpr = a / (b: FloatExpr)
+    def +(b: Int): FloatExpr = a + (b: FloatExpr)
+    def -(b: Int): FloatExpr = a - (b: FloatExpr)
+    def *(b: Int): FloatExpr = a * (b: FloatExpr)
+    def /(b: Int): FloatExpr = a / (b: FloatExpr)
+
+    // Left-scalar broadcast against a vector. Mirrors `Vec * FloatExpr` on
+    // the right side so `floatExpr * vec3Expr` resolves without manual
+    // `vec3(s,s,s)` wrapping. `@targetName` keeps JVM signatures distinct
+    // (opaque types all erase to `Expr`).
+    @annotation.targetName("fAddVec2")
+    def +(v: Vec2Expr): Vec2Expr = Vec2Expr(s"(${a.wgsl} + ${v.wgsl})")
+    @annotation.targetName("fAddVec3")
+    def +(v: Vec3Expr): Vec3Expr = Vec3Expr(s"(${a.wgsl} + ${v.wgsl})")
+    @annotation.targetName("fAddVec4")
+    def +(v: Vec4Expr): Vec4Expr = Vec4Expr(s"(${a.wgsl} + ${v.wgsl})")
+
+    @annotation.targetName("fSubVec2")
+    def -(v: Vec2Expr): Vec2Expr = Vec2Expr(s"(${a.wgsl} - ${v.wgsl})")
+    @annotation.targetName("fSubVec3")
+    def -(v: Vec3Expr): Vec3Expr = Vec3Expr(s"(${a.wgsl} - ${v.wgsl})")
+    @annotation.targetName("fSubVec4")
+    def -(v: Vec4Expr): Vec4Expr = Vec4Expr(s"(${a.wgsl} - ${v.wgsl})")
+
+    @annotation.targetName("fMulVec2")
+    def *(v: Vec2Expr): Vec2Expr = Vec2Expr(s"(${a.wgsl} * ${v.wgsl})")
+    @annotation.targetName("fMulVec3")
+    def *(v: Vec3Expr): Vec3Expr = Vec3Expr(s"(${a.wgsl} * ${v.wgsl})")
+    @annotation.targetName("fMulVec4")
+    def *(v: Vec4Expr): Vec4Expr = Vec4Expr(s"(${a.wgsl} * ${v.wgsl})")
+
+    @annotation.targetName("fDivVec2")
+    def /(v: Vec2Expr): Vec2Expr = Vec2Expr(s"(${a.wgsl} / ${v.wgsl})")
+    @annotation.targetName("fDivVec3")
+    def /(v: Vec3Expr): Vec3Expr = Vec3Expr(s"(${a.wgsl} / ${v.wgsl})")
+    @annotation.targetName("fDivVec4")
+    def /(v: Vec4Expr): Vec4Expr = Vec4Expr(s"(${a.wgsl} / ${v.wgsl})")
   def zero: FloatExpr = FloatExpr("0.0")
   def one: FloatExpr = FloatExpr("1.0")
 
