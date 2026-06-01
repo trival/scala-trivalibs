@@ -210,9 +210,20 @@ gitignored `.vscode/settings.json`, so each dev sets them):
 ```
 
 Metals then writes `.mcp.json` (gitignored, dynamic port) exposing tools like
-`get-docs`, `inspect`, `get-source`, `glob-search`. A Claude Code session
-started _after_ `.mcp.json` exists picks it up and prompts to approve the
-`metals` server.
+`get-docs`, `inspect`, `get-source`, `glob-search`. Start the Claude session
+_after_ `.mcp.json` exists, then activate the server with **`/mcp`** → `metals`
+→ connect (`/mcp` should then show it **connected**). To skip that step on every
+session, pre-approve it once in your local Claude settings — the CLI otherwise
+prompts on first run, and the VS Code extension silently skips an un-approved
+server:
+
+```jsonc
+// .claude/settings.local.json  (gitignored, per machine)
+{ "enabledMcpjsonServers": ["metals"] }
+```
+
+Note the **dynamic port**: each Metals restart rewrites `.mcp.json`, so sessions
+started earlier lose the tools — `/mcp` → reconnect, or restart the session.
 
 ## License
 
