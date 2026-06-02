@@ -250,7 +250,12 @@ class Painter(
 
     inline erasedValue[U] match
       case _: EmptyTuple =>
-        val sd = Shader[A, V, EmptyTuple](vertWgsl, fragWgsl, helperFns)
+        val sd =
+          Shader.full[A, V, EmptyTuple, VertIn, VertOut, FragIn, FragOut](
+            vertWgsl,
+            fragWgsl,
+            helperFns,
+          )
         val baseWgsl = sd.generateWGSL
         val wgsl =
           if panelDecls.isEmpty then baseWgsl else s"$baseWgsl\n\n$panelDecls"
@@ -275,7 +280,11 @@ class Painter(
         )
       case _ =>
         type Wrapped = (values: U)
-        val sd = Shader[A, V, Wrapped](vertWgsl, fragWgsl, helperFns)
+        val sd = Shader.full[A, V, Wrapped, VertIn, VertOut, FragIn, FragOut](
+          vertWgsl,
+          fragWgsl,
+          helperFns,
+        )
         val baseWgsl = sd.generateWGSL
         val wgsl =
           if panelDecls.isEmpty then baseWgsl else s"$baseWgsl\n\n$panelDecls"
@@ -314,7 +323,7 @@ class Painter(
 
     inline erasedValue[U] match
       case _: EmptyTuple =>
-        val sd = Shader.full[A, V, EmptyTuple, None, VertOut, None, FO](
+        val sd = Shader.full[A, V, EmptyTuple, VertIn, VertOut, FragIn, FO](
           vertWgsl,
           fragWgsl,
           helperFns,
@@ -343,7 +352,7 @@ class Painter(
         )
       case _ =>
         type Wrapped = (values: U)
-        val sd = Shader.full[A, V, Wrapped, None, VertOut, None, FO](
+        val sd = Shader.full[A, V, Wrapped, VertIn, VertOut, FragIn, FO](
           vertWgsl,
           fragWgsl,
           helperFns,
@@ -434,7 +443,7 @@ class Painter(
           EmptyTuple,
           VBI,
           VertOut,
-          EmptyTuple,
+          FragIn,
           FragOut,
         ](LAYER_VERT_BODY, fragWgsl, helperFns)
         val baseWgsl = sd.generateWGSL
@@ -468,7 +477,7 @@ class Painter(
           Wrapped,
           VBI,
           VertOut,
-          EmptyTuple,
+          FragIn,
           FragOut,
         ](LAYER_VERT_BODY, fragWgsl, helperFns)
         val baseWgsl = sd.generateWGSL
@@ -512,7 +521,7 @@ class Painter(
           EmptyTuple,
           VBI,
           VertOut,
-          EmptyTuple,
+          FragIn,
           FO,
         ](LAYER_VERT_BODY, fragWgsl, helperFns)
         val baseWgsl = sd.generateWGSL
@@ -546,7 +555,7 @@ class Painter(
           Wrapped,
           VBI,
           VertOut,
-          EmptyTuple,
+          FragIn,
           FO,
         ](LAYER_VERT_BODY, fragWgsl, helperFns)
         val baseWgsl = sd.generateWGSL

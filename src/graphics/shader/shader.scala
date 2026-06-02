@@ -1,10 +1,13 @@
 package trivalibs.graphics.shader
 
+import trivalibs.bufferdata.StructArray
+import trivalibs.graphics.painter.GPUBindGroupLayout
+import trivalibs.graphics.painter.GPUDevice
+import trivalibs.graphics.painter.GPUPipelineLayout
+import trivalibs.utils.js.Arr
+
 import scala.compiletime.erasedValue
 import scala.scalajs.js
-import trivalibs.bufferdata.StructArray
-import trivalibs.utils.js.Arr
-import trivalibs.graphics.painter.{GPUBindGroupLayout, GPUPipelineLayout, GPUDevice}
 
 /** Complete shader definition with all type parameters
   *
@@ -19,7 +22,7 @@ case class ShaderDef[
     VertBuiltinIn, // @builtin inputs (default: None)
     VertBuiltinOut, // @builtin outputs (default: VertOut)
     FragBuiltinIn, // @builtin inputs (default: None)
-    FragmentOut // Custom outputs (default: FragOut)
+    FragmentOut, // Custom outputs (default: FragOut)
 ](
     vertexBody: String,
     fragmentBody: String,
@@ -32,14 +35,14 @@ case class ShaderDef[
 
   /** Create bind group layouts from the Uniforms type */
   inline def createBindGroupLayouts(
-      device: GPUDevice
+      device: GPUDevice,
   ): Arr[GPUBindGroupLayout] =
     layouts.createBindGroupLayouts[Uniforms](device)
 
   /** Create both bind group layouts and pipeline layout from the Uniforms type
     */
   inline def createPipelineLayout(
-      device: GPUDevice
+      device: GPUDevice,
   ): (Arr[GPUBindGroupLayout], GPUPipelineLayout) =
     layouts.createPipelineLayoutFromUniforms[Uniforms](device)
 
@@ -52,6 +55,9 @@ case class ShaderDef[
     val fragmentOutputStruct =
       derive.generateCombinedStruct[FragmentOut, EmptyTuple]("FragmentOutput")
     val uniformDecls = derive.generateUniforms[Uniforms]
+    // Fragment-only builtin inputs (e.g. front_facing) — can't ride in the
+    // shared VertexOutput, so they're extra @builtin params on fs_main.
+    val fragBuiltinParams = derive.fragBuiltinParams[FragBuiltinIn]
 
     buildWGSL(
       vertexInputStruct,
@@ -59,7 +65,8 @@ case class ShaderDef[
       fragmentOutputStruct,
       uniformDecls,
       vertexBody,
-      fragmentBody
+      fragmentBody,
+      fragBuiltinParams,
     )
 
   private def buildWGSL(
@@ -68,7 +75,8 @@ case class ShaderDef[
       fragmentOutputStruct: String,
       uniformDecls: String,
       vertexBody: String,
-      fragmentBody: String
+      fragmentBody: String,
+      fragBuiltinParams: String,
   ): String =
     val all = Arr(
       vertexInputStruct,
@@ -77,7 +85,7 @@ case class ShaderDef[
       uniformDecls,
       helperFns,
       buildVertexMain(vertexBody),
-      buildFragmentMain(fragmentBody)
+      buildFragmentMain(fragmentBody, fragBuiltinParams),
     )
     val parts = Arr[String]()
     var i = 0
@@ -94,9 +102,9 @@ $body
   return out;
 }"""
 
-  private def buildFragmentMain(body: String): String =
+  private def buildFragmentMain(body: String, builtinParams: String): String =
     s"""@fragment
-fn fs_main(in: VertexOutput) -> FragmentOutput {
+fn fs_main(in: VertexOutput$builtinParams) -> FragmentOutput {
   var out: FragmentOutput;
 $body
   return out;
@@ -129,4 +137,8 @@ object Shader:
       fragmentBody: String,
       helperFns: String = "",
   ): ShaderDef[A, V, U, VBI, VBO, FBI, FO] =
-    new ShaderDef[A, V, U, VBI, VBO, FBI, FO](vertexBody, fragmentBody, helperFns)
+    new ShaderDef[A, V, U, VBI, VBO, FBI, FO](
+      vertexBody,
+      fragmentBody,
+      helperFns,
+    )

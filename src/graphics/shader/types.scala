@@ -1,9 +1,17 @@
 package trivalibs.graphics.shader
 
-import trivalibs.graphics.math.cpu.*
-import trivalibs.graphics.math.gpu.{IVec2, IVec3, IVec4, UInt, UVec2, UVec3, UVec4}
-import trivalibs.graphics.math.gpu.Expr.{Texture2D, Sampler}
 import trivalibs.bufferdata.F32
+import trivalibs.graphics.math.cpu.*
+import trivalibs.graphics.math.gpu.Expr.DepthTexture2D
+import trivalibs.graphics.math.gpu.Expr.Sampler
+import trivalibs.graphics.math.gpu.Expr.Texture2D
+import trivalibs.graphics.math.gpu.IVec2
+import trivalibs.graphics.math.gpu.IVec3
+import trivalibs.graphics.math.gpu.IVec4
+import trivalibs.graphics.math.gpu.UInt
+import trivalibs.graphics.math.gpu.UVec2
+import trivalibs.graphics.math.gpu.UVec3
+import trivalibs.graphics.math.gpu.UVec4
 
 import scala.compiletime.*
 
@@ -14,6 +22,7 @@ trait WGSLType[T]:
   def alignment: Int
   def vertexFormat: String
   def isSampler: Boolean = false
+  def isDepthTexture: Boolean = false
   type AttribBuffer <: Tuple
   type UniformBuffer <: Tuple
 
@@ -99,6 +108,23 @@ type None = EmptyTuple
 /** Default vertex builtin output */
 type VertOut = (position: BuiltinPosition)
 
+/** Default vertex builtin inputs always declared for DSL shape shaders, exposed
+  * as `ctx.vertexIndex` / `ctx.instanceIndex`. Unused ones are stripped by the
+  * GPU shader compiler, so they cost nothing when not referenced.
+  */
+type VertIn = (
+    vertexIndex: BuiltinVertexIndex,
+    instanceIndex: BuiltinInstanceIndex,
+)
+
+/** Default fragment builtin inputs always declared for DSL shades, exposed as
+  * `ctx.frontFacing` (and `ctx.fragCoord`, which rides on the always-present
+  * `@builtin(position)`). `sample_index` is intentionally excluded — using it
+  * forces per-sample shading on MSAA targets — declare it via `Shader.full`
+  * only when you actually need it.
+  */
+type FragIn = (frontFacing: BuiltinFrontFacing)
+
 /** Default fragment output */
 type FragOut = (color: Vec4)
 
@@ -166,6 +192,15 @@ given WGSLType[Sampler]:
   type AttribBuffer = EmptyTuple
   type UniformBuffer = EmptyTuple
 
+given WGSLType[DepthTexture2D]:
+  def wgslName = "texture_depth_2d"
+  def byteSize = 0
+  def alignment = 0
+  def vertexFormat = ""
+  override def isDepthTexture = true
+  type AttribBuffer = EmptyTuple
+  type UniformBuffer = EmptyTuple
+
 // =============================================================================
 // Panel Visibility Wrappers (Group 1 texture bindings)
 // =============================================================================
@@ -178,6 +213,20 @@ sealed trait VertexPanel
 
 /** Panel texture visible in both vertex and fragment shaders */
 sealed trait SharedPanel
+
+// Depth-texture panel variants — same visibility, but the bound panel attachment
+// is sampled as a depth texture (`texture_depth_2d`, `sampleType: "depth"`).
+// `ctx.textures.<name>` yields a `DepthTexture2D`; bind with
+// `panel.binding(depth = true)`.
+
+/** Depth panel texture visible only in the fragment shader */
+sealed trait FragmentDepthPanel
+
+/** Depth panel texture visible only in the vertex shader */
+sealed trait VertexDepthPanel
+
+/** Depth panel texture visible in both vertex and fragment shaders */
+sealed trait SharedDepthPanel
 
 // =============================================================================
 // Integer Types (shader-only; no CPU buffer representation)

@@ -30,12 +30,18 @@ class GridTest extends FunSuite:
     assertEquals(g.get(0, 99), 2)
 
   test("CircleAll wraps both axes"):
-    val g = Grid.fromCols[Int](Arr(Arr(1, 2, 3), Arr(4, 5, 6), Arr(7, 8, 9)), CoordOps.CircleAll)
+    val g = Grid.fromCols[Int](
+      Arr(Arr(1, 2, 3), Arr(4, 5, 6), Arr(7, 8, 9)),
+      CoordOps.CircleAll,
+    )
     // get(4,4) on 3×3 → (4%3=1, 4%3=1) → get(1,1) = 5
     assertEquals(g.get(4, 4), 5)
 
   test("CircleAll wraps negative axes"):
-    val g = Grid.fromCols[Int](Arr(Arr(1, 2, 3), Arr(4, 5, 6), Arr(7, 8, 9)), CoordOps.CircleAll)
+    val g = Grid.fromCols[Int](
+      Arr(Arr(1, 2, 3), Arr(4, 5, 6), Arr(7, 8, 9)),
+      CoordOps.CircleAll,
+    )
     // get(-1,-1) on 3×3 → (-1+3=2, -1+3=2) → get(2,2) = 9
     assertEquals(g.get(-1, -1), 9)
 
@@ -55,12 +61,12 @@ class GridTest extends FunSuite:
 
   test("addCol length mismatch throws"):
     val g = make2x2()
-    intercept[IllegalArgumentException]:
+    intercept[scala.scalajs.js.JavaScriptException]:
       g.addCol(Arr(10, 20, 30))
 
   test("addRow length mismatch throws"):
     val g = make2x2()
-    intercept[IllegalArgumentException]:
+    intercept[scala.scalajs.js.JavaScriptException]:
       g.addRow(Arr(10))
 
   test("addRow appends one element to each column"):
@@ -111,7 +117,8 @@ class GridTest extends FunSuite:
     assertEquals(b.get.value, 2)
 
   test("Vertex.left wraps with CircleAll"):
-    val g = Grid.fromCols[Int](Arr(Arr(10, 20), Arr(30, 40)), CoordOps.CircleAll)
+    val g =
+      Grid.fromCols[Int](Arr(Arr(10, 20), Arr(30, 40)), CoordOps.CircleAll)
     val v = g.vertex(0, 0)
     val l = v.left
     assert(l != null)

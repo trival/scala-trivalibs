@@ -112,6 +112,15 @@ object Expr:
   opaque type Sampler <: Expr = Expr
   object Sampler { def apply(s: String): Sampler = new Expr(s) }
 
+  /** A 2D depth texture in the shader DSL (WGSL `texture_depth_2d`), obtained
+    * from `ctx.textures.<name>` for a depth panel field (declared with a
+    * `*DepthPanel` marker). Read it with `.load(coord, level)` (no sampler,
+    * point-exact) — depth reads yield a single channel, so the result is a
+    * scalar `FloatExpr`, not a `Vec4`.
+    */
+  opaque type DepthTexture2D <: Expr = Expr
+  object DepthTexture2D { def apply(s: String): DepthTexture2D = new Expr(s) }
+
   // Local types — each <: its Expr type (for math ops) & LetExpr (for :=)
   // At runtime all are LetExpr instances, so selectDynamic returning
   // LetExpr(name) + asInstanceOf cast works safely.
@@ -274,6 +283,59 @@ extension (tex: Expr.Texture2D)
   def numLevels: Expr.FloatExpr =
     Expr.FloatExpr(s"f32(textureNumLevels(${tex.wgsl}))")
 
+  /** Point-read a texel by integer coordinate at an explicit mip `level`, with
+    * no sampler and no filtering (nearest). Coords are texel indices (not
+    * normalized UV); out-of-bounds reads return 0. Ideal for fullscreen / layer
+    * passes that read a texture 1:1 with their target (e.g.
+    * `tex.load(ivec2(ctx.in.fragCoord.xy), 0.i)`).
+    */
+  def load(coord: Expr.IVec2Expr, level: Expr.IntExpr): Expr.Vec4Expr =
+    Expr.Vec4Expr(s"textureLoad(${tex.wgsl}, ${coord.wgsl}, ${level.wgsl})")
+
+  /** [[load]] at mip 0. */
+  def load(coord: Expr.IVec2Expr): Expr.Vec4Expr =
+    Expr.Vec4Expr(s"textureLoad(${tex.wgsl}, ${coord.wgsl}, 0)")
+
+  /** Size in texels of the bound texture's mip 0, as `vec2<u32>`. Convert to
+    * float for UV→texel math: `ivec2(uv * vec2(tex.dimensions))`.
+    */
+  def dimensions: Expr.UVec2Expr =
+    Expr.UVec2Expr(s"textureDimensions(${tex.wgsl})")
+
+/** Read ops on a panel depth texture (`ctx.textures.<name>` for a depth panel
+  * field). Depth reads yield a single channel, so each returns a scalar
+  * `FloatExpr`.
+  */
+extension (tex: Expr.DepthTexture2D)
+  /** Point-read the depth texel by integer coordinate at mip `level`, no
+    * sampler. Coords are texel indices (not UV); out-of-bounds reads return 0.
+    * Primary way to read a depth attachment in a 1:1 fullscreen / layer pass:
+    * `depthTex.load(ivec2(ctx.in.fragCoord.xy), 0.i)`.
+    */
+  @annotation.targetName("depthTexLoad")
+  def load(coord: Expr.IVec2Expr, level: Expr.IntExpr): Expr.FloatExpr =
+    Expr.FloatExpr(s"textureLoad(${tex.wgsl}, ${coord.wgsl}, ${level.wgsl})")
+
+  /** [[load]] at mip 0. */
+  @annotation.targetName("depthTexLoad0")
+  def load(coord: Expr.IVec2Expr): Expr.FloatExpr =
+    Expr.FloatExpr(s"textureLoad(${tex.wgsl}, ${coord.wgsl}, 0)")
+
+  /** Sample the depth at `uv` with a **non-comparison** `sampler`. Returns the
+    * stored depth as a scalar. (No `sampleLevel` variant: depth attachments are
+    * single-level — the mip pyramid is built on the colour texture, not depth.
+    * For shadow-map PCF use a comparison sampler + `textureSampleCompare`, not
+    * yet wrapped.)
+    */
+  @annotation.targetName("depthTexSample")
+  def sample(uv: Expr.Vec2Expr, sampler: Expr.Sampler): Expr.FloatExpr =
+    Expr.FloatExpr(s"textureSample(${tex.wgsl}, ${sampler.wgsl}, ${uv.wgsl})")
+
+  /** Size in texels of the depth texture's mip 0, as `vec2<u32>`. */
+  @annotation.targetName("depthTexDimensions")
+  def dimensions: Expr.UVec2Expr =
+    Expr.UVec2Expr(s"textureDimensions(${tex.wgsl})")
+
 export Expr.{
   FloatExpr,
   Vec2Expr,
@@ -284,6 +346,7 @@ export Expr.{
   Mat4Expr,
   BoolExpr,
   Texture2D,
+  DepthTexture2D,
   Sampler,
   IntExpr,
   UIntExpr,

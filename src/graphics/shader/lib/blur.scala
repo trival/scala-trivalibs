@@ -163,3 +163,98 @@ object Blur:
     i = i + 1;
   }
   return sum / (1.0 + f32(support) * 2.0);"""
+
+  // ===========================================================================
+  // 2D single-pass pyramid kernels
+  //
+  // The blurs above are SEPARABLE 1D kernels: a wide blur at one resolution
+  // needs two passes (horizontal `dir=(1,0)` + vertical `dir=(0,1)`) and they
+  // exploit the linear-sampling trick. The two kernels below are a different
+  // family — NON-SEPARABLE 2D kernels run in a SINGLE pass with a tiny
+  // footprint, meant to fill a mip chain: each level reads the previous
+  // (higher-res) level, so the mip chain itself does the spreading (effective
+  // radius ≈ doubles per level) and per-level work stays cheap.
+  //
+  // Use separable (above) for a wide blur at one resolution; use these to build
+  // a downsample/blur pyramid. `radius` is the tap offset in destination-mip
+  // texels.
+  // ===========================================================================
+
+  /** 2D 4-tap box downsample (single pass) — four corners at ±`radius`,
+    * averaged. The classic bloom mip-downsample step.
+    *
+    * @param radius
+    *   tap offset in destination-mip texels
+    */
+  val boxBlur2d: WgslFn[
+    (tex: Texture2D, s: Sampler, uv: Vec2, res: Vec2, radius: Float),
+    Vec4,
+  ] =
+    WgslFn.raw("box_blur_2d"):
+      """  let o = vec2<f32>(radius) / res;
+  var color = textureSample(tex, s, uv - o);
+  color += textureSample(tex, s, uv + vec2<f32>(o.x, -o.y));
+  color += textureSample(tex, s, uv + vec2<f32>(-o.x, o.y));
+  color += textureSample(tex, s, uv + o);
+  return color * 0.25;"""
+
+  /** 2D 9-tap tent / 3×3 binomial blur (single pass). Weights
+    * `[1 2 1; 2 4 2; 1 2 1] / 16` (center .25, edges .125, corners .0625) on a
+    * 3×3 lattice spaced `radius` texels. Softer than [[boxBlur2d]]; the
+    * per-level downsample of the reflection blur pyramid (and the bloom
+    * upsample step).
+    *
+    * @param radius
+    *   tap offset in destination-mip texels
+    */
+  val tentBlur2d: WgslFn[
+    (tex: Texture2D, s: Sampler, uv: Vec2, res: Vec2, radius: Float),
+    Vec4,
+  ] =
+    WgslFn.raw("tent_blur_2d"):
+      """  let o = vec2<f32>(radius) / res;
+  var color = textureSample(tex, s, uv) * 0.25;
+  color += (textureSample(tex, s, uv + vec2<f32>(0.0, o.y)) + textureSample(tex, s, uv + vec2<f32>(0.0, -o.y)) + textureSample(tex, s, uv + vec2<f32>(o.x, 0.0)) + textureSample(tex, s, uv + vec2<f32>(-o.x, 0.0))) * 0.125;
+  color += (textureSample(tex, s, uv + o) + textureSample(tex, s, uv + vec2<f32>(-o.x, o.y)) + textureSample(tex, s, uv + vec2<f32>(o.x, -o.y)) + textureSample(tex, s, uv - o)) * 0.0625;
+  return color;"""
+
+  // ---------------------------------------------------------------------------
+  // Res-free (`*Auto`) variants — derive the resolution from
+  // `textureDimensions(tex)` instead of a `res` uniform, so a downsample/blur
+  // chain needs no per-mip `res` bindings or `onResize` bookkeeping. `radius` is
+  // the tap offset in **source** texels (the bound input texture's own texels —
+  // for a mip-source layer that's the source mip, since it binds a single-mip
+  // view). A mirror/bloom pyramid that used `radius = 2` dst-mip texels with the
+  // `res` variants matches `radius = 4` here (dst = src / 2).
+  // ---------------------------------------------------------------------------
+
+  /** Res-free [[boxBlur2d]] — resolution from `textureDimensions(tex)`.
+    * @param radius
+    *   tap offset in source texels
+    */
+  val boxBlur2dAuto: WgslFn[
+    (tex: Texture2D, s: Sampler, uv: Vec2, radius: Float),
+    Vec4,
+  ] =
+    WgslFn.raw("box_blur_2d_auto"):
+      """  let o = vec2<f32>(radius) / vec2<f32>(textureDimensions(tex));
+  var color = textureSample(tex, s, uv - o);
+  color += textureSample(tex, s, uv + vec2<f32>(o.x, -o.y));
+  color += textureSample(tex, s, uv + vec2<f32>(-o.x, o.y));
+  color += textureSample(tex, s, uv + o);
+  return color * 0.25;"""
+
+  /** Res-free [[tentBlur2d]] — resolution from `textureDimensions(tex)`.
+    * @param radius
+    *   tap offset in source texels
+    */
+  val tentBlur2dAuto: WgslFn[
+    (tex: Texture2D, s: Sampler, uv: Vec2, radius: Float),
+    Vec4,
+  ] =
+    WgslFn.raw("tent_blur_2d_auto"):
+      """  let o = vec2<f32>(radius) / vec2<f32>(textureDimensions(tex));
+  var color = textureSample(tex, s, uv) * 0.25;
+  color += (textureSample(tex, s, uv + vec2<f32>(0.0, o.y)) + textureSample(tex, s, uv + vec2<f32>(0.0, -o.y)) + textureSample(tex, s, uv + vec2<f32>(o.x, 0.0)) + textureSample(tex, s, uv + vec2<f32>(-o.x, 0.0))) * 0.125;
+  color += (textureSample(tex, s, uv + o) + textureSample(tex, s, uv + vec2<f32>(-o.x, o.y)) + textureSample(tex, s, uv + vec2<f32>(o.x, -o.y)) + textureSample(tex, s, uv - o)) * 0.0625;
+  return color;"""

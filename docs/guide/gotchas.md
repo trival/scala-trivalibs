@@ -20,6 +20,28 @@ auto-bound to its first panel slot. To read a **different** panel at that slot
 explicitly: `layer.bind("scene" := scenePanel, …)`. Then the painter uses your
 binding instead of the auto-injected one.
 
+### Panel-level bindings fill a shape's _unbound_ slots — reuse a shape across panels
+
+`panel.bind("name" := value)` supplies a uniform / sampler / texture to every
+shape the panel draws, but only for slots the shape itself left unbound (shape
+bindings always win; the panel only fills nulls). So one shape instance can live
+in two panels and read a _different_ value for the same uniform from each — e.g.
+a wall shape bound with just its texture, reading `vp` from
+`scenePanel.bind("vp" := sceneVp)` in the normal pass and
+`mirrorPanel.bind("vp" := mirrorVp)` in a reflection pass. No per-frame
+rebinding, no duplicate shapes. (Works for group-0 uniforms, not just textures.)
+
+### Depth textures: bind with `binding(depth = true)`, single-level, lazy-sampleable
+
+Sample a panel's depth attachment by binding `panel.binding(depth = true)` to a
+field declared with a `*DepthPanel` marker (`FragmentDepthPanel`, …); it reads as
+a `DepthTexture2D`. Two traps: (1) the depth attachment is **single-level** — the
+mip pyramid is built on the colour texture, so there's no depth `sampleLevel`;
+use `.load` (no sampler) or `.sample`. (2) The depth texture is **lazily
+recreated as sampleable the first time it's sampled**, so the very first frame
+reads an empty depth — a one-frame startup glitch, harmless in an animation loop
+(each `paint(panel)` submits separately, so it's not a validation error).
+
 ### `paint` order matters; `show` presents
 
 `paint(a, b, c)` renders in order — list panels so a panel that samples another

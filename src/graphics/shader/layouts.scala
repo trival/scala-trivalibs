@@ -1,12 +1,12 @@
 package trivalibs.graphics.shader
 
 import trivalibs.graphics.math.gpu.Expr.Sampler
-import trivalibs.utils.js.Arr
-import trivalibs.utils.js.Obj
 import trivalibs.graphics.painter.GPUBindGroupLayout
 import trivalibs.graphics.painter.GPUDevice
 import trivalibs.graphics.painter.GPUPipelineLayout
 import trivalibs.graphics.painter.GPUShaderStage
+import trivalibs.utils.js.Arr
+import trivalibs.utils.js.Obj
 
 import scala.NamedTuple.AnyNamedTuple
 import scala.compiletime.*
@@ -33,7 +33,7 @@ object layouts:
       case _: EmptyTuple     => Arr()
       case _: (head *: rest) =>
         Arr(
-          summonInline[WGSLType[head]].vertexFormat
+          summonInline[WGSLType[head]].vertexFormat,
         ) ++ fieldVertexFormatsImpl[rest]
 
   /** Get byte sizes for each field in a named tuple */
@@ -48,7 +48,7 @@ object layouts:
       case _: EmptyTuple     => Arr()
       case _: (head *: rest) =>
         Arr(summonInline[WGSLType[head]].byteSize) ++ fieldByteSizesImpl[
-          rest
+          rest,
         ]
 
   /** Calculate field offsets from byte sizes */
@@ -92,14 +92,14 @@ object layouts:
         Obj.literal(
           shaderLocation = i,
           offset = offsets(i),
-          format = formats(i)
-        )
+          format = formats(i),
+        ),
       )
       i += 1
 
     Obj.literal(
       arrayStride = stride,
-      attributes = attributes
+      attributes = attributes,
     )
 
   // ===========================================================================
@@ -124,7 +124,7 @@ object layouts:
       case _ => Arr()
 
   private inline def bindGroupEntriesImpl[T <: Tuple](
-      bindingIdx: Int
+      bindingIdx: Int,
   ): Arr[js.Dynamic] =
     inline erasedValue[T] match
       case _: EmptyTuple     => Arr()
@@ -174,31 +174,31 @@ object layouts:
 
   /** Create bind group layouts from the Uniforms type parameter */
   inline def createBindGroupLayouts[Uniforms](
-      device: GPUDevice
+      device: GPUDevice,
   ): Arr[GPUBindGroupLayout] =
     val descriptors = bindGroupLayoutDescriptors[Uniforms]
     val result = Arr[GPUBindGroupLayout]()
     for entries <- descriptors do
       result.push(
         device.createBindGroupLayout(
-          Obj.literal(entries = entries)
-        )
+          Obj.literal(entries = entries),
+        ),
       )
     result
 
   /** Create a pipeline layout from bind group layouts */
   def createPipelineLayout(
       device: GPUDevice,
-      bindGroupLayouts: Arr[GPUBindGroupLayout]
+      bindGroupLayouts: Arr[GPUBindGroupLayout],
   ): GPUPipelineLayout =
     device.createPipelineLayout(
-      Obj.literal(bindGroupLayouts = bindGroupLayouts)
+      Obj.literal(bindGroupLayouts = bindGroupLayouts),
     )
 
   /** Create both bind group layouts and pipeline layout from the Uniforms type
     */
   inline def createPipelineLayoutFromUniforms[Uniforms](
-      device: GPUDevice
+      device: GPUDevice,
   ): (Arr[GPUBindGroupLayout], GPUPipelineLayout) =
     val bgLayouts = createBindGroupLayouts[Uniforms](device)
     val pipelineLayout = createPipelineLayout(device, bgLayouts)
@@ -214,7 +214,21 @@ object layouts:
       case _: FragmentPanel => GPUShaderStage.FRAGMENT
       case _: VertexPanel   => GPUShaderStage.VERTEX
       case _: SharedPanel   => GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
-      case _                => GPUShaderStage.FRAGMENT
+      case _: FragmentDepthPanel => GPUShaderStage.FRAGMENT
+      case _: VertexDepthPanel   => GPUShaderStage.VERTEX
+      case _: SharedDepthPanel   =>
+        GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+      case _ => GPUShaderStage.FRAGMENT
+
+  /** Texture bind-group entry for a panel field: depth panels declare
+    * `sampleType: "depth"`, all others the default (filterable float).
+    */
+  private inline def panelTextureLayout[T]: js.Dynamic =
+    inline erasedValue[T] match
+      case _: FragmentDepthPanel => Obj.literal(sampleType = "depth")
+      case _: VertexDepthPanel   => Obj.literal(sampleType = "depth")
+      case _: SharedDepthPanel   => Obj.literal(sampleType = "depth")
+      case _                     => Obj.literal()
 
   private inline def panelBindGroupEntries[P]: Arr[js.Dynamic] =
     inline erasedValue[P] match
@@ -224,7 +238,7 @@ object layouts:
       case _ => Arr()
 
   private inline def panelBindGroupEntriesImpl[T <: Tuple](
-      bindingIdx: Int
+      bindingIdx: Int,
   ): Arr[js.Dynamic] =
     inline erasedValue[T] match
       case _: EmptyTuple     => Arr()
@@ -232,18 +246,18 @@ object layouts:
         val entry = Obj.literal(
           binding = bindingIdx,
           visibility = panelVisibilityFlags[head],
-          texture = Obj.literal(),
+          texture = panelTextureLayout[head],
         )
         Arr(entry) ++ panelBindGroupEntriesImpl[rest](bindingIdx + 1)
 
-  /** Create the group 1 bind group layout for panel texture bindings.
-    * Returns null when P = EmptyTuple.
+  /** Create the group 1 bind group layout for panel texture bindings. Returns
+    * null when P = EmptyTuple.
     */
   inline def createPanelBindGroupLayout[P](
-      device: GPUDevice
+      device: GPUDevice,
   ): GPUBindGroupLayout | Null =
     inline erasedValue[P] match
       case _: EmptyTuple => null
-      case _ =>
+      case _             =>
         val entries = panelBindGroupEntries[P]
         device.createBindGroupLayout(Obj.literal(entries = entries))

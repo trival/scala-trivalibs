@@ -110,6 +110,39 @@ class ShaderTest extends FunSuite:
       s"Missing albedo uniform:\n$wgsl",
     )
 
+  test("default VertIn / FragIn builtins generate correct WGSL"):
+    type A = (position: Vec3)
+    type V = (uv: Vec2)
+    val shader = Shader.full[A, V, None, VertIn, VertOut, FragIn, FragOut](
+      vertexBody = "",
+      fragmentBody = "",
+    )
+    val wgsl = shader.generateWGSL
+    assert(
+      wgsl.contains("@builtin(vertex_index) vertexIndex: u32"),
+      s"Missing vertex_index builtin:\n$wgsl",
+    )
+    assert(
+      wgsl.contains("@builtin(instance_index) instanceIndex: u32"),
+      s"Missing instance_index builtin:\n$wgsl",
+    )
+    assert(
+      wgsl.contains(
+        "fn fs_main(in: VertexOutput, @builtin(front_facing) frontFacing: bool)",
+      ),
+      s"Missing front_facing fragment builtin param:\n$wgsl",
+    )
+
+  test("empty FragBuiltinIn leaves fs_main signature unchanged"):
+    type A = (position: Vec3)
+    type V = (uv: Vec2)
+    val shader = Shader[A, V, None](vertexBody = "", fragmentBody = "")
+    val wgsl = shader.generateWGSL
+    assert(
+      wgsl.contains("fn fs_main(in: VertexOutput) -> FragmentOutput"),
+      s"Default (None FBI) should not add builtin params:\n$wgsl",
+    )
+
   test("shader with custom vertex builtin input"):
     type Attribs = (position: Vec3)
     type Varyings = (color: Vec4)

@@ -479,6 +479,12 @@ object ivec2:
   def apply(x: IntExpr, y: IntExpr): IVec2Expr =
     IVec2Expr(s"vec2<i32>(${x.wgsl}, ${y.wgsl})")
 
+  /** Truncating conversion from a float vec2 (e.g. `ivec2(ctx.in.fragCoord.xy)`
+    * → texel coords for `textureLoad`).
+    */
+  def apply(v: Vec2Expr): IVec2Expr =
+    IVec2Expr(s"vec2<i32>(${v.wgsl})")
+
 object ivec3:
   def apply(x: IntExpr, y: IntExpr, z: IntExpr): IVec3Expr =
     IVec3Expr(s"vec3<i32>(${x.wgsl}, ${y.wgsl}, ${z.wgsl})")

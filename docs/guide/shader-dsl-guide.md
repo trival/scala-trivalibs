@@ -28,7 +28,10 @@ type Panels = (tex: FragmentPanel)                 // P — panel textures (opti
   both.
 - In `layerShade`, every uniform is fragment-stage, so drop the wrappers.
 - Panel textures go in a separate `P` schema as `FragmentPanel` (or
-  `VertexPanel`/`SharedPanel`) markers, read via `ctx.textures.<name>`.
+  `VertexPanel`/`SharedPanel`) markers, read via `ctx.textures.<name>`. For a
+  **depth** attachment use the `*DepthPanel` markers (`FragmentDepthPanel` / …):
+  the field reads as a `DepthTexture2D` and is bound with
+  `panel.binding(depth = true)`.
 
 ## vert / frag and the context
 
@@ -55,6 +58,7 @@ val shade = p.shade[Attribs, Varyings, Uniforms, Panels]: program =>
 | `ctx.bindings` | uniforms `U`              | uniforms `U`                       |
 | `ctx.textures` | panels `P`                | panels `P`                         |
 | `ctx.locals`   | typed locals `L`          | typed locals `L`                   |
+| `ctx.fragCoord`| —                         | `@builtin(position)` pixel coords  |
 
 `layerShade[U]` (or `[U, P]`, `[U, P, FO]`) is fragment-only; the vertex stage
 is a built-in full-screen triangle and `ctx.in.uv: Vec2` is the screen UV in
@@ -139,7 +143,9 @@ GPU expressions mirror the CPU math surface, so shader code reads like CPU code:
   `&& || !`.
 - **matrices**: `Mat*Expr` `*` (matrix or vector), `.determinant`.
 - **textures**: `tex.sample(uv, samp)`, `tex.sampleLevel(uv, samp, lod)`,
-  `tex.numLevels`.
+  `tex.load(coord, level = 0)` (sampler-free point read), `tex.numLevels`,
+  `tex.dimensions`. Depth textures (`DepthTexture2D`) support `.load` and
+  `.sample`, both returning a scalar `FloatExpr`. See _Textures: sample vs load_.
 
 ### Numeric literals
 
@@ -178,6 +184,41 @@ returns a `Vec` mask (1.0 / 0.0 per lane, lowered to WGSL `step`) rather than a
 `BoolExpr`, and it takes another vector only — there's no scalar-literal form on
 either side. Use a scalar `FloatExpr` comparison when you want a `BoolExpr` for
 control flow.
+
+### Textures: sample vs load, and depth
+
+`sample` / `sampleLevel` take normalized UV (`[0,1]`) plus a `Sampler`, with
+filtering. `load` takes **integer texel coordinates** and **no sampler** — an
+exact point read, ideal for full-screen / `layerShade` passes that read a
+texture 1:1 with their target:
+
+```scala
+// reading a same-resolution panel 1:1 — the fragment's own pixel is the texel:
+ctx.out.color := ctx.textures.src.load(ivec2(ctx.fragCoord.xy))   // level → 0
+// off-1:1 (e.g. a half-res source): scale UV by the source size instead:
+ctx.out.color := ctx.textures.src.load(ivec2(ctx.in.uv * vec2(ctx.textures.src.dimensions)))
+```
+
+`load` coords are texel indices (not UV); out-of-bounds reads return `0` (no
+clamp/wrap), and the mip `level` is explicit (defaults to `0`). `ivec2(vec2)`
+truncates a float vec to texel coords; `tex.dimensions` gives the size in texels
+(use `ctx.fragCoord.xy` when the source is the same resolution as the target).
+
+**Depth attachments.** A `DepthTexture2D` (from a `*DepthPanel` field bound with
+`panel.binding(depth = true)`) reads a single scalar. It has no mip pyramid (the
+colour texture carries one), so there's no depth `sampleLevel` — use `.load`
+(no sampler) or `.sample`. A common use is reconstructing world position from
+depth + an inverse view-projection in a resolve pass:
+
+```scala
+val d   = ctx.textures.depth.load(ivec2(ctx.in.uv * ctx.bindings.res))
+val ndc = vec3(ctx.in.uv.x * 2.0 - 1.0, 1.0 - ctx.in.uv.y * 2.0, d)
+val wh  = ctx.bindings.invVp * vec4(ndc, 1.0)
+val world = wh.xyz / wh.w
+```
+
+(For shadow-map PCF you'd want a comparison sampler + `textureSampleCompare`;
+that path isn't wrapped in the DSL yet.)
 
 ## Control flow
 
@@ -238,6 +279,40 @@ uniforms by name. One statement per line (project convention).
 
 ## Builtins
 
-Standard vertex/fragment builtins are handled for you (`out.position` is the
-clip-space output). To read `@builtin(vertex_index)` etc., use the lower-level
-`Shader.full[...]` — see `examples/simple_triangle`.
+Builtins follow one rule: **input builtins are direct `ctx` members; output
+builtins live in `ctx.out`** (alongside your varyings/outputs) — the same on both
+stages. They're always declared for DSL shades; an unused one is stripped by the
+GPU shader compiler, so it costs nothing unless you reference it.
+
+| builtin              | stage / dir     | access                | type       |
+| -------------------- | --------------- | --------------------- | ---------- |
+| `@builtin(position)` | vertex **out**  | `ctx.out.position`    | `Vec4`     |
+| `vertex_index`       | vertex **in**   | `ctx.vertexIndex`     | `UIntExpr` |
+| `instance_index`     | vertex **in**   | `ctx.instanceIndex`   | `UIntExpr` |
+| `@builtin(position)` | fragment **in** | `ctx.fragCoord`       | `Vec4Expr` |
+| `front_facing`       | fragment **in** | `ctx.frontFacing`     | `BoolExpr` |
+
+- `ctx.out.position` — clip-space vertex output; assign it in every `vert`.
+- `ctx.fragCoord` — framebuffer pixel coords (`.xy` pixel centers / origin
+  top-left, `.z` depth, `.w` = `1/clip.w`). Great for a 1:1
+  `tex.load(ivec2(ctx.fragCoord.xy))`.
+- `ctx.frontFacing` — `true` on front-facing primitives (two-sided shading).
+- In a `layerShade`, the built-in full-screen triangle also gives
+  `ctx.in.uv: Vec2Expr` (screen UV in `[0,1]`) — a varying, not a builtin.
+
+**`sample_index` is *not* a default** — referencing it forces per-sample shading
+(the fragment runs once per MSAA sample). Declare it explicitly via the
+lower-level `Shader.full[A, V, U, VBI, VBO, FBI, FO]` (put `BuiltinSampleIndex`
+in the `FBI` schema) only when you need it. All builtin markers
+(`trivalibs.graphics.shader`, for the `Shader.full` route):
+
+| marker                 | `@builtin`       | stage / dir | WGSL type   |
+| ---------------------- | ---------------- | ----------- | ----------- |
+| `BuiltinPosition`      | `position`       | vertex out  | `vec4<f32>` |
+| `BuiltinVertexIndex`   | `vertex_index`   | vertex in   | `u32`       |
+| `BuiltinInstanceIndex` | `instance_index` | vertex in   | `u32`       |
+| `BuiltinFragCoord`     | `position`       | fragment in | `vec4<f32>` |
+| `BuiltinFrontFacing`   | `front_facing`   | fragment in | `bool`      |
+| `BuiltinSampleIndex`   | `sample_index`   | fragment in | `u32`       |
+
+See `examples/simple_triangle` for the `Shader.full` route.

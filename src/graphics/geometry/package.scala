@@ -1,6 +1,7 @@
 package trivalibs.graphics.geometry
 
 import trivalibs.graphics.math.*
+import trivalibs.graphics.math.cpu.Mat4
 import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.given
 import trivalibs.utils.js.*
@@ -15,9 +16,10 @@ import scala.scalajs.js
 // position type class and givens
 
 /** Extracts a `Vec3` position from a vertex `T`. Given automatically for any
-  * `Vec3`-like type and for any named tuple / case class with a `position: Vec3`
-  * field (so `(position: Vec3, uv: Vec2)` just works). Required by [[Mesh]],
-  * [[toBufferedGeometry]], and the polygon ops. */
+  * `Vec3`-like type and for any named tuple / case class with a
+  * `position: Vec3` field (so `(position: Vec3, uv: Vec2)` just works).
+  * Required by [[Mesh]], [[toBufferedGeometry]], and the polygon ops.
+  */
 trait Position[T]:
   extension (t: T) def pos: Vec3
 
@@ -49,7 +51,8 @@ inline given [T <: AnyNamedTuple]
 
 /** Linear interpolation for `T` — given for `Double` and the `Vec2-4` types.
   * Enables vertex interpolation in subdivision / plane clipping
-  * (`Quad.subdivide*`, `Grid.subdivide`, `splitByPlane`). */
+  * (`Quad.subdivide*`, `Grid.subdivide`, `splitByPlane`).
+  */
 trait Lerp[T]:
   extension (a: T) def lerp(b: T, t: Double): T
 
@@ -68,11 +71,59 @@ given vec4Lerp: [V] => Vec4Base[V] => Vec4ImmutableOps[V] => Lerp[V]:
 // geometry types
 
 /** An infinite plane `normal · p = d`, used to clip/split polygons
-  * ([[Triangle.splitByPlane]] / [[Quad.splitByPlane]]). `signedDist` is positive
-  * on the normal's side; `flip` reverses the facing. */
+  * ([[Triangle.splitByPlane]] / [[Quad.splitByPlane]]) and as a mirror plane
+  * for reflections. `signedDist` is positive on the normal's side; `flip`
+  * reverses the facing. `signedDist` and [[reflectionMat]] assume a **unit**
+  * `normal` — the [[Plane.fromPointNormal]] / [[Plane.fromPoints]] factories
+  * normalize for you.
+  */
 class Plane(val normal: Vec3, val d: Double):
   def signedDist(p: Vec3): Double = normal.dot(p) - d
   def flip: Plane = Plane(-normal, -d)
+
+  /** Reflection matrix across this plane (assumes a unit `normal`): reflects a
+    * point `p` to `p - 2·(n·p - d)·n`. Column-major, matching the `Mat4 * Vec4`
+    * convention. For the ground plane `y = 0` it reduces to
+    * `Mat4.fromScale(1, -1, 1)`.
+    */
+  def reflectionMat: Mat4 =
+    val a = normal.x
+    val b = normal.y
+    val c = normal.z
+    Mat4(
+      1.0 - 2.0 * a * a,
+      -2.0 * a * b,
+      -2.0 * a * c,
+      0.0,
+      -2.0 * a * b,
+      1.0 - 2.0 * b * b,
+      -2.0 * b * c,
+      0.0,
+      -2.0 * a * c,
+      -2.0 * b * c,
+      1.0 - 2.0 * c * c,
+      0.0,
+      2.0 * a * d,
+      2.0 * b * d,
+      2.0 * c * d,
+      1.0,
+    )
+
+object Plane:
+  /** The ground plane `y = 0`, normal `(0, 1, 0)`. The default mirror plane. */
+  val ground: Plane = Plane(Vec3(0.0, 1.0, 0.0), 0.0)
+
+  /** Plane through point `p` with the given `normal` (normalized here). */
+  def fromPointNormal(p: Vec3, normal: Vec3): Plane =
+    val n = normal.normalize
+    Plane(n, n.dot(p))
+
+  /** Plane through three points; normal is `(b - a) × (c - a)` normalized
+    * (right-hand rule), `d = normal · a`.
+    */
+  def fromPoints(a: Vec3, b: Vec3, c: Vec3): Plane =
+    val n = (b - a).cross(c - a).normalize
+    Plane(n, n.dot(a))
 
 // float equality helpers
 

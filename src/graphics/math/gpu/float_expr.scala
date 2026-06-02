@@ -718,6 +718,12 @@ object vec2:
     s"vec2<f32>(${scalar.wgsl})",
   )
 
+  /** Float conversion of an unsigned int vec — e.g. `vec2(tex.dimensions)` to
+    * do UV→texel math against a texture's size.
+    */
+  @annotation.targetName("vec2FromUVec2")
+  def apply(v: UVec2Expr): Vec2Expr = Vec2Expr(s"vec2<f32>(${v.wgsl})")
+
 /** GPU `vec3<f32>` constructor: `vec3(x, y, z)`, `vec3(xy, z)`, or
   * `vec3(scalar)`.
   */

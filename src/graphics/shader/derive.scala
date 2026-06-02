@@ -1,10 +1,11 @@
 package trivalibs.graphics.shader
 
-import scala.compiletime.*
-import scala.NamedTuple.AnyNamedTuple
 import trivalibs.graphics.buffers.BufferBinding
 import trivalibs.graphics.math.gpu.Expr.Sampler
 import trivalibs.utils.js.Arr
+
+import scala.NamedTuple.AnyNamedTuple
+import scala.compiletime.*
 
 /** Utilities for deriving WGSL code from Scala types at compile time */
 object derive:
@@ -46,7 +47,7 @@ object derive:
       case _: AnyNamedTuple =>
         fieldBuiltinsImpl[
           NamedTuple.Names[T & AnyNamedTuple],
-          NamedTuple.DropNames[T & AnyNamedTuple]
+          NamedTuple.DropNames[T & AnyNamedTuple],
         ]
 
   private inline def fieldBuiltinsImpl[N <: Tuple, T <: Tuple]
@@ -59,8 +60,8 @@ object derive:
           (
             constValue[name].asInstanceOf[String],
             bt.wgslBuiltin,
-            bt.wgslType
-          )
+            bt.wgslType,
+          ),
         ) ++ fieldBuiltinsImpl[namesRest, typesRest]
 
   // ===========================================================================
@@ -76,7 +77,7 @@ object derive:
   private def generateLocationStructFromLists(
       structName: String,
       names: Arr[String],
-      types: Arr[String]
+      types: Arr[String],
   ): String =
     if names.isEmpty then ""
     else
@@ -93,7 +94,7 @@ object derive:
 
   private def generateBuiltinStructFromList(
       structName: String,
-      builtins: Arr[(String, String, String)]
+      builtins: Arr[(String, String, String)],
   ): String =
     if builtins.isEmpty then ""
     else
@@ -102,9 +103,27 @@ object derive:
       }
       s"struct $structName {\n${fields.join("\n")}\n}"
 
+  /** WGSL fragment-entry parameter list for builtin inputs that can't live in
+    * the varyings struct — e.g. `, @builtin(front_facing) frontFacing: bool`.
+    * Empty string when the fragment declares no extra builtin inputs.
+    */
+  inline def fragBuiltinParams[T]: String =
+    buildFragBuiltinParams(fieldBuiltins[T])
+
+  private def buildFragBuiltinParams(
+      builtins: Arr[(String, String, String)],
+  ): String =
+    var s = ""
+    var i = 0
+    while i < builtins.length do
+      val b = builtins(i)
+      s = s + s", @builtin(${b._2}) ${b._1}: ${b._3}"
+      i += 1
+    s
+
   /** Generate a combined struct with both @location and @builtin fields */
   inline def generateCombinedStruct[Locations, Builtins](
-      structName: String
+      structName: String,
   ): String =
     val locNames = fieldNames[Locations]
     val locTypes = fieldWgslTypes[Locations]
@@ -115,7 +134,7 @@ object derive:
       structName: String,
       locNames: Arr[String],
       locTypes: Arr[String],
-      builtins: Arr[(String, String, String)]
+      builtins: Arr[(String, String, String)],
   ): String =
     val locationFields =
       locNames.zip(locTypes).zipWithIndex.map { case ((name, typ), idx) =>
@@ -143,7 +162,7 @@ object derive:
       case _ => ""
 
   private inline def generateUniformsFromNamedTuple[T <: AnyNamedTuple](
-      groupIdx: Int
+      groupIdx: Int,
   ): String =
     generateUniformsImpl[NamedTuple.DropNames[T]](groupIdx)
 
@@ -183,8 +202,8 @@ object derive:
   // Uniform Field Index Resolution (compile-time name → binding index)
   // ===========================================================================
 
-  /** Resolve a field name to its binding index within a named tuple.
-    * Produces a compile-time error if the name doesn't match any field.
+  /** Resolve a field name to its binding index within a named tuple. Produces a
+    * compile-time error if the name doesn't match any field.
     */
   inline def uniformFieldIndex[Name <: String, U]: Int =
     inline erasedValue[U] match
@@ -206,7 +225,8 @@ object derive:
       case _: (name *: rest) =>
         inline constValue[name] match
           case _: Name => constValue[Idx]
-          case _       => uniformFieldIndexImpl[Name, rest, compiletime.ops.int.S[Idx]]
+          case _       =>
+            uniformFieldIndexImpl[Name, rest, compiletime.ops.int.S[Idx]]
 
   /** Resolve the value type for a named field, unwrapping visibility wrappers.
     * Returns the inner type (e.g. Vec3 from FragmentUniform[Vec3]).
@@ -231,7 +251,7 @@ object derive:
       case (_: (name *: namesRest), _: (head *: typesRest)) =>
         inline constValue[name] match
           case _: Name => erasedValue[UnwrapUniform[head]]
-          case _ =>
+          case _       =>
             uniformFieldTypeImpl[Name, namesRest, typesRest]
 
   /** Match type to unwrap visibility wrappers */
@@ -250,8 +270,8 @@ object derive:
     case SharedUniform[?]   => T
     case _                  => FragmentUniform[T]
 
-  /** Compile-time check that V matches the expected type for field Name in U.
-    * V can be the raw type T or a BufferBinding[T, ?] — both are accepted.
+  /** Compile-time check that V matches the expected type for field Name in U. V
+    * can be the raw type T or a BufferBinding[T, ?] — both are accepted.
     */
   inline def checkUniformFieldType[Name <: String, V, U]: Unit =
     inline erasedValue[U] match
@@ -277,22 +297,31 @@ object derive:
           case _: Name =>
             type Expected = UnwrapUniform[head]
             summonFrom:
-              case _: (V =:= Expected) => ()
+              case _: (V =:= Expected)                   => ()
               case _: (V <:< BufferBinding[Expected, ?]) => ()
               // Float ↔ Double interchange — both map to WGSL f32.
               case _ =>
                 summonFrom:
                   case _: (Expected =:= Float) =>
                     summonFrom:
-                      case _: (V =:= Double) => ()
+                      case _: (V =:= Double)                   => ()
                       case _: (V <:< BufferBinding[Double, ?]) => ()
-                      case _ => error("Binding type mismatch: value type does not match uniform field type")
+                      case _                                   =>
+                        error(
+                          "Binding type mismatch: value type does not match uniform field type",
+                        )
                   case _: (Expected =:= Double) =>
                     summonFrom:
-                      case _: (V =:= Float) => ()
+                      case _: (V =:= Float)                   => ()
                       case _: (V <:< BufferBinding[Float, ?]) => ()
-                      case _ => error("Binding type mismatch: value type does not match uniform field type")
-                  case _ => error("Binding type mismatch: value type does not match uniform field type")
+                      case _                                  =>
+                        error(
+                          "Binding type mismatch: value type does not match uniform field type",
+                        )
+                  case _ =>
+                    error(
+                      "Binding type mismatch: value type does not match uniform field type",
+                    )
           case _ =>
             checkFieldTypeImpl[Name, V, namesRest, typesRest]
 
@@ -303,7 +332,7 @@ object derive:
   private def generateUniformGroupFromLists(
       groupIdx: Int,
       names: Arr[String],
-      types: Arr[String]
+      types: Arr[String],
   ): String =
     names
       .zip(types)
@@ -358,21 +387,32 @@ object derive:
         ](0)
       case _ => ""
 
+  /** WGSL texture type for a panel field marker: depth panels declare
+    * `texture_depth_2d`, all others `texture_2d<f32>`.
+    */
+  private inline def panelTexWgslType[T]: String =
+    inline erasedValue[T] match
+      case _: FragmentDepthPanel => "texture_depth_2d"
+      case _: VertexDepthPanel   => "texture_depth_2d"
+      case _: SharedDepthPanel   => "texture_depth_2d"
+      case _                     => "texture_2d<f32>"
+
   private inline def generatePanelDeclsImpl[
       Names <: Tuple,
       Types <: Tuple,
   ](bindingIdx: Int): String =
     inline (erasedValue[Names], erasedValue[Types]) match
-      case (_: EmptyTuple, _: EmptyTuple) => ""
+      case (_: EmptyTuple, _: EmptyTuple)                   => ""
       case (_: (name *: namesRest), _: (head *: typesRest)) =>
         val fieldName = constValue[name].asInstanceOf[String]
+        val texType = panelTexWgslType[head]
         val decl =
-          s"@group(1) @binding($bindingIdx) var $fieldName: texture_2d<f32>;"
+          s"@group(1) @binding($bindingIdx) var $fieldName: $texType;"
         val rest = generatePanelDeclsImpl[namesRest, typesRest](bindingIdx + 1)
         if rest.isEmpty then decl else s"$decl\n$rest"
 
-  /** Compile-time check that field Name in U is a Sampler uniform.
-    * Used in processEntry when binding a GPUSampler.
+  /** Compile-time check that field Name in U is a Sampler uniform. Used in
+    * processEntry when binding a GPUSampler.
     */
   inline def checkSamplerFieldType[Name <: String, U]: Unit =
     inline erasedValue[U] match
@@ -395,11 +435,11 @@ object derive:
         inline constValue[name] match
           case _: Name =>
             inline erasedValue[head] match
-              case _: VertexUniform[Sampler]   => ()
-              case _: FragmentUniform[Sampler] => ()
-              case _: SharedUniform[Sampler]   => ()
+              case _: VertexUniform[Sampler]                   => ()
+              case _: FragmentUniform[Sampler]                 => ()
+              case _: SharedUniform[Sampler]                   => ()
               case _: trivalibs.graphics.math.gpu.Expr.Sampler => ()
-              case _ =>
+              case _                                           =>
                 error(
                   "This uniform field is not a Sampler — bind GPUSampler only to Sampler fields",
                 )
