@@ -626,7 +626,7 @@ class Painter(
   /** Create a drawable [[Shape]] from a [[Form]] and a [[Shade]]. Bind its
     * uniforms/panels with `.bind("name" := value, …)` and add per-draw
     * overrides via `shape.instances.add(...)`. `cullMode`/`blendState` are
-    * optional.
+    * optional — see [[Shape.set]] for their defaults.
     */
   def shape[U, P](
       form: Form,

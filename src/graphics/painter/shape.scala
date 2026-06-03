@@ -2,10 +2,10 @@ package trivalibs.graphics.painter
 
 import trivalibs.graphics.buffers.BufferBinding
 import trivalibs.graphics.buffers.UniformValue
-import trivalibs.graphics.shader.derive
-import trivalibs.utils.js.*
 import trivalibs.graphics.painter.GPUDevice
 import trivalibs.graphics.painter.GPUSampler
+import trivalibs.graphics.shader.derive
+import trivalibs.utils.js.*
 
 import scala.compiletime.summonFrom
 import scala.scalajs.js
@@ -27,9 +27,9 @@ extension [N <: String & Singleton](name: N)
 
 /** Mixin for things that carry shader bindings — [[Shape]], [[Layer]],
   * [[Instance]]. Provides the `bind(...)` overloads (1–8 [[BindPair]]s; chain
-  * for more) that assign uniform/panel values by field name. Accepted values:
-  * a `BufferBinding`, a raw uniform value (auto-boxed into a `BufferBinding`),
-  * a `GPUSampler`, a `Panel`, or a `PanelBinding`.
+  * for more) that assign uniform/panel values by field name. Accepted values: a
+  * `BufferBinding`, a raw uniform value (auto-boxed into a `BufferBinding`), a
+  * `GPUSampler`, a `Panel`, or a `PanelBinding`.
   */
 trait Bindable[U, P]:
   val shade: Shade[U, P]
@@ -267,8 +267,8 @@ trait Bindable[U, P]:
 /** A drawable: a [[Form]] (geometry) rendered with a [[Shade]], plus its bound
   * uniforms/panels and optional per-instance draws. Create via
   * [[Painter.shape]], bind with `.bind("name" := value, …)`, and add it to a
-  * [[Panel]]. Use `instances.add(...)` for instanced draws (e.g. many transforms
-  * sharing one form).
+  * [[Panel]]. Use `instances.add(...)` for instanced draws (e.g. many
+  * transforms sharing one form).
   */
 class Shape[U, P] private[painter] (
     val painter: Painter,
@@ -277,6 +277,7 @@ class Shape[U, P] private[painter] (
 ) extends Bindable[U, P]:
   /** Internal: cull mode, set via [[set]] / [[Painter.shape]]. */
   private[painter] var cullMode: CullMode = CullMode.None
+
   /** Internal: blend mode, set via [[set]] / [[Painter.shape]]. */
   private[painter] var blendState: Opt[BlendState] = null
   var bindings: BindingSlots = Arr()
@@ -287,7 +288,9 @@ class Shape[U, P] private[painter] (
     */
   val instances: InstanceList[U, P] = InstanceList[U, P](shade, painter)
 
-  /** Set [[cullMode]] / [[blendState]]; returns `this`. */
+  /** Set [[cullMode]] (default [[CullMode.None]]) / [[blendState]] (default
+    * `null` — opaque, no blending); returns `this`.
+    */
   def set(
       cullMode: Maybe[CullMode] = Maybe.Not,
       blendState: Maybe[Opt[BlendState]] = Maybe.Not,

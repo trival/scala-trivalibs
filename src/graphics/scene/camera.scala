@@ -20,7 +20,7 @@ class PerspectiveCamera private (
 ):
   import PerspectiveCamera.{normalizeH, clampV}
 
-  def apply(
+  def set(
       fov: Double = this.fov,
       aspect: Double = this.aspect,
       near: Double = this.near,
@@ -39,6 +39,17 @@ class PerspectiveCamera private (
     if rotV != this.rotV then this.rotV = clampV(rotV)
     this.pos = pos
     if needsProj then proj = Mat4.perspective(fov, aspect, near, far)
+
+  inline def apply(
+      fov: Double = this.fov,
+      aspect: Double = this.aspect,
+      near: Double = this.near,
+      far: Double = this.far,
+      rotH: Double = this.rotH,
+      rotV: Double = this.rotV,
+      pos: Vec3 = this.pos,
+  ): Unit =
+    set(fov, aspect, near, far, rotH, rotV, pos)
 
   // ---- FPS-style movement ----
 
