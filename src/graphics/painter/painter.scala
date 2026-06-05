@@ -387,7 +387,24 @@ class Painter(
 
   /** Build a fragment-only shader for a full-screen pass (used by [[layer]]).
     *
-    * There is no user vertex stage — Metals supplies a built-in full-screen
+    * There is no user vertex stage — Painter supplies a built-in full-screen
+    * triangle and the fragment context exposes `ctx.in.uv` (a `Vec2` in `[0,1]`
+    * screen space). This is the simplest overload, with no uniforms or panel
+    * inputs, no custom output.
+    */
+  inline def layerShade(
+      build: LayerProgram[EmptyTuple, EmptyTuple, FragOut] => Unit,
+  ): Shade[EmptyTuple, EmptyTuple] =
+    val program = new LayerProgram[EmptyTuple, EmptyTuple, FragOut]
+    build(program)
+    layerShadeFromWgsl[EmptyTuple, EmptyTuple](
+      program.fragBodyStr,
+      program.helperFnsStr,
+    )
+
+  /** Build a fragment-only shader for a full-screen pass (used by [[layer]]).
+    *
+    * There is no user vertex stage — Painter supplies a built-in full-screen
     * triangle and the fragment context exposes `ctx.in.uv` (a `Vec2` in `[0,1]`
     * screen space). Because every uniform is fragment-stage by construction,
     * the `U` fields need no `FragmentUniform[_]` wrapper — bare types are
