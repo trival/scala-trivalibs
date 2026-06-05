@@ -128,6 +128,34 @@ Like `:=`, the compound ops are unchecked on the value's category (mirroring the
 WGSL it lowers to): `vec3Var += floatExpr` compiles in Scala but WGSL will
 reject the type mismatch — keep the operands in the same value category.
 
+## Constants: plain Scala `val`s vs uniforms
+
+A value that is **the same across every draw of a shader** does not need a
+uniform. Close over a plain Scala `val` in the shader body — it bakes into the
+generated WGSL as a compile-time constant. This is a real advantage of authoring
+shaders in Scala: no buffer, no binding, no schema field.
+
+```scala
+// global, baked straight into the shader:
+val Contrast = 0.85
+val Seed     = vec3(140)
+
+val shade = p.shade[A, V, U]: program =>
+  program.frag: ctx =>
+    Block(
+      // `Contrast` lowers to a literal; tweak the val + recompile to change it.
+      ctx.out.color := vec4(vec3((n - 0.5) * Contrast + 0.5), 1.0),
+    )
+```
+
+Reach for a **uniform** (`p.binding[T]` + a `U`-schema field) only when the value
+must **vary per shape / per panel** or **change at runtime** (per frame, from
+input, animated). Rule of thumb: start with a global `val`; promote it to a
+binding the moment you need per-instance or runtime variation — not before.
+
+(`ConstFloat`/`ConstVec*` locals emit a WGSL `const` *inside* the function body;
+a closed-over Scala `val` is simpler still — prefer it for plain global tunables.)
+
 ## Expressions & ops
 
 GPU expressions mirror the CPU math surface, so shader code reads like CPU code:
