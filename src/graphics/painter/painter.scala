@@ -141,18 +141,26 @@ class Painter(
     )
 
   /** Create a custom sampler. Use a `mipmapFilter` of `Linear` when sampling a
-    * mip-mapped panel texture with trilinear filtering.
+    * mip-mapped panel texture with trilinear filtering. Set `addressMode` to
+    * `AddressMode.Repeat` to seamlessly tile a repeat-sampled texture; it
+    * applies to both U and V unless overridden per axis by `addressModeU` /
+    * `addressModeV` (when given, those take precedence over `addressMode`).
     */
   def sampler(
       magFilter: FilterMode = FilterMode.Nearest,
       minFilter: FilterMode = FilterMode.Nearest,
       mipmapFilter: FilterMode = FilterMode.Nearest,
+      addressMode: AddressMode = AddressMode.ClampToEdge,
+      addressModeU: Maybe[AddressMode] = Maybe.Not,
+      addressModeV: Maybe[AddressMode] = Maybe.Not,
   ): GPUSampler =
     device.createSampler(
       Obj.literal(
         magFilter = magFilter.toJs,
         minFilter = minFilter.toJs,
         mipmapFilter = mipmapFilter.toJs,
+        addressModeU = addressModeU.orElse(addressMode).toJs,
+        addressModeV = addressModeV.orElse(addressMode).toJs,
       ),
     )
 

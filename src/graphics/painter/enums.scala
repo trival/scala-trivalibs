@@ -40,6 +40,18 @@ object FilterMode:
   val Linear: FilterMode = "linear"
   extension (f: FilterMode) inline def toJs: js.Any = f.asInstanceOf[js.Any]
 
+/** Sampler texture-coordinate address mode, used for U/V/W wrapping in
+  * [[Painter.sampler]]. `ClampToEdge` (the default) clamps to the border texel;
+  * `Repeat` tiles the texture (use it for seamless repeat-sampled tiles);
+  * `MirrorRepeat` tiles with alternating mirroring.
+  */
+opaque type AddressMode = String
+object AddressMode:
+  val ClampToEdge: AddressMode = "clamp-to-edge"
+  val Repeat: AddressMode = "repeat"
+  val MirrorRepeat: AddressMode = "mirror-repeat"
+  extension (a: AddressMode) inline def toJs: js.Any = a.asInstanceOf[js.Any]
+
 /** Vertex primitive topology for a [[Form]] (default `TriangleList`). */
 opaque type PrimitiveTopology = String
 object PrimitiveTopology:
