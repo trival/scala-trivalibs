@@ -1309,7 +1309,7 @@ class Painter(
       Obj.literal(
         layout = pl,
         vertex = Obj.literal(module = module, entryPoint = "vs_main"),
-        // Depth-only: a fragment stage (writes frag_depth) with no colour targets.
+        // Depth-only: a fragment stage (writes frag_depth) with no color targets.
         fragment = Obj.literal(
           module = module,
           entryPoint = "fs_main",
