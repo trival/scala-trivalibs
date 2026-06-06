@@ -41,6 +41,11 @@ use `.load` (no sampler) or `.sample`. (2) The depth texture is **lazily
 recreated as sampleable the first time it's sampled**, so the very first frame
 reads an empty depth — a one-frame startup glitch, harmless in an animation loop
 (each `paint(panel)` submits separately, so it's not a validation error).
+Sampling the depth of a **`multisample = true`** panel works too: the painter
+resolves the MSAA depth to a single-sample texture (an internal pass after the
+shapes) and hands that back, so you still read a plain `texture_depth_2d` — no
+special handling needed (it uses subsample 0, which is fine for depth-driven
+effects like fog/DOF).
 
 ### `paint` order matters; `show` presents
 

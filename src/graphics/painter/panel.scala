@@ -55,6 +55,12 @@ class Panel private[painter] (val painter: Painter):
   private var _depthTexture: Opt[GPUTexture] = null
   private var _depthView: Opt[GPUTextureView] = null
   private var _depthSamplable: Boolean = false
+  // MSAA depth can't be sampled as `texture_depth_2d`; when a multisample panel's
+  // depth is sampled, an internal pass resolves it into this single-sample
+  // texture (see `Painter.resolvePanelDepth`).
+  private var _resolvedDepthTexture: Opt[GPUTexture] = null
+  private var _resolvedDepthView: Opt[GPUTextureView] = null
+  private var _needsDepthResolve: Boolean = false
   private var _msaaTextures: Arr[GPUTexture] = Arr()
   private var _msaaViews: Arr[GPUTextureView] = Arr()
   private var _outputView: Opt[GPUTextureView] = null
@@ -84,6 +90,11 @@ class Panel private[painter] (val painter: Painter):
   private[painter] def textureView: GPUTextureView = _textureViews(0)
   private[painter] def pongView: GPUTextureView = _pongViews(0)
   private[painter] def depthView: GPUTextureView = _depthView.get
+  // True when this panel's (multisample) depth must be resolved to a sampleable
+  // single-sample texture after the shape pass. The render-target depth view to
+  // read is [[depthView]]; the resolve target is [[resolvedDepthTarget]].
+  private[painter] def needsDepthResolve: Boolean = _needsDepthResolve
+  private[painter] def resolvedDepthTarget: GPUTextureView = _resolvedDepthView.get
   private[painter] def msaaView: GPUTextureView = _msaaViews(0)
   private[painter] def outputView: GPUTextureView =
     if _outputView.notNull then _outputView.get else _textureViews(0)
@@ -115,22 +126,53 @@ class Panel private[painter] (val painter: Painter):
     index,
   )
 
-  private[painter] def depthSamplingView: GPUTextureView =
-    if !_depthSamplable && _depthTexture.notNull then
-      _depthTexture.get.destroy()
-      val depthTex = painter.device.createTexture(
+  // (Re)allocate the depth render texture (and, for a sampled MSAA panel, the
+  // single-sample resolve texture). Shared by `ensureSize` and the lazy upgrade
+  // in `depthSamplingView`.
+  private def allocDepth(): Unit =
+    if _depthTexture.notNull then _depthTexture.get.destroy()
+    if _resolvedDepthTexture.notNull then _resolvedDepthTexture.get.destroy()
+    val depthUsage =
+      if _depthSamplable then
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+      else GPUTextureUsage.RENDER_ATTACHMENT
+    val depthTex = painter.device.createTexture(
+      Obj.literal(
+        size = Obj.literal(width = _width, height = _height),
+        format = "depth24plus",
+        usage = depthUsage,
+        sampleCount = if multisample then 4 else 1,
+      ),
+    )
+    _depthTexture = depthTex
+    _depthView = depthTex.createView()
+    if _depthSamplable && multisample then
+      val resTex = painter.device.createTexture(
         Obj.literal(
           size = Obj.literal(width = _width, height = _height),
           format = "depth24plus",
           usage =
             GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-          sampleCount = if multisample then 4 else 1,
+          sampleCount = 1,
         ),
       )
-      _depthTexture = depthTex
-      _depthView = depthTex.createView()
+      _resolvedDepthTexture = resTex
+      _resolvedDepthView = resTex.createView()
+      _needsDepthResolve = true
+    else
+      _resolvedDepthTexture = null
+      _resolvedDepthView = null
+      _needsDepthResolve = false
+
+  // Return a depth view usable as a `texture_depth_2d` shader input. The first
+  // time a panel's depth is sampled it's re-allocated with TEXTURE_BINDING; for
+  // a multisample panel that also allocates the single-sample resolve texture
+  // (filled by `Painter.resolvePanelDepth` each frame) and we hand that back.
+  private[painter] def depthSamplingView: GPUTextureView =
+    if !_depthSamplable && _depthTexture.notNull then
       _depthSamplable = true
-    _depthView
+      allocDepth()
+    if _needsDepthResolve then _resolvedDepthView.get else _depthView.get
 
   /** Make a [[PanelBinding]] selecting one view of this panel to feed another
     * pass as a texture: a render-target `index`, a specific `mipLevel` (`-1` =
@@ -415,7 +457,7 @@ class Panel private[painter] (val painter: Painter):
       while d < _msaaTextures.length do
         _msaaTextures(d).destroy()
         d += 1
-      if _depthTexture.notNull then _depthTexture.get.destroy()
+      // Depth textures are (re)allocated by `allocDepth()` below.
 
       _width = targetW
       _height = targetH
@@ -492,18 +534,4 @@ class Panel private[painter] (val painter: Painter):
 
         i += 1
 
-      if depthTest then
-        val depthUsage =
-          if _depthSamplable then
-            GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-          else GPUTextureUsage.RENDER_ATTACHMENT
-        val depthTex = painter.device.createTexture(
-          Obj.literal(
-            size = Obj.literal(width = targetW, height = targetH),
-            format = "depth24plus",
-            usage = depthUsage,
-            sampleCount = if multisample then 4 else 1,
-          ),
-        )
-        _depthTexture = depthTex
-        _depthView = depthTex.createView()
+      if depthTest then allocDepth()

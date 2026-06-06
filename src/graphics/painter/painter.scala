@@ -49,6 +49,25 @@ fn fs_main(in: VsOut) -> @location(0) vec4f {
 }
 """
 
+// Resolves a multisample depth attachment into a single-sample depth texture so
+// it can be sampled as `texture_depth_2d`. Reads subsample 0 (cheap; adequate
+// for depth-driven effects) and writes it via `frag_depth`.
+private val DEPTH_RESOLVE_WGSL = """
+@group(0) @binding(0) var ms_depth: texture_depth_multisampled_2d;
+
+@vertex
+fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  let x = f32((vi << 1u) & 2u) * 2.0 - 1.0;
+  let y = f32(vi & 2u) * 2.0 - 1.0;
+  return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @builtin(frag_depth) f32 {
+  return textureLoad(ms_depth, vec2i(pos.xy), 0);
+}
+"""
+
 /** Central registry and frame driver for WebGPU rendering.
   *
   * A `Painter` owns the GPU device and the canvas, and is the factory for every
@@ -863,6 +882,9 @@ class Painter(
     shapePass.end()
     queue.submit(Arr(encoder.finish()))
 
+    // Step 1b: resolve multisample depth → single-sample so it can be sampled.
+    if panel.needsDepthResolve then resolvePanelDepth(panel)
+
     // Step 2: Render layers in order — no depth, no msaa.
     // Layers are fullscreen quads that always render on top.
     // Consecutive non-ping-pong layers share a pass; ping-pong forces a new one.
@@ -1170,6 +1192,12 @@ class Painter(
     * `paint(...)` then `show(finalPanel)`.
     */
   def show(panel: Panel): Unit =
+    // TODO(perf, micro): this presents via a full-screen triangle that
+    // `textureSample`s the panel with a sampler. When the panel matches the
+    // canvas size exactly (the common case), a sampler-free 1:1 path —
+    // `textureLoad(panel, vec2i(fragCoord.xy))`, or even a `copyTextureToTexture`
+    // when formats are copy-compatible — would skip the sampler/interpolation.
+    // Likely negligible; revisit only if `show` ever shows up in a profile.
     val encoder = device.createCommandEncoder()
     val swapChainView = context.getCurrentTexture().createView()
 
@@ -1253,6 +1281,78 @@ class Painter(
         primitive = Obj.literal(topology = "triangle-list"),
       ),
     )
+
+  // =========================================================================
+  // MSAA depth resolve — single-sample depth from a multisample attachment
+  // =========================================================================
+
+  private lazy val depthResolveBindGroupLayout: GPUBindGroupLayout =
+    device.createBindGroupLayout(
+      Obj.literal(
+        entries = Arr(
+          Obj.literal(
+            binding = 0,
+            visibility = GPUShaderStage.FRAGMENT,
+            texture = Obj.literal(sampleType = "depth", multisampled = true),
+          ),
+        ),
+      ),
+    )
+
+  private lazy val depthResolvePipeline: GPURenderPipeline =
+    val module =
+      device.createShaderModule(Obj.literal(code = DEPTH_RESOLVE_WGSL))
+    val pl = device.createPipelineLayout(
+      Obj.literal(bindGroupLayouts = Arr(depthResolveBindGroupLayout)),
+    )
+    device.createRenderPipeline(
+      Obj.literal(
+        layout = pl,
+        vertex = Obj.literal(module = module, entryPoint = "vs_main"),
+        // Depth-only: a fragment stage (writes frag_depth) with no colour targets.
+        fragment = Obj.literal(
+          module = module,
+          entryPoint = "fs_main",
+          targets = Arr[js.Dynamic](),
+        ),
+        primitive = Obj.literal(topology = "triangle-list"),
+        depthStencil = Obj.literal(
+          format = "depth24plus",
+          depthWriteEnabled = true,
+          depthCompare = "always",
+        ),
+      ),
+    )
+
+  /** Resolve `panel`'s multisample depth into its single-sample sampleable depth
+    * texture. Run after the shape pass, before anything samples the depth.
+    */
+  private def resolvePanelDepth(panel: Panel): Unit =
+    val encoder = device.createCommandEncoder()
+    val pass = encoder.beginRenderPass(
+      Obj.literal(
+        colorAttachments = Arr[js.Dynamic](),
+        depthStencilAttachment = Obj.literal(
+          view = panel.resolvedDepthTarget,
+          depthLoadOp = "clear",
+          depthStoreOp = "store",
+          depthClearValue = 1.0,
+        ),
+      ),
+    )
+    val bindGroup = device.createBindGroup(
+      Obj.literal(
+        layout = depthResolveBindGroupLayout,
+        entries = Arr(
+          Obj.literal(binding = 0, resource = panel.depthView),
+        ),
+      ),
+    )
+    pass.setPipeline(depthResolvePipeline)
+    pass.setBindGroup(0, bindGroup)
+    pass.draw(3)
+    pass.end()
+    queue.submit(Arr(encoder.finish()))
 
   // =========================================================================
   // Mipmap generation
