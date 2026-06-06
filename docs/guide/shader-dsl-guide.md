@@ -51,14 +51,14 @@ val shade = p.shade[Attribs, Varyings, Uniforms, Panels]: program =>
 
 `ctx` exposes:
 
-| accessor       | in `vert`                 | in `frag`                          |
-| -------------- | ------------------------- | ---------------------------------- |
-| `ctx.in`       | attributes `A`            | varyings `V`                       |
-| `ctx.out`      | varyings + `out.position` | fragment output `FO` (`out.color`) |
-| `ctx.bindings` | uniforms `U`              | uniforms `U`                       |
-| `ctx.textures` | panels `P`                | panels `P`                         |
-| `ctx.locals`   | typed locals `L`          | typed locals `L`                   |
-| `ctx.fragCoord`| —                         | `@builtin(position)` pixel coords  |
+| accessor        | in `vert`                 | in `frag`                          |
+| --------------- | ------------------------- | ---------------------------------- |
+| `ctx.in`        | attributes `A`            | varyings `V`                       |
+| `ctx.out`       | varyings + `out.position` | fragment output `FO` (`out.color`) |
+| `ctx.bindings`  | uniforms `U`              | uniforms `U`                       |
+| `ctx.textures`  | panels `P`                | panels `P`                         |
+| `ctx.locals`    | typed locals `L`          | typed locals `L`                   |
+| `ctx.fragCoord` | —                         | `@builtin(position)` pixel coords  |
 
 `layerShade[U]` (or `[U, P]`, `[U, P, FO]`) is fragment-only; the vertex stage
 is a built-in full-screen triangle and `ctx.in.uv: Vec2` is the screen UV in
@@ -148,13 +148,14 @@ val shade = p.shade[A, V, U]: program =>
     )
 ```
 
-Reach for a **uniform** (`p.binding[T]` + a `U`-schema field) only when the value
-must **vary per shape / per panel** or **change at runtime** (per frame, from
-input, animated). Rule of thumb: start with a global `val`; promote it to a
+Reach for a **uniform** (`p.binding[T]` + a `U`-schema field) only when the
+value must **vary per shape / per panel** or **change at runtime** (per frame,
+from input, animated). Rule of thumb: start with a global `val`; promote it to a
 binding the moment you need per-instance or runtime variation — not before.
 
-(`ConstFloat`/`ConstVec*` locals emit a WGSL `const` *inside* the function body;
-a closed-over Scala `val` is simpler still — prefer it for plain global tunables.)
+(`ConstFloat`/`ConstVec*` locals emit a WGSL `const` _inside_ the function body;
+a closed-over Scala `val` is simpler still — prefer it for plain global
+tunables.)
 
 ## Expressions & ops
 
@@ -173,7 +174,8 @@ GPU expressions mirror the CPU math surface, so shader code reads like CPU code:
 - **textures**: `tex.sample(uv, samp)`, `tex.sampleLevel(uv, samp, lod)`,
   `tex.load(coord, level = 0)` (sampler-free point read), `tex.numLevels`,
   `tex.dimensions`. Depth textures (`DepthTexture2D`) support `.load` and
-  `.sample`, both returning a scalar `FloatExpr`. See _Textures: sample vs load_.
+  `.sample`, both returning a scalar `FloatExpr`. See _Textures: sample vs
+  load_.
 
 ### Numeric literals
 
@@ -194,7 +196,11 @@ scalar comparisons (`< <= > >= === !==`) on `FloatExpr`.
 
 **A bare literal is always a float.** Both `Double` and `Int` literals convert
 to `f32` (an `Int` emits `f32(n)`). This matches WGSL, where most math is `f32`.
-For an actual integer expression, opt in explicitly:
+This holds for Scala `Int`/`Double` **values and expressions** too, not just
+literals — a plain `Int` like `(fadeMips - 1)` is accepted wherever a float
+expression is expected (e.g. `lod.min(fadeMips - 1)`), so **never write
+`.toDouble`** to feed an `Int` into the DSL; it's unnecessary noise. For an
+actual integer expression, opt in explicitly:
 
 - `n.i` → `IntExpr` (WGSL `i32`)
 - `n.u` → `UInt` → `UIntExpr` (WGSL `u32`)
@@ -234,8 +240,8 @@ truncates a float vec to texel coords; `tex.dimensions` gives the size in texels
 
 **Depth attachments.** A `DepthTexture2D` (from a `*DepthPanel` field bound with
 `panel.binding(depth = true)`) reads a single scalar. It has no mip pyramid (the
-colour texture carries one), so there's no depth `sampleLevel` — use `.load`
-(no sampler) or `.sample`. A common use is reconstructing world position from
+colour texture carries one), so there's no depth `sampleLevel` — use `.load` (no
+sampler) or `.sample`. A common use is reconstructing world position from
 depth + an inverse view-projection in a resolve pass:
 
 ```scala
@@ -308,17 +314,17 @@ uniforms by name. One statement per line (project convention).
 ## Builtins
 
 Builtins follow one rule: **input builtins are direct `ctx` members; output
-builtins live in `ctx.out`** (alongside your varyings/outputs) — the same on both
-stages. They're always declared for DSL shades; an unused one is stripped by the
-GPU shader compiler, so it costs nothing unless you reference it.
+builtins live in `ctx.out`** (alongside your varyings/outputs) — the same on
+both stages. They're always declared for DSL shades; an unused one is stripped
+by the GPU shader compiler, so it costs nothing unless you reference it.
 
-| builtin              | stage / dir     | access                | type       |
-| -------------------- | --------------- | --------------------- | ---------- |
-| `@builtin(position)` | vertex **out**  | `ctx.out.position`    | `Vec4`     |
-| `vertex_index`       | vertex **in**   | `ctx.vertexIndex`     | `UIntExpr` |
-| `instance_index`     | vertex **in**   | `ctx.instanceIndex`   | `UIntExpr` |
-| `@builtin(position)` | fragment **in** | `ctx.fragCoord`       | `Vec4Expr` |
-| `front_facing`       | fragment **in** | `ctx.frontFacing`     | `BoolExpr` |
+| builtin              | stage / dir     | access              | type       |
+| -------------------- | --------------- | ------------------- | ---------- |
+| `@builtin(position)` | vertex **out**  | `ctx.out.position`  | `Vec4`     |
+| `vertex_index`       | vertex **in**   | `ctx.vertexIndex`   | `UIntExpr` |
+| `instance_index`     | vertex **in**   | `ctx.instanceIndex` | `UIntExpr` |
+| `@builtin(position)` | fragment **in** | `ctx.fragCoord`     | `Vec4Expr` |
+| `front_facing`       | fragment **in** | `ctx.frontFacing`   | `BoolExpr` |
 
 - `ctx.out.position` — clip-space vertex output; assign it in every `vert`.
 - `ctx.fragCoord` — framebuffer pixel coords (`.xy` pixel centers / origin
@@ -328,7 +334,7 @@ GPU shader compiler, so it costs nothing unless you reference it.
 - In a `layerShade`, the built-in full-screen triangle also gives
   `ctx.in.uv: Vec2Expr` (screen UV in `[0,1]`) — a varying, not a builtin.
 
-**`sample_index` is *not* a default** — referencing it forces per-sample shading
+**`sample_index` is _not_ a default** — referencing it forces per-sample shading
 (the fragment runs once per MSAA sample). Declare it explicitly via the
 lower-level `Shader.full[A, V, U, VBI, VBO, FBI, FO]` (put `BuiltinSampleIndex`
 in the `FBI` schema) only when you need it. All builtin markers
