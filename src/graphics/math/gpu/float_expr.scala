@@ -22,6 +22,21 @@ given Conversion[Float, FloatExpr] = v => FloatExpr(floatToWgsl(v.toDouble))
 given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
 
 // ---------------------------------------------------------------------------
+// Free-function linear interpolation
+// ---------------------------------------------------------------------------
+
+/** Linear interpolation `a + (b - a) * t` (WGSL `mix`). The free-function,
+  * edge-first spelling keeps a constant→constant interpolation with a variable
+  * `t` legible — `mix(0.45, 1.0, n)` reads as "from `0.45` to `1.0` by `n`".
+  * Edges and `t` accept plain `Double` literals. [[lerp]] is the same op under
+  * the conventional name; the `a.mix(b, t)` method form also exists. */
+def mix(a: FloatExpr, b: FloatExpr, t: FloatExpr): FloatExpr = a.mix(b, t)
+
+/** Linear interpolation `a + (b - a) * t` — `lerp(a, b, t)`, the conventional
+  * name for [[mix]] (edges first, `t` the moving parameter). */
+def lerp(a: FloatExpr, b: FloatExpr, t: FloatExpr): FloatExpr = a.mix(b, t)
+
+// ---------------------------------------------------------------------------
 // NumOps / NumExt for FloatExpr
 // LocalFloat <: FloatExpr, so these apply to LocalFloat too.
 // ---------------------------------------------------------------------------
