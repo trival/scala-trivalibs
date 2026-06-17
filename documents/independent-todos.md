@@ -103,6 +103,69 @@ the `Random` row in §10 to `Ported`.
 
 ---
 
+## GPU resources
+
+### 🔄 Explicit GPU resource freeing across the painter
+
+Independent, tangential workstream — a generally useful library capability for
+any sketch that allocates transient GPU resources (e.g. the texture baker's
+per-bake `model` binding). trivalibs is still work-in-progress, so filling this
+gap is fair game. **Not scheduled** — prebaking will not free its binding for
+now; capture the design here until it's worth doing.
+
+Add a public `destroy(): Unit` to the painter classes that own GPU resources:
+
+- **`Form`** (`form.scala`) — destroy `vertexBuffer` + `indexBuffer`. The
+  teardown already exists internally (it runs on `set`, `form.scala:59/72`);
+  expose it.
+- **`BufferBinding`** (`buffers/…`) — destroy the underlying `GPUBuffer` (the
+  WebGPU facade already has `GPUBuffer.destroy()`, `webgpu.scala:139`). This is
+  the one the baker would actually use (free the transient `model` binding after
+  `p.paint`).
+- **`Panel`** (`panel.scala`) — destroy color / pong / msaa / depth textures;
+  reuse the existing texture-teardown logic (`panel.scala:133-134, 450-458`).
+
+Each class carries a `private var destroyed = false` flag:
+
+- `destroy()` is **idempotent** (no-op if already destroyed) and sets the flag.
+- Use-after-destroy **throws** `throw jsError("<Resource>: use after destroy")`
+  (plain JS `Error`, per the trivalibs no-Scala-exceptions rule) from the public
+  use/mutation entry points — `Form` render/buffer access, `BufferBinding`
+  `set`/`update`/bind, `Panel` paint/bind/show/`binding`. The guard is a single
+  boolean branch.
+
+**Needs deeper thought — who owns which bindings:** the simple "destroy what I
+hold" rule above is only correct for resources the object allocated itself. The
+painter has several cases where ownership is conditional:
+
+- **`Shape` / instances** allocate and manage their **own** bindings when handed
+  a **raw value** instead of a pre-existing `BufferBinding`. Those self-allocated
+  bindings are owned by the shape/instance and are candidates to destroy on its
+  teardown; a binding **passed in** by the caller is not — destroying it would
+  pull the rug out from under the owner. So `destroy()` must track provenance
+  (allocated-here vs. supplied) and only free the former.
+- **`Panel` bindings** (not only its textures) fall under the same rule — a panel
+  similarly owns bindings it created from raw values but not ones it was given.
+
+So the full design needs an ownership/provenance flag per binding before any
+class can safely cascade `destroy()` into its bindings. Until that's worked out,
+keep `destroy()` scoped to unambiguously-owned resources.
+
+Feasibility / cost notes:
+
+- Guarding only the **public** entry points (not every internal access) keeps it
+  cheap and avoids per-inner-loop checks. If a guard would land on a genuine hot
+  path, limit it to the outermost call.
+- Bundle-size discipline applies (library code): boolean field +
+  `throw jsError(...)`, no Scala exception types, no stdlib.
+- A small test can assert `destroy()` is idempotent and that a guarded call
+  after destroy throws.
+
+**Priority:** Low — transient resources are negligible for the handful-of-bakes
+scale; revisit when a sketch churns GPU resources at runtime.
+
+---
+
 ## ✅ Completed
 
 ---
