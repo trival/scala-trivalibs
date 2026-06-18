@@ -26,6 +26,16 @@ def interactiveCanvas(
   canvas.setAttribute("tabindex", "0")
   canvas.style.setProperty("outline", "none")
 
+  // Suppress native touch gestures so only our own pointer handling fires.
+  // touch-action disables browser scroll/zoom/pan on the canvas; user-select
+  // stops the long-press selection overlay; touch-callout suppresses the iOS
+  // callout / magnifier; tap-highlight removes the grey tap flash.
+  canvas.style.setProperty("touch-action", "none")
+  canvas.style.setProperty("user-select", "none")
+  canvas.style.setProperty("-webkit-user-select", "none")
+  canvas.style.setProperty("-webkit-touch-callout", "none")
+  canvas.style.setProperty("-webkit-tap-highlight-color", "transparent")
+
   val input = InputState(
     el = canvas,
     keyTarget = canvas,
