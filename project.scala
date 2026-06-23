@@ -1,4 +1,4 @@
-//> using scala 3.8.4-RC2
+//> using scala 3.8.4
 //> using platform js
 //> using option -Wconf:msg=differs.only.in.case:s
 
@@ -10,4 +10,4 @@
 
 //> using dep org.scala-js::scalajs-dom::2.8.1
 
-//> using test.dep org.scalameta::munit::1.2.4
+//> using test.dep org.scalameta::munit::1.3.3

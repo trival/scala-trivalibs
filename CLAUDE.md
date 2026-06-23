@@ -281,3 +281,10 @@ mode.
 - When doing floating point math, prefer trivalibs NumExt extensions instead of
   math library methods if possible. I.e. `x.sin` instead of `math.sin(x)`,
   `x.sqrt` instead of `math.sqrt(x)`, etc.
+- **Per-frame `update` methods take `tpf`** (milliseconds since the last frame,
+  as `animate` provides) — not an absolute timestamp. E.g. `CanvasInput.update`,
+  `HoldGesture.update`, `BasicFirstPersonCameraController.update`. This keeps
+  stepping consistent, pauses/resumes cleanly with the render loop, and avoids
+  wall-clock coupling. Time-since-event *queries* are the exception (e.g.
+  `keyHeldMs`, `pointerDownMs`, `buttonHeldMs`): they take an optional
+  `now = js.Date.now()` because they measure real elapsed time.

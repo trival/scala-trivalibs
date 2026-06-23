@@ -167,46 +167,62 @@ pointer position is read-only; raw slots stay private behind
 ## Layer 3 — `gestures.scala`: composable gesture interpreters
 
 New file `src/utils/events/gestures.scala`. DOM-free, each constructed over an
-`InputState`. "Drag-eligible driver" = the front-most pointer in `order` whose
-`button == Primary` (covers left-mouse and every touch finger; middle/secondary
-never drive drag).
+`InputState`. Each gesture is **ticked once per render frame** with `update()`;
+the query members (`delta`, `holding`) are then **pure, idempotent reads** of the
+last frame's result — safe to call any number of times and from multiple
+consumers (no consume-on-read footgun). "Drag-eligible driver" = the front-most
+pointer in `order` whose `button == Primary` (covers left-mouse and every touch
+finger; middle/secondary never drive drag).
 
-**DragGesture(input)** — pure poll, no subscription:
+**DragGesture(input)** — position-based per-frame delta:
 
 ```scala
 class DragGesture(input: InputState):
   private var lastId: Opt[Double] = null
-  private var lastX, lastY, accX, accY = 0.0
+  private var lastX, lastY, _dx, _dy = 0.0
   def dragging: Boolean = driver.notNull
-  /** Accumulated driver movement since last call; reseeds on hand-off (no jump). */
-  def consumeDelta(): (dx: Double, dy: Double) = ...
+  /** The driver's movement during the last update() frame (pure read). */
+  def delta: (dx: Double, dy: Double) = (dx = _dx, dy = _dy)
+  /** Advance one frame: recompute delta + baseline. */
+  def update(): Unit = ...
 ```
 
-`consumeDelta` finds the driver; if its id differs from `lastId` (fresh press or
-hand-off) it reseeds `last = driver pos` contributing **zero** for the switch;
-otherwise it adds `driver.pos − last`, updates `last`, returns and clears the
-accumulator. Called once per frame by the consumer — this _is_ the tick.
+`update` finds the driver; if its id differs from `lastId` (fresh press or
+hand-off) it reseeds `last = driver pos`, making that frame's delta **zero** (no
+jump); otherwise `_dx,_dy = driver.pos − last` and the baseline advances. `delta`
+just returns `_dx,_dy`.
 
-**HoldGesture(input, holdDelay = 400, holdRadius = 5)** — pure poll, no timer,
-no subscription. `holding` is computed from the snapshot on access:
+**HoldGesture(input, holdDelay = 400, holdRadius = 5)** — no timer, no
+subscription; time is measured by **accumulating `tpf`** (so it pauses/resumes
+with the render loop and uses no wall clock); `holding` reflects the last
+`update()`:
 
 ```scala
 class HoldGesture(input: InputState, holdDelay = 400.0, holdRadius = 5.0):
-  private var strayedId: Opt[Double] = null   // driver id that has strayed (latched)
+  private var lastId: Opt[Double] = null
+  private var heldMs = 0.0      // accumulated time the current driver was down
+  private var strayed = false   // strayed during the init window
+  private var activated = false // hold activated (until release)
   def holding: Boolean = ...
+  def update(tpf: Double): Unit = ...
 ```
 
-`holding` reads the current Primary driver; if none → `false`. While the same
-driver is down it samples `dist(driver.down, driver.current)`, latching
-`strayedId` once it exceeds `holdRadius` (so a later return inside the radius
-does not re-arm).
-`holding = driver down && driver.id != strayedId && now - driver.downSince >= holdDelay`.
-Latched stray resets when the driver id changes or releases.
+`update(tpf)` reads the current Primary driver; if none → `holding = false`
+(state resets). A fresh press / driver change (id differs from `lastId`) restarts
+the timer. It accumulates `heldMs += tpf`. The stray check only gates the
+**initialization window** (`heldMs < holdDelay`): a sample of the driver's
+distance from its origin (`downX/downY`) beyond `holdRadius` there sets `strayed`
+and disqualifies the press. Once `heldMs` reaches `holdDelay` without having
+strayed, the hold **activates** and stays held until release **regardless of
+further movement** — so the consumer can drive movement and look/drag
+simultaneously (only the short initial press must stay still).
 
 No wake is needed: a pointer being down keeps `isIdle` false, so the consumer's
-loop is already running and observes the hold on the next poll. Stray is sampled
-at poll cadence (per frame) rather than per move event — slightly coarser than
-today's max-stray but ample for the camera use case, and far simpler.
+loop is already running and ticks the hold each frame. Stray is sampled at frame
+cadence rather than per move event — ample for the camera use case and far
+simpler. The radius origin uses `Pointer.downX/downY` (positional); `downSince`
+is no longer read by hold (it remains only for the wall-clock `pointerDownMs`
+query).
 
 Both are unit-testable by driving a fake InputState (the relocated
 `PointerTracker` test coverage lands here).
@@ -222,34 +238,49 @@ class CanvasInput(
     val drag: DragGesture,
     val hold: HoldGesture,
 ):
-  export input.*            // isKeyDown, isDown, pointersDown, hasFocus, isIdle, ...
-  def dispose(): Unit       // input.dispose() (gestures hold no resources)
+  export input.{dispose => _, *} // isKeyDown, isDown, pointersDown, isIdle, ...
+  def update(tpf: Double): Unit   // ticks drag + hold; call once per frame
+  def dispose(): Unit             // input.dispose() (gestures hold none)
 ```
 
 `interactiveCanvas(canvas, …, holdDelay, holdRadius, onActivity)` constructs
 `InputState` (passing `onActivity`), `DragGesture(input)`, and
-`HoldGesture(input, holdDelay, holdRadius)` and returns `CanvasInput`. Bare
-`InputState` + hand-rolled gestures remain available for non-opinionated
-consumers.
+`HoldGesture(input, holdDelay, holdRadius)` and returns `CanvasInput`. The
+consumer calls `ci.update(tpf)` **once per render frame** (explicitly, in the
+sketch/render loop) before reading `ci.drag.delta` / `ci.hold.holding` or driving
+a controller. Bare `InputState` + hand-rolled gestures remain available for
+non-opinionated consumers.
+
+**Time rule**: per-frame stepping methods (`CanvasInput.update`,
+`HoldGesture.update`, the camera controller) all take `tpf` (ms since last
+frame), matching `animate`; this pauses/resumes with the loop and avoids any wall
+clock. Event-age queries (`keyHeldMs` / `pointerDownMs` / `buttonHeldMs`) keep
+their wall-clock `now = Date.now()` default — a separate concern (real time since
+an event), and they never collide with stepping since the loop only idles when
+nothing is held.
 
 ## Consumer changes
 
 ### `camera_controller.scala`
 
-`BasicFirstPersonCameraController.updateCamera(cam, in: CanvasInput, tpf)`:
+`BasicFirstPersonCameraController(cam, in: CanvasInput, sensitivity, speed)` binds
+the camera + input at construction and exposes `update(tpf)`:
 
 - backward: `in.isDown(PointerButton.Secondary) || in.pointersDown >= 2` (keeps
   the secondary mouse button for non-touch input, adds genuine two-finger
   touch).
 - forward-on-hold: `in.hold.holding`.
-- look: `in.drag.consumeDelta()` — continuous across hand-off by construction.
+- look: `in.drag.delta` — continuous across hand-off by construction. The
+  controller reads only; the consumer must have called `in.update(tpf)` this
+  frame.
 - update the banner comment (the "secondary-button press walks backward" line).
 
 ### sketches (4 call sites) + `painter.scala`
 
-`painter.inputState(...)` now returns `CanvasInput`; the sketch loops keep
-`controller.updateCamera(cam, input, tpf)` unchanged in shape (only the type of
-`input` changes) and `input.dispose()` still works via the bundle. Files:
+`painter.input(...)` now returns `CanvasInput`. The sketch loops construct
+`BasicFirstPersonCameraController(cam, input, …)` and per frame call
+`input.update(tpf)` then `controller.update(tpf)`, and
+`input.dispose()` still works via the bundle. Files:
 [rooms/base/Base.scala](../../sketches/rooms/base/Base.scala),
 [rooms/columns/Columns.scala](../../sketches/rooms/columns/Columns.scala),
 [rooms/canvases/Canvases.scala](../../sketches/rooms/canvases/Canvases.scala),
@@ -280,9 +311,9 @@ the two-finger backward-walk consumer.
 - `InputState.pointerX/pointerY` become read-only defs; `dragging`/`holding`/
   `consumeDragDelta` **leave** `InputState` and live on
   `DragGesture`/`HoldGesture` (reached via `CanvasInput.drag`/`.hold`).
-- `interactiveCanvas` / `painter.inputState` return `CanvasInput` (was
-  `InputState`); `BasicFirstPersonCameraController.updateCamera` takes
-  `CanvasInput`.
+- `interactiveCanvas` / `painter.input` return `CanvasInput` (was `InputState`);
+  `BasicFirstPersonCameraController` binds `cam` + `CanvasInput` at construction
+  and exposes `update(tpf)`.
 - `PointerTracker` (and its test) relocate into the gesture layer.
 
 ## Verification
@@ -298,6 +329,54 @@ the two-finger backward-walk consumer.
   desktop. Spot-check `pointersDown` / per-pointer `x/y`. (Dev server on :3000
   assumed running.)
 - Bundle-size sanity: no Scala-stdlib leak — slot scans are `while` loops,
-  ordering uses native `Arr` push/splice, `buttonsDown`/listeners via
-  `Dict`/`Arr`. Optional `jsModuleSplitStyleStr smallestmodules` diff if the
-  events module grows unexpectedly.
+  ordering uses native `Arr` push/splice, `buttonsDown` via `Dict`. Optional
+  `jsModuleSplitStyleStr smallestmodules` diff if the events module grows
+  unexpectedly.
+
+## Implementation status
+
+**Implemented & verified** (2026-06-24). Differs from the original sketch above in
+two iterated decisions, both reflected in the sections above:
+
+1. **No event subscription on InputState.** Gestures are pure-poll; `InputState`
+   exposes no `addPointerListener`. Future event-based logic would tap the raw
+   relay instead.
+2. **Explicit per-frame `update(tpf)` + pure reads.** Gestures don't consume on
+   read. Each frame the consumer calls `CanvasInput.update(tpf)`; then
+   `drag.delta` / `hold.holding` are pure, idempotent reads. All stepping is
+   driven by **`tpf`** (no wall clock); `HoldGesture` accumulates `heldMs` from
+   `tpf` (init-window stray check only — movement after activation is allowed, so
+   move + look work together).
+
+Files:
+
+- Layer 1 — [src/utils/events/pointer.scala](../src/utils/events/pointer.scala):
+  stateless relay, per-pointer ids; `PointerTracker` removed.
+- Layer 2 —
+  [src/utils/events/input_state.scala](../src/utils/events/input_state.scala):
+  `Pointer` type, reusable ordered slots, `pointers`/`pointersDown`/`pointer(i):
+  Opt`/`pointerX,Y`/`pointerDownMs`/`buttonHeldMs` (timestamped `buttonsDown`),
+  `install()` refactor, scaladoc.
+- Layer 3 — [src/utils/events/gestures.scala](../src/utils/events/gestures.scala):
+  `DragGesture` (position-based per-frame `delta`, jump-free hand-off) +
+  `HoldGesture` (tpf-accumulated, init-window stray latch).
+- Preset —
+  [src/utils/events/interactive_canvas.scala](../src/utils/events/interactive_canvas.scala):
+  `CanvasInput(input, drag, hold)` with `update(tpf)` / `dispose()`.
+- Consumers —
+  [src/graphics/painter/painter.scala](../src/graphics/painter/painter.scala)
+  (`input()` → `CanvasInput`),
+  [src/graphics/scene/camera_controller.scala](../src/graphics/scene/camera_controller.scala)
+  (`(cam, in, sensitivity, speed)` + `update(tpf)`; backward = secondary mouse
+  **or** `pointersDown >= 2`).
+- Tests — [test/utils/Gestures.test.scala](../test/utils/Gestures.test.scala)
+  (8 cases, DOM-free via the `() => Arr[Pointer]` constructor).
+
+**Status of checks**: `bun run check` clean; `bun run test` green (8 gesture
+tests + full suite); all four `rooms/*` sketches relink (`main.js` rebuilt); all
+touched sources `scalafmt`-formatted.
+
+**Remaining**: the manual multi-touch acceptance test (above) on a real touch
+device — the only thing unit tests can't cover. The hand-off no-jump path is unit
+tested; the device run validates two-finger backward + simultaneous
+hold-move/look feel.

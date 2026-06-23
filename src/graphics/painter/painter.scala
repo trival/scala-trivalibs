@@ -11,7 +11,7 @@ import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.*
 import trivalibs.graphics.shader.dsl.LayerProgram
 import trivalibs.graphics.shader.dsl.Program
-import trivalibs.utils.events.InputState
+import trivalibs.utils.events.CanvasInput
 import trivalibs.utils.events.interactiveCanvas
 import trivalibs.utils.js.*
 
@@ -119,9 +119,10 @@ class Painter(
   /** Current canvas height in physical pixels. */
   def height: Int = canvas.height
 
-  /** Convenience: set up an `InputState` for this painter's canvas with the
+  /** Convenience: set up a `CanvasInput` for this painter's canvas with the
     * interactive-canvas defaults (focusable, cleared outline, focus on
-    * pointer-down, initial focus). See `interactiveCanvas`.
+    * pointer-down, initial focus) and the default drag/hold gesture preset. See
+    * `interactiveCanvas`.
     */
   def input(
       initialFocus: Boolean = true,
@@ -129,7 +130,7 @@ class Painter(
       holdRadius: Double = 5.0,
       suppressContextMenu: Boolean = true,
       onActivity: Maybe[js.Function0[Unit]] = Maybe.Not,
-  ): InputState =
+  ): CanvasInput =
     interactiveCanvas(
       canvas,
       initialFocus,
@@ -1324,8 +1325,9 @@ class Painter(
       ),
     )
 
-  /** Resolve `panel`'s multisample depth into its single-sample sampleable depth
-    * texture. Run after the shape pass, before anything samples the depth.
+  /** Resolve `panel`'s multisample depth into its single-sample sampleable
+    * depth texture. Run after the shape pass, before anything samples the
+    * depth.
     */
   private def resolvePanelDepth(panel: Panel): Unit =
     val encoder = device.createCommandEncoder()
