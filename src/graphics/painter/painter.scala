@@ -996,9 +996,12 @@ class Painter(
       curPass.end()
       queue.submit(Arr(curEncoder.finish()))
 
-    // Record the final output view for show()
-    if hasPongLayers then panel.setOutputView(srcView)
-    else panel.setOutputView(null)
+    // Swap slot-0 main ↔ pong so the post-pong result becomes the panel's
+    // main texture — external samplers, `outputView` (used by `show()`), and
+    // the mip-generation below all read from `_textureViews(0)` /
+    // `_samplingViews(0)`, so they all see the layer output after the swap.
+    if hasPongLayers then panel.swapPongMain()
+    panel.setOutputView(null)
 
     // Generate mipmaps if configured — but skip when any layer renders into a
     // mip target: those layers build the mip chain by hand, so auto-generation
