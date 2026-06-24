@@ -6,10 +6,10 @@ exporter that feeds directly into the painter.
 
 Companion documents:
 
-- [documents/mesh-geometry-port-plan.md](/home/trival/code/personal/scala/webgpu/documents/mesh-geometry-port-plan.md)
+- [documents/done/mesh-geometry-port-plan.md](/home/trival/code/personal/scala/webgpu/documents/mesh-geometry-port-plan.md)
   — original combined plan (now an index); all prerequisites listed there are
   done.
-- [documents/geometry3d-plan.md](/home/trival/code/personal/scala/webgpu/documents/geometry3d-plan.md)
+- [documents/done/geometry3d-plan.md](/home/trival/code/personal/scala/webgpu/documents/geometry3d-plan.md)
   — sibling plan for Grid / Cuboid / Sphere (independent feature).
 - [documents/rust-painter/repomix-trivalibs-core.xml](/home/trival/code/personal/scala/webgpu/documents/rust-painter/repomix-trivalibs-core.xml)
   — Rust source bundle. Key section: lines 3136–3946 (`rendering/line_2d`).
