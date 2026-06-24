@@ -43,19 +43,16 @@ class BasicFirstPersonCameraController(
   def update(tpf: Double): Unit =
     val dist = speed * tpf / 1000.0
 
-    // Touch: walking backward is a secondary mouse button or a two-finger touch;
-    // holding the (single) primary pointer walks forward. Two-finger backward
-    // wins over the hold — otherwise a held two-finger press cancels itself out
-    // (and lurches backward during the hold's init window), so the hold-forward
-    // is suppressed while two or more pointers are down.
-    val backward =
-      in.isKeyDown(Key.KeyS) || in.isKeyDown(Key.ArrowDown) ||
-        in.isDown(PointerButton.Secondary) || in.pointersDown >= 2
     var forward = 0.0
-    if in.isKeyDown(Key.KeyW) || in.isKeyDown(Key.ArrowUp) ||
-      (in.hold.holding && in.pointersDown < 2)
+    if in.isKeyDown(Key.KeyW)
+      || in.isKeyDown(Key.ArrowUp)
+      || (in.hold.holding && in.pointersDown == 1)
     then forward += dist
-    if backward then forward -= dist
+    if in.isKeyDown(Key.KeyS)
+      || in.isKeyDown(Key.ArrowDown)
+      || in.isDown(PointerButton.Secondary)
+      || in.pointersDown >= 2
+    then forward -= dist
 
     var left = 0.0
     if in.isKeyDown(Key.KeyA) || in.isKeyDown(Key.ArrowLeft) then left += dist
