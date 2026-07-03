@@ -230,8 +230,8 @@ carries a `blendState` is meant to **render on top of the current slot-0 result
 and persist there**, so a subsequent pong layer picks up the composite. Example
 use: draw an additive glow / alpha-blended overlay between two ping-pong passes.
 
-This is the **targeted** behaviour. The current (pre-refactor) code happens to do
-*something* here through the `srcView` / `dstView` locals, but that path was
+This is the **targeted** behaviour. The current (pre-refactor) code happens to
+do _something_ here through the `srcView` / `dstView` locals, but that path was
 never designed or tested for this case — treat whatever it does today as
 accidental, not a contract to preserve.
 
@@ -240,24 +240,24 @@ The pair-array design delivers it cleanly. Non-pong layers write to slot 0 with
 0, write slot 1, then `swapPair`. Worked example — `pong A → blend B → pong C`
 (B alpha-blends over the running result):
 
-| Step | Action                                        | Slot 0        | Slot 1        |
-| ---- | --------------------------------------------- | ------------- | ------------- |
-| 1    | Shape pass                                    | shape         | (stale)       |
-| 2    | A (pong): read 0 → write 1, `swapPair`        | A(shape)      | shape         |
-| 3    | B (non-pong blend): load slot 0, blend over   | B∘A(shape)    | shape         |
-| 4    | C (pong): read 0 → write 1, `swapPair`        | C(B∘A(shape)) | B∘A(shape)    |
+| Step | Action                                      | Slot 0        | Slot 1     |
+| ---- | ------------------------------------------- | ------------- | ---------- |
+| 1    | Shape pass                                  | shape         | (stale)    |
+| 2    | A (pong): read 0 → write 1, `swapPair`      | A(shape)      | shape      |
+| 3    | B (non-pong blend): load slot 0, blend over | B∘A(shape)    | shape      |
+| 4    | C (pong): read 0 → write 1, `swapPair`      | C(B∘A(shape)) | B∘A(shape) |
 
 The load-bearing detail: the shared non-pong pass writing B into slot 0 must be
 **ended and submitted before** C's pass samples slot 0 (a texture can't be
-sampled while it's an open render-attachment). The layer loop already flushes the
-open `curPass` when it hits a pong (or mip-target) layer — that flush is what
-makes the composite land in slot 0 before C reads it, so it must be retained in
-the Stage 4 rewrite (called out there).
+sampled while it's an open render-attachment). The layer loop already flushes
+the open `curPass` when it hits a pong (or mip-target) layer — that flush is
+what makes the composite land in slot 0 before C reads it, so it must be
+retained in the Stage 4 rewrite (called out there).
 
 Two non-pong sub-cases both compose the same way: (a) a pure blend draw with no
 panel input, and (b) a `slot0Manual = true` layer that samples an external panel
-and blends its result in. Both write slot 0 with `loadOp = "load"` and do **not**
-`swapPair`.
+and blends its result in. Both write slot 0 with `loadOp = "load"` and do
+**not** `swapPair`.
 
 ### `show()`
 
@@ -595,9 +595,9 @@ expected (visuals still unchanged). Stages stack but can be merged separately.
 Per-stage additions on top of this gate are called out under each **Verify**
 bullet.
 
-The refactor's success bar is **currently-working rendering still works** —
-this gate, run on the _existing_ examples and consumer sketches. Adding new
-rendering examples is explicitly **out of scope**: paths with no example today
+The refactor's success bar is **currently-working rendering still works** — this
+gate, run on the _existing_ examples and consumer sketches. Adding new rendering
+examples is explicitly **out of scope**: paths with no example today
 (blend-in-pong compose, mip-target layers, MSAA + pong, multi-panel layer reuse)
 are covered here by consumer sketches or one-off manual checks, and their
 permanent examples are a deferred milestone — see [Deferred milestone: example
@@ -782,8 +782,8 @@ whether to allocate slot 1.
     the live slot 0, and the result persists there. Consecutive non-pong layers
     share the pass, as today.
   - pong branch: **first end + submit any open `curPass`** (so a preceding
-    non-pong blend layer's write to slot 0 is flushed before we sample it),
-    then begin a pass against `panel.pongTargetView`, call
+    non-pong blend layer's write to slot 0 is flushed before we sample it), then
+    begin a pass against `panel.pongTargetView`, call
     `renderLayerOnPass(..., srcView = panel.textureView, panel = panel)`,
     end/submit, then `panel.swapPair()`. The freshly-read `panel.textureView`
     reflects any prior non-pong composite into slot 0.
@@ -806,11 +806,11 @@ whether to allocate slot 1.
 - MSAA + pong panel (the canvases scene panel feeds the mirror reflection
   - bloom util) keeps working without GPU validation errors in the console.
 - The blend-compose target ([Blend layers compose with ping-pong]) has **no
-  interim coverage** — no existing example or consumer sketch interleaves a blend
-  layer in a pong stack. It ships correct-by-construction here; its permanent
-  example (`layer_pong_mixed`) is a deferred milestone (see [Deferred milestone:
-  example coverage gaps]). Do a one-off manual check during this stage if
-  convenient, but a permanent regression guard waits for the example.
+  interim coverage** — no existing example or consumer sketch interleaves a
+  blend layer in a pong stack. It ships correct-by-construction here; its
+  permanent example (`layer_pong_mixed`) is a deferred milestone (see [Deferred
+  milestone: example coverage gaps]). Do a one-off manual check during this
+  stage if convenient, but a permanent regression guard waits for the example.
 
 ### Stage 5 — Layer bind-group cache
 
@@ -861,10 +861,10 @@ per-`Layer` `LayerBindCache` fast path.
 - Multi-panel reuse correctness: bind one static layer instance into two
   different panels painted in the same frame; confirm each panel renders its own
   result (not the other's). This exercises the `panelId`-mismatch miss path —
-  the guarantee that reuse degrades to a rebuild rather than a wrong hit. Do this
-  as a one-off manual/throwaway check for this stage; the permanent `layer_reuse`
-  example is a deferred milestone (see [Deferred milestone: example coverage
-  gaps]).
+  the guarantee that reuse degrades to a rebuild rather than a wrong hit. Do
+  this as a one-off manual/throwaway check for this stage; the permanent
+  `layer_reuse` example is a deferred milestone (see [Deferred milestone:
+  example coverage gaps]).
 - Frame-time spot check on a bloom-heavy sketch (e.g. `rooms/canvases`, which
   feeds `sketchlib.utils.bloom`): record frame time in the browser perf panel
   before and after Stage 5. Expect a measurable drop on the layer-stack draw
@@ -894,28 +894,29 @@ Doc-only stage. No code changes.
 
 ## Deferred milestone: example coverage gaps
 
-**Not part of this refactor.** The refactor's bar is _currently-working rendering
-still works_ — verified through the existing examples and downstream consumer
-sketches in the standard gate. Adding new examples is a **separate milestone
-after the refactor lands**, to be designed then with concrete visuals / effects
-in mind (an actual glow, an actual blur cascade, etc.) rather than synthetic
-render-correctness probes.
+**Not part of this refactor.** The refactor's bar is _currently-working
+rendering still works_ — verified through the existing examples and downstream
+consumer sketches in the standard gate. Adding new examples is a **separate
+milestone after the refactor lands**, to be designed then with concrete visuals
+/ effects in mind (an actual glow, an actual blur cascade, etc.) rather than
+synthetic render-correctness probes.
 
-This section only **documents the gaps** so they aren't lost. `trivalibs/examples`
-should eventually exercise every rendering feature so a future refactor can't
-silently break it; today several paths this refactor touches are covered only by
-downstream consumer sketches (`sketchlib.utils.bloom`, the `rooms/canvases`
-scene) or by nothing at all. The "Verified during the refactor by" column is the
-interim safety net; the example is the eventual permanent coverage.
+This section only **documents the gaps** so they aren't lost.
+`trivalibs/examples` should eventually exercise every rendering feature so a
+future refactor can't silently break it; today several paths this refactor
+touches are covered only by downstream consumer sketches
+(`sketchlib.utils.bloom`, the `rooms/canvases` scene) or by nothing at all. The
+"Verified during the refactor by" column is the interim safety net; the example
+is the eventual permanent coverage.
 
-| Path                                                                              | Verified during the refactor by                          | Deferred example (design later)                                                                                                                                                                                                                                              |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single + chained auto-pong layers                                                 | `blur` (chained), `rooms/canvases` (single)              | already covered by examples — none needed                                                                                                                                                                                                                                   |
-| MRT panel + manually-bound-slot-0 layer chained to a single-format panel          | `deferred`                                               | already covered by examples — none needed                                                                                                                                                                                                                                   |
-| **Mip-target layers** (`layer.mipTarget >= 0`, hand-built mip chain via `perMip`) | `sketchlib.utils.bloom` (consumer)                       | `mip_layers`: one panel, `mips = true`, `mipTarget`/`mipSource` layers that downsample-then-upsample; the mip chain is hand-built (auto-`generateMipmaps` skipped). Exercises `slotViews(0).perMip(n)` + the mip-target branch. Design around a real down/up cascade effect. |
+| Path                                                                              | Verified during the refactor by                                                                                         | Deferred example (design later)                                                                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single + chained auto-pong layers                                                 | `blur` (chained), `rooms/canvases` (single)                                                                             | already covered by examples — none needed                                                                                                                                                                                                                                                               |
+| MRT panel + manually-bound-slot-0 layer chained to a single-format panel          | `deferred`                                                                                                              | already covered by examples — none needed                                                                                                                                                                                                                                                               |
+| **Mip-target layers** (`layer.mipTarget >= 0`, hand-built mip chain via `perMip`) | `sketchlib.utils.bloom` (consumer)                                                                                      | `mip_layers`: one panel, `mips = true`, `mipTarget`/`mipSource` layers that downsample-then-upsample; the mip chain is hand-built (auto-`generateMipmaps` skipped). Exercises `slotViews(0).perMip(n)` + the mip-target branch. Design around a real down/up cascade effect.                            |
 | **Blend (non-pong) layer interleaved with auto-pong layers on the same panel**    | nothing — new targeted behaviour (see [Blend layers compose with ping-pong]); only exercised once a real effect uses it | `layer_pong_mixed`: stack `pong A → blend B → pong C`, B carrying an alpha/additive `blendState` compositing over the running result; B persists _and_ is transformed by C (C sampled `B∘A`). Cover both sub-cases: pure blend draw, and `slot0Manual` blend. Design around a real overlay/glow effect. |
-| **MSAA + auto-pong**                                                              | `rooms/canvases` (consumer)                              | `layer_pong_msaa`: `multisample = true` panel + shape + one auto-pong layer; MSAA resolve → slot-0 → pong → swap, plus the `clearColor = null` load-from-previous-frame semantic ([Risks] MSAA + pong).                                                                       |
-| **Multi-panel reuse of one `Layer` instance**                                     | Stage 5 manual/throwaway check (see its Verify)          | `layer_reuse`: one static layer instance bound into two panels painted in the same frame; each renders its own result. Proves the Stage 5 `panelId`-mismatch miss path (reuse degrades to a rebuild, never a wrong hit).                                                      |
+| **MSAA + auto-pong**                                                              | `rooms/canvases` (consumer)                                                                                             | `layer_pong_msaa`: `multisample = true` panel + shape + one auto-pong layer; MSAA resolve → slot-0 → pong → swap, plus the `clearColor = null` load-from-previous-frame semantic ([Risks] MSAA + pong).                                                                                                 |
+| **Multi-panel reuse of one `Layer` instance**                                     | Stage 5 manual/throwaway check (see its Verify)                                                                         | `layer_reuse`: one static layer instance bound into two panels painted in the same frame; each renders its own result. Proves the Stage 5 `panelId`-mismatch miss path (reuse degrades to a rebuild, never a wrong hit).                                                                                |
 
 When this milestone is picked up, each new example follows the standard example
 rules (compiles standalone, ships `index.html` + `main.js`, never deleted once
@@ -924,8 +925,8 @@ added) and joins the standard verification gate.
 ## Risks / open questions
 
 - **Non-pong layers interleaved in a pong stack — resolved, see [Blend layers
-  compose with ping-pong].** (This is targeted behaviour, not a risk to
-  preserve — the current behaviour is untested and accidental.)
+  compose with ping-pong].** (This is targeted behaviour, not a risk to preserve
+  — the current behaviour is untested and accidental.)
 - **Resize during a paint** — `ensureSize` rebuilds all textures; the swap state
   is irrelevant after rebuild because both slots are fresh. No special handling.
 - **MSAA + pong**: MSAA shape pass resolves into `textureView` (slot 0). First
