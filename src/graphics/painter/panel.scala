@@ -238,6 +238,15 @@ class Panel private[painter] (val painter: Painter):
     layers
       .orMaybe(layer.map(l => Arr(l)))
       .foreach(v => this.layers = v.asInstanceOf[Arr[AnyLayer]])
+    // MRT panels can't host auto-pong layers: ping-pong is single-target by
+    // design (one color attachment), so it can't post-process multiple render
+    // targets. Compose a chain of single-format panels instead. Checked here —
+    // the choke point for both initial construction and later reconfiguration.
+    if this.formats.length > 1 && needsPong then
+      throw jsError(
+        "Panel: MRT (multiple formats) cannot host auto-pong layers. " +
+          "Chain a single-format panel for post-processing instead.",
+      )
     this
 
   private inline def processPanelEntry[N <: String & Singleton, V](
@@ -449,10 +458,13 @@ class Panel private[painter] (val painter: Painter):
     processPanelEntry(e8)
     this
 
+  // Allocate a pong scratch iff some layer auto-pongs. Uses the shared
+  // `Layer.autoPongsSlot0` predicate — the stricter form, so a layer that
+  // manually binds slot 0 no longer over-allocates an unused pong texture.
   private def needsPong: Boolean =
     var i = 0
     while i < layers.length do
-      if layers(i).shade.panelBindGroupLayout != null then return true
+      if layers(i).autoPongsSlot0 then return true
       i += 1
     false
 

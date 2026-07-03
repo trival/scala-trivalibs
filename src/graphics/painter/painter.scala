@@ -892,7 +892,13 @@ class Painter(
 
     var srcView = panel.textureView
     var dstView = panel.pongView
-    var hasPongLayers = false
+    // Tracks which physical texture currently holds the live result: it starts
+    // in main (the shape pass), and each ping-pong pass flips it main↔pong. Only
+    // when it ends in pong (odd number of pong passes) must we swap slot 0 so the
+    // result becomes the panel's main texture — swapping on an even count would
+    // wrongly demote the final result. (Stage 4's per-layer `swapPair` removes
+    // this end-of-loop reconciliation entirely.)
+    var resultInPong = false
 
     var curEncoder: Opt[GPUCommandEncoder] = null
     var curPass: Opt[GPURenderPassEncoder] = null
@@ -900,10 +906,7 @@ class Painter(
     var j = 0
     while j < panel.layers.length do
       val layer = panel.layers(j)
-      val hasPanelLayout = layer.shade.panelBindGroupLayout.notNull
-      val slot0Manual = hasPanelLayout &&
-        layer.panelBindings.length > 0 && layer.panelBindings(0).notNull
-      val needsPingPong = hasPanelLayout && !slot0Manual
+      val needsPingPong = layer.autoPongsSlot0
       val hasMipTarget = layer.mipTarget >= 0
 
       if hasMipTarget then
@@ -940,7 +943,6 @@ class Painter(
         mipPass.end()
         queue.submit(Arr(enc.finish()))
       else if needsPingPong then
-        hasPongLayers = true
         // End current pass if open, submit
         if curPass.notNull then
           curPass.end()
@@ -973,6 +975,7 @@ class Painter(
         val tmp = srcView
         srcView = dstView
         dstView = tmp
+        resultInPong = !resultInPong
       else
         // Lazily open a pass on srcView if none is open
         if curPass.isNull then
@@ -999,8 +1002,10 @@ class Painter(
     // Swap slot-0 main ↔ pong so the post-pong result becomes the panel's
     // main texture — external samplers, `outputView` (used by `show()`), and
     // the mip-generation below all read from `slotViews(0)`, so they all see the
-    // layer output after the swap.
-    if hasPongLayers then panel.swapPongMain()
+    // layer output after the swap. Only when the result actually ended in pong
+    // (odd pong count); an even chain (e.g. an H+V blur pair) already left the
+    // result in main and must not be swapped.
+    if resultInPong then panel.swapPongMain()
     panel.setOutputView(null)
 
     // Generate mipmaps if configured — but skip when any layer renders into a

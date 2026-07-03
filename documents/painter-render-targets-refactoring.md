@@ -724,27 +724,32 @@ predicate. Tiny — the whole check is one `if`.
 
 **Edits.**
 
-- Inside `Panel.set(...)` (panel.scala:196 onward), after field updates:
+- Inside `Panel.set(...)`, after field updates:
   ```scala
-  if formats.length > 1 && needsPong then
+  if this.formats.length > 1 && needsPong then
     throw jsError(
       "Panel: MRT (multiple formats) cannot host auto-pong layers. " +
       "Chain a single-format panel for post-processing instead.",
     )
   ```
+  Note `this.formats` — inside `set` the bare name `formats` is the `Maybe`
+  parameter, not the field.
 - No inline predicate scan — `needsPong` is the single source (already the
   stricter form after Stage 2).
 
-**Verify.**
+**Verify.** ✅ Done.
 
 - Standard gate (no existing example or sketch uses MRT + auto-pong, so the gate
   must stay fully green — if one fails, audit it as a real bug surfaced by the
-  invariant).
-- Add a panel unit test asserting:
-  - constructing a panel with two formats and an auto-pong layer throws;
-  - constructing a panel with two formats, then calling
-    `set(layer = autoPongLayer)` later, also throws — validates the
-    post-construction recheck.
+  invariant). Confirmed green — `deferred`'s MRT gBuffer has no layers, its
+  lighting layer lives on a single-format panel.
+- Panel unit test added — `test/graphics/painter/MrtPongInvariant.test.scala`.
+  Turned out **device-free** after all (the invariant reads only `.notNull` on
+  the shade's panel layout + the layer's `panelBindings`, never a GPU handle;
+  stub shades with a null painter suffice). Covers: MRT + auto-pong throws;
+  MRT + non-pong layer allowed; MRT + manually-bound-slot-0 layer allowed;
+  single-format + auto-pong allowed; post-construction `set(formats = twoFmts)`
+  re-trips the invariant.
 
 ### Stage 4 — Pair-array pong + per-layer swap + drop `_outputView`
 

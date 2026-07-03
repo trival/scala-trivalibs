@@ -32,6 +32,19 @@ class Layer[U, P] private[painter] (
     */
   val instances: InstanceList[U, P] = InstanceList[U, P](shade, painter)
 
+  /** Whether this layer triggers an auto-pong pass: it has a panel-texture bind
+    * group, but its first panel slot is *not* manually bound — so the painter
+    * injects the previous pass's output there and ping-pongs. The single static
+    * source of truth for the pong-dispatch decision, shared by pong allocation
+    * ([[Panel.ensureSize]] via `needsPong`), the config-time MRT invariant, and
+    * the `paintPanel` layer-loop dispatcher. The runtime `effectiveSrcView` gate
+    * in `renderLayerOnPass` stays independent (a panel runtime binding can
+    * override slot 0 even for a pong-dispatched layer).
+    */
+  private[painter] def autoPongsSlot0: Boolean =
+    shade.panelBindGroupLayout.notNull &&
+      (panelBindings.length == 0 || panelBindings(0).isNull)
+
   /** Set [[blendState]] / [[mipSource]] / [[mipTarget]]; returns `this`. */
   def set(
       blendState: Maybe[Opt[BlendState]] = Maybe.Not,
