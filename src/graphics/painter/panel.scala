@@ -129,7 +129,7 @@ class Panel private[painter] (val painter: Painter):
     * invalidated because cached views reference the old underlying textures.
     *
     * Slot 0 only: ping-pong is single-target by design (`renderLayerOnPass`
-    * for a pong pass uses one colour attachment), even on MRT panels.
+    * for a pong pass uses one color attachment), even on MRT panels.
     */
   private[painter] def swapPongMain(): Unit =
     val t = _textures(0)

@@ -323,7 +323,7 @@ extension (tex: Expr.DepthTexture2D)
 
   /** Sample the depth at `uv` with a **non-comparison** `sampler`. Returns the
     * stored depth as a scalar. (No `sampleLevel` variant: depth attachments are
-    * single-level — the mip pyramid is built on the colour texture, not depth.
+    * single-level — the mip pyramid is built on the color texture, not depth.
     * For shadow-map PCF use a comparison sampler + `textureSampleCompare`, not
     * yet wrapped.)
     */
