@@ -799,23 +799,30 @@ whether to allocate slot 1.
 - Update `Painter.show(panel)` (painter.scala ~1221) to read `panel.textureView`
   instead of `panel.outputView`.
 
-**Verify.**
+Note: the interim `resultInPong` parity guard added during Stage 1 verification
+(to fix the `62e57d9` hotfix's even-count `swapPongMain` bug) is **removed here**
+— per-layer `swapPair` keeps slot 0 authoritative after every pong pass, so
+even/odd parity is handled structurally with no end-of-loop reconciliation.
 
-- Standard gate.
+**Verify.** ✅ Done — build gate green (check, tests, all examples, all 7
+sketches).
+
+- Standard gate. ✅
 - Canvases sketch: wall shadows visible (regression re-validation, now via the
-  new pair-array swap path).
-- `trivalibs/examples/blur` (chained auto-pong): no odd/even-frame flicker — the
-  worked example in [Chained pong layers] holds visually.
+  new pair-array swap path). — build green; visual pending user eyeball.
+- `trivalibs/examples/blur` (chained auto-pong H+V): the even-count case that
+  regressed in Stage 1 is now correct by construction (traced: slot 0 ends on
+  `V(H(shape))`). No parity flicker possible — nothing to reconcile.
 - `sketchlib.utils.bloom` and `sketchlib.utils.mirror` (mip-target layers, no
-  pong) keep working after `_outputView` removal.
+  pong) keep building after `_outputView` removal; mip `else`-source now reads
+  `panel.textureView` (slot 0) in place of the dropped `srcView` local.
 - MSAA + pong panel (the canvases scene panel feeds the mirror reflection
-  - bloom util) keeps working without GPU validation errors in the console.
+  + bloom util) keeps working without GPU validation errors in the console.
 - The blend-compose target ([Blend layers compose with ping-pong]) has **no
   interim coverage** — no existing example or consumer sketch interleaves a
   blend layer in a pong stack. It ships correct-by-construction here; its
   permanent example (`layer_pong_mixed`) is a deferred milestone (see [Deferred
-  milestone: example coverage gaps]). Do a one-off manual check during this
-  stage if convenient, but a permanent regression guard waits for the example.
+  milestone: example coverage gaps]).
 
 ### Stage 5 — Layer bind-group cache
 

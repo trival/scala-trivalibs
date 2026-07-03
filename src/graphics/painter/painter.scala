@@ -890,15 +890,10 @@ class Painter(
     // Layers are fullscreen quads that always render on top.
     // Consecutive non-ping-pong layers share a pass; ping-pong forces a new one.
 
-    var srcView = panel.textureView
-    var dstView = panel.pongView
-    // Tracks which physical texture currently holds the live result: it starts
-    // in main (the shape pass), and each ping-pong pass flips it main↔pong. Only
-    // when it ends in pong (odd number of pong passes) must we swap slot 0 so the
-    // result becomes the panel's main texture — swapping on an even count would
-    // wrongly demote the final result. (Stage 4's per-layer `swapPair` removes
-    // this end-of-loop reconciliation entirely.)
-    var resultInPong = false
+    // Slot 0 is always the live result. Pong layers read it, write the scratch
+    // (slot 1), then `swapPair` so slot 0 holds their output again; non-pong
+    // layers load-compose into slot 0 in a shared pass. So every read of
+    // `panel.textureView` below is fresh — it reflects all prior layers.
 
     var curEncoder: Opt[GPUCommandEncoder] = null
     var curPass: Opt[GPURenderPassEncoder] = null
@@ -910,7 +905,8 @@ class Painter(
       val hasMipTarget = layer.mipTarget >= 0
 
       if hasMipTarget then
-        // Mip-targeted layer: render to specific mip level, no ping-pong
+        // Mip-targeted layer: render to a specific mip level, no ping-pong.
+        // Flush any open shared pass first so its slot-0 writes are visible.
         if curPass.notNull then
           curPass.end()
           queue.submit(Arr(curEncoder.finish()))
@@ -919,7 +915,7 @@ class Painter(
         val mipDstView = panel.slotViews(0).perMip(layer.mipTarget)
         val mipSrcView =
           if layer.mipSource >= 0 then panel.slotViews(0).perMip(layer.mipSource)
-          else srcView
+          else panel.textureView
 
         val enc = device.createCommandEncoder()
         val mipPass = enc.beginRenderPass(
@@ -943,19 +939,21 @@ class Painter(
         mipPass.end()
         queue.submit(Arr(enc.finish()))
       else if needsPingPong then
-        // End current pass if open, submit
+        // Flush any open shared pass so a preceding non-pong blend layer's write
+        // to slot 0 is submitted before we sample it here.
         if curPass.notNull then
           curPass.end()
           queue.submit(Arr(curEncoder.finish()))
           curPass = null
 
-        // Ping-pong pass: render to dstView, inject srcView at slot 0
+        // Ping-pong pass: read slot 0 (auto-injected), write the scratch (slot
+        // 1), then swap so slot 0 becomes this layer's output.
         val enc = device.createCommandEncoder()
         val ppPass = enc.beginRenderPass(
           Obj.literal(
             colorAttachments = Arr(
               Obj.literal(
-                view = dstView,
+                view = panel.pongTargetView,
                 loadOp = "load",
                 storeOp = "store",
               ),
@@ -966,25 +964,23 @@ class Painter(
           ppPass,
           layer,
           formats = panelFormats,
-          srcView = srcView,
+          srcView = panel.textureView,
           panel = panel,
         )
         ppPass.end()
         queue.submit(Arr(enc.finish()))
 
-        val tmp = srcView
-        srcView = dstView
-        dstView = tmp
-        resultInPong = !resultInPong
+        panel.swapPair()
       else
-        // Lazily open a pass on srcView if none is open
+        // Non-pong layer: lazily open a shared pass on slot 0 and load-compose
+        // (blend layers stack on top of the live result, which persists there).
         if curPass.isNull then
           curEncoder = device.createCommandEncoder()
           curPass = curEncoder.beginRenderPass(
             Obj.literal(
               colorAttachments = Arr(
                 Obj.literal(
-                  view = srcView,
+                  view = panel.textureView,
                   loadOp = "load",
                   storeOp = "store",
                 ),
@@ -998,15 +994,6 @@ class Painter(
     if curPass.notNull then
       curPass.end()
       queue.submit(Arr(curEncoder.finish()))
-
-    // Swap slot-0 main ↔ pong so the post-pong result becomes the panel's
-    // main texture — external samplers, `outputView` (used by `show()`), and
-    // the mip-generation below all read from `slotViews(0)`, so they all see the
-    // layer output after the swap. Only when the result actually ended in pong
-    // (odd pong count); an even chain (e.g. an H+V blur pair) already left the
-    // result in main and must not be swapped.
-    if resultInPong then panel.swapPongMain()
-    panel.setOutputView(null)
 
     // Generate mipmaps if configured — but skip when any layer renders into a
     // mip target: those layers build the mip chain by hand, so auto-generation
@@ -1226,7 +1213,7 @@ class Painter(
       Obj.literal(
         layout = blitBindGroupLayout,
         entries = Arr(
-          Obj.literal(binding = 0, resource = panel.outputView),
+          Obj.literal(binding = 0, resource = panel.textureView),
           Obj.literal(binding = 1, resource = blitSampler),
         ),
       ),

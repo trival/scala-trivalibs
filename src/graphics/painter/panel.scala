@@ -61,14 +61,12 @@ class Panel private[painter] (val painter: Painter):
   // sketch code and references this field directly.
   var runtimeBindings: Dict[PanelBindingValue] = Dict[PanelBindingValue]()
 
+  // Slot-indexed render textures + their view bundles, lockstep. Length is
+  // `formats.length` for a plain/MRT panel; a panel with auto-pong layers gets
+  // one extra slot (index 1, the pong scratch — MRT + pong is forbidden, so pong
+  // panels are always single-format, slot 0 = live result, slot 1 = scratch).
   private var _textures: Arr[GPUTexture] = Arr()
-  // One view bundle per main slot, lockstep with `_textures`.
   private[painter] var slotViews: Arr[SlotViews] = Arr()
-  private var _pongTextures: Arr[GPUTexture] = Arr()
-  // Slot-0 pong view bundle — held so that after a ping-pong layer pass we can
-  // swap main ↔ pong in slot 0 (`swapPongMain`) and keep slot-0 sampling valid.
-  // (Merges into slot 1 of `slotViews` in Stage 4.)
-  private var _pongSlotViews: Arr[SlotViews] = Arr()
   private var _depthTexture: Opt[GPUTexture] = null
   private var _depthView: Opt[GPUTextureView] = null
   private var _depthSamplable: Boolean = false
@@ -80,7 +78,6 @@ class Panel private[painter] (val painter: Painter):
   private var _needsDepthResolve: Boolean = false
   private var _msaaTextures: Arr[GPUTexture] = Arr()
   private var _msaaViews: Arr[GPUTextureView] = Arr()
-  private var _outputView: Opt[GPUTextureView] = null
   private var _width: Int = 0
   private var _height: Int = 0
 
@@ -103,13 +100,14 @@ class Panel private[painter] (val painter: Painter):
 
   private[painter] def targetCount: Int = effectiveFormats.length
 
+  // The live result view (slot 0). External samplers, `show()`, and mip
+  // generation all read slot 0, so a per-pong-layer `swapPair` keeping slot 0
+  // authoritative is all that's needed — no output-routing override.
   private[painter] def textureView: GPUTextureView = slotViews(0).attach
-  // Nullable by design: read eagerly in `paintPanel` before the layer loop even
-  // for non-pong panels (where `_pongSlotViews` is empty). Returning `null` here
-  // — rather than dereferencing an absent bundle — keeps that harmless, matching
-  // the pre-bundle behaviour. Only ever *used* inside the ping-pong branch.
-  private[painter] def pongView: GPUTextureView =
-    if _pongSlotViews.length > 0 then _pongSlotViews(0).attach else null
+  // The pong scratch render target (slot 1). Valid only on pong-configured
+  // panels; read exclusively inside the ping-pong branch, which runs only when
+  // a layer auto-pongs (⇒ `needsPong` ⇒ slot 1 allocated).
+  private[painter] def pongTargetView: GPUTextureView = slotViews(1).attach
   private[painter] def depthView: GPUTextureView = _depthView.get
   // True when this panel's (multisample) depth must be resolved to a sampleable
   // single-sample texture after the shape pass. The render-target depth view to
@@ -117,26 +115,21 @@ class Panel private[painter] (val painter: Painter):
   private[painter] def needsDepthResolve: Boolean = _needsDepthResolve
   private[painter] def resolvedDepthTarget: GPUTextureView = _resolvedDepthView.get
   private[painter] def msaaView: GPUTextureView = _msaaViews(0)
-  private[painter] def outputView: GPUTextureView =
-    if _outputView.notNull then _outputView.get else slotViews(0).attach
 
-  /** After a ping-pong layer pass the final result lives in the pong texture,
-    * but external samplers (and `outputView` for `show()`) read from main.
-    * Swap slot-0 main ↔ pong so the post-pong result becomes the new main —
-    * uniforms can stay bound, only panel bind groups (which view the panel's
-    * sampling texture) need refreshing on the next read. The view bundles travel
-    * with their textures, so no mip-view cache to invalidate.
-    *
-    * Slot 0 only: ping-pong is single-target by design (`renderLayerOnPass`
-    * for a pong pass uses one color attachment), even on MRT panels.
+  /** Rotate slot 0 ↔ slot 1 (texture + view bundle together) after a ping-pong
+    * layer pass, so the just-written pong scratch (slot 1) becomes the live
+    * result (slot 0). The view bundles travel with their textures, so nothing
+    * else needs invalidating. Called per pong layer, keeping slot 0 authoritative
+    * at every point — the next layer, external samplers, `show()`, and mip
+    * generation all read slot 0.
     */
-  private[painter] def swapPongMain(): Unit =
+  private[painter] def swapPair(): Unit =
     val t = _textures(0)
-    _textures(0) = _pongTextures(0)
-    _pongTextures(0) = t
+    _textures(0) = _textures(1)
+    _textures(1) = t
     val sv = slotViews(0)
-    slotViews(0) = _pongSlotViews(0)
-    _pongSlotViews(0) = sv
+    slotViews(0) = slotViews(1)
+    slotViews(1) = sv
 
   private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(
     index,
@@ -200,9 +193,6 @@ class Panel private[painter] (val painter: Painter):
       depth: Boolean = false,
   ): PanelBinding =
     new PanelBinding(this, index, mipLevel, depth)
-
-  private[painter] def setOutputView(view: GPUTextureView): Unit =
-    _outputView = view
 
   /** Reconfigure this panel (same options as [[Painter.panel]]); returns `this`
     * for chaining. Only provided args change. `mips = true` sets
@@ -484,14 +474,10 @@ class Panel private[painter] (val painter: Painter):
     val targetW = if specWidth == 0 then canvasW else specWidth
     val targetH = if specHeight == 0 then canvasH else specHeight
     if targetW != _width || targetH != _height then
-      // Destroy old textures
+      // Destroy old textures (pong scratch, if any, lives in `_textures`).
       var d = 0
       while d < _textures.length do
         _textures(d).destroy()
-        d += 1
-      d = 0
-      while d < _pongTextures.length do
-        _pongTextures(d).destroy()
         d += 1
       d = 0
       while d < _msaaTextures.length do
@@ -510,8 +496,6 @@ class Panel private[painter] (val painter: Painter):
 
       _textures = Arr()
       slotViews = Arr()
-      _pongTextures = Arr()
-      _pongSlotViews = Arr()
       _msaaTextures = Arr()
       _msaaViews = Arr()
 
@@ -529,18 +513,6 @@ class Panel private[painter] (val painter: Painter):
         _textures.push(tex)
         slotViews.push(buildSlotViews(tex, mipCount))
 
-        if hasPong then
-          val pongTex = painter.device.createTexture(
-            Obj.literal(
-              size = Obj.literal(width = targetW, height = targetH),
-              format = fmt.toJs,
-              usage = colorUsage,
-              mipLevelCount = mipCount,
-            ),
-          )
-          _pongTextures.push(pongTex)
-          _pongSlotViews.push(buildSlotViews(pongTex, mipCount))
-
         if multisample then
           val msaaTex = painter.device.createTexture(
             Obj.literal(
@@ -554,5 +526,19 @@ class Panel private[painter] (val painter: Painter):
           _msaaViews.push(msaaTex.createView())
 
         i += 1
+
+      // Pong scratch (slot 1). MRT + pong is forbidden, so a pong panel is
+      // single-format ⇒ this appends index 1 alongside the single main slot 0.
+      if hasPong then
+        val pongTex = painter.device.createTexture(
+          Obj.literal(
+            size = Obj.literal(width = targetW, height = targetH),
+            format = fmts(0).toJs,
+            usage = colorUsage,
+            mipLevelCount = mipCount,
+          ),
+        )
+        _textures.push(pongTex)
+        slotViews.push(buildSlotViews(pongTex, mipCount))
 
       if depthTest then allocDepth()
