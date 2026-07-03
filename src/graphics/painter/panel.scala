@@ -10,6 +10,20 @@ import scala.scalajs.js
 
 type ClearColor = (Double, Double, Double, Double)
 
+/** The eager per-slot view bundle for one panel texture. Collapses the three
+  * former lineages (`_textureViews`, `_samplingViews`, `_mipViews`) into one:
+  *   - `perMip` — one single-level view per mip level (length = `mipCount`).
+  *     `perMip(0)` (aliased [[attach]]) is the render-attachment view; higher
+  *     entries feed hand-built mip chains and `generateMipmaps`.
+  *   - `sampling` — a full-chain view for shader sampling (`textureSampleLevel`).
+  * Built once alongside the texture; travels with it through swaps.
+  */
+private[painter] final class SlotViews(
+    val perMip: Arr[GPUTextureView],
+    val sampling: GPUTextureView,
+):
+  inline def attach: GPUTextureView = perMip(0)
+
 /** A reference to one texture view of a [[Panel]], used as a shader input. Pick
   * which view via `panel.binding(index = …, mipLevel = …, depth = …)`:
   *   - `index` — render-target index (for MRT panels with multiple `formats`).
@@ -48,15 +62,13 @@ class Panel private[painter] (val painter: Painter):
   var runtimeBindings: Dict[PanelBindingValue] = Dict[PanelBindingValue]()
 
   private var _textures: Arr[GPUTexture] = Arr()
-  private var _textureViews: Arr[GPUTextureView] = Arr()
-  private var _samplingViews: Arr[Opt[GPUTextureView]] = Arr()
+  // One view bundle per main slot, lockstep with `_textures`.
+  private[painter] var slotViews: Arr[SlotViews] = Arr()
   private var _pongTextures: Arr[GPUTexture] = Arr()
-  private var _pongViews: Arr[GPUTextureView] = Arr()
-  // Full-mip sampling view of each pong texture — held so that after a
-  // ping-pong layer pass we can swap main ↔ pong in the slot-0 arrays
-  // (`swapPongMain`) and keep `textureViewAt(0, -1)` pointing at a valid
-  // sampling view of the new main.
-  private var _pongSamplingViews: Arr[Opt[GPUTextureView]] = Arr()
+  // Slot-0 pong view bundle — held so that after a ping-pong layer pass we can
+  // swap main ↔ pong in slot 0 (`swapPongMain`) and keep slot-0 sampling valid.
+  // (Merges into slot 1 of `slotViews` in Stage 4.)
+  private var _pongSlotViews: Arr[SlotViews] = Arr()
   private var _depthTexture: Opt[GPUTexture] = null
   private var _depthView: Opt[GPUTextureView] = null
   private var _depthSamplable: Boolean = false
@@ -71,7 +83,6 @@ class Panel private[painter] (val painter: Painter):
   private var _outputView: Opt[GPUTextureView] = null
   private var _width: Int = 0
   private var _height: Int = 0
-  private val _mipViews: Dict[GPUTextureView] = Dict[GPUTextureView]()
 
   private[painter] def panelWidth: Int = _width
   private[painter] def panelHeight: Int = _height
@@ -92,8 +103,13 @@ class Panel private[painter] (val painter: Painter):
 
   private[painter] def targetCount: Int = effectiveFormats.length
 
-  private[painter] def textureView: GPUTextureView = _textureViews(0)
-  private[painter] def pongView: GPUTextureView = _pongViews(0)
+  private[painter] def textureView: GPUTextureView = slotViews(0).attach
+  // Nullable by design: read eagerly in `paintPanel` before the layer loop even
+  // for non-pong panels (where `_pongSlotViews` is empty). Returning `null` here
+  // — rather than dereferencing an absent bundle — keeps that harmless, matching
+  // the pre-bundle behaviour. Only ever *used* inside the ping-pong branch.
+  private[painter] def pongView: GPUTextureView =
+    if _pongSlotViews.length > 0 then _pongSlotViews(0).attach else null
   private[painter] def depthView: GPUTextureView = _depthView.get
   // True when this panel's (multisample) depth must be resolved to a sampleable
   // single-sample texture after the shape pass. The render-target depth view to
@@ -102,31 +118,14 @@ class Panel private[painter] (val painter: Painter):
   private[painter] def resolvedDepthTarget: GPUTextureView = _resolvedDepthView.get
   private[painter] def msaaView: GPUTextureView = _msaaViews(0)
   private[painter] def outputView: GPUTextureView =
-    if _outputView.notNull then _outputView.get else _textureViews(0)
-
-  private[painter] def textureViewAt(
-      index: Int = 0,
-      mipLevel: Int = -1,
-  ): GPUTextureView =
-    if mipLevel < 0 then
-      val sv = _samplingViews(index)
-      if sv.notNull then sv.get else _textureViews(index)
-    else
-      val key = s"$index|$mipLevel"
-      if _mipViews.has(key) then _mipViews.at(key)
-      else
-        val view = _textures(index).createView(
-          Obj.literal(baseMipLevel = mipLevel, mipLevelCount = 1),
-        )
-        _mipViews.set(key, view)
-        view
+    if _outputView.notNull then _outputView.get else slotViews(0).attach
 
   /** After a ping-pong layer pass the final result lives in the pong texture,
     * but external samplers (and `outputView` for `show()`) read from main.
     * Swap slot-0 main ↔ pong so the post-pong result becomes the new main —
     * uniforms can stay bound, only panel bind groups (which view the panel's
-    * sampling texture) need refreshing on the next read. Mip-view cache is
-    * invalidated because cached views reference the old underlying textures.
+    * sampling texture) need refreshing on the next read. The view bundles travel
+    * with their textures, so no mip-view cache to invalidate.
     *
     * Slot 0 only: ping-pong is single-target by design (`renderLayerOnPass`
     * for a pong pass uses one color attachment), even on MRT panels.
@@ -135,26 +134,10 @@ class Panel private[painter] (val painter: Painter):
     val t = _textures(0)
     _textures(0) = _pongTextures(0)
     _pongTextures(0) = t
-    val tv = _textureViews(0)
-    _textureViews(0) = _pongViews(0)
-    _pongViews(0) = tv
-    val sv = _samplingViews(0)
-    _samplingViews(0) = _pongSamplingViews(0)
-    _pongSamplingViews(0) = sv
-    val mipKeys = js.Object
-      .keys(_mipViews.asInstanceOf[js.Object])
-      .asInstanceOf[Arr[String]]
-    var mk = 0
-    while mk < mipKeys.length do
-      js.special.delete(_mipViews, mipKeys(mk))
-      mk += 1
+    val sv = slotViews(0)
+    slotViews(0) = _pongSlotViews(0)
+    _pongSlotViews(0) = sv
 
-  private[painter] def renderViewAt(index: Int): GPUTextureView = _textureViews(
-    index,
-  )
-  private[painter] def pongViewAt(index: Int): GPUTextureView = _pongViews(
-    index,
-  )
   private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(
     index,
   )
@@ -473,6 +456,18 @@ class Panel private[painter] (val painter: Painter):
       i += 1
     false
 
+  // Build the eager per-slot view bundle for a freshly-allocated texture: one
+  // single-level view per mip level plus one full-chain sampling view.
+  private def buildSlotViews(tex: GPUTexture, mipCount: Int): SlotViews =
+    val perMip = Arr[GPUTextureView]()
+    var m = 0
+    while m < mipCount do
+      perMip.push(
+        tex.createView(Obj.literal(baseMipLevel = m, mipLevelCount = 1)),
+      )
+      m += 1
+    new SlotViews(perMip, tex.createView())
+
   private[painter] def ensureSize(canvasW: Int, canvasH: Int): Unit =
     val targetW = if specWidth == 0 then canvasW else specWidth
     val targetH = if specHeight == 0 then canvasH else specHeight
@@ -495,15 +490,6 @@ class Panel private[painter] (val painter: Painter):
       _width = targetW
       _height = targetH
 
-      // Clear mip view cache
-      val mipKeys = js.Object
-        .keys(_mipViews.asInstanceOf[js.Object])
-        .asInstanceOf[Arr[String]]
-      var mk = 0
-      while mk < mipKeys.length do
-        js.special.delete(_mipViews, mipKeys(mk))
-        mk += 1
-
       val mipCount = mipLevelCount
       val fmts = effectiveFormats
       val hasPong = needsPong
@@ -511,11 +497,9 @@ class Panel private[painter] (val painter: Painter):
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
 
       _textures = Arr()
-      _textureViews = Arr()
-      _samplingViews = Arr()
+      slotViews = Arr()
       _pongTextures = Arr()
-      _pongViews = Arr()
-      _pongSamplingViews = Arr()
+      _pongSlotViews = Arr()
       _msaaTextures = Arr()
       _msaaViews = Arr()
 
@@ -531,12 +515,7 @@ class Panel private[painter] (val painter: Painter):
           ),
         )
         _textures.push(tex)
-        _textureViews.push(
-          tex.createView(Obj.literal(baseMipLevel = 0, mipLevelCount = 1)),
-        )
-        _samplingViews.push(
-          if mipCount > 1 then tex.createView() else null,
-        )
+        slotViews.push(buildSlotViews(tex, mipCount))
 
         if hasPong then
           val pongTex = painter.device.createTexture(
@@ -548,14 +527,7 @@ class Panel private[painter] (val painter: Painter):
             ),
           )
           _pongTextures.push(pongTex)
-          _pongViews.push(
-            pongTex.createView(
-              Obj.literal(baseMipLevel = 0, mipLevelCount = 1),
-            ),
-          )
-          _pongSamplingViews.push(
-            if mipCount > 1 then pongTex.createView() else null,
-          )
+          _pongSlotViews.push(buildSlotViews(pongTex, mipCount))
 
         if multisample then
           val msaaTex = painter.device.createTexture(

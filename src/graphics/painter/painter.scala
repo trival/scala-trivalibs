@@ -827,14 +827,14 @@ class Painter(
           if msaa then
             Obj.literal(
               view = panel.msaaViewAt(t),
-              resolveTarget = panel.renderViewAt(t),
+              resolveTarget = panel.slotViews(t).attach,
               loadOp = "clear",
               storeOp = "discard",
               clearValue = Obj.literal(r = r, g = g, b = b, a = a),
             )
           else
             Obj.literal(
-              view = panel.renderViewAt(t),
+              view = panel.slotViews(t).attach,
               loadOp = "clear",
               storeOp = "store",
               clearValue = Obj.literal(r = r, g = g, b = b, a = a),
@@ -842,13 +842,13 @@ class Painter(
         else if msaa then
           Obj.literal(
             view = panel.msaaViewAt(t),
-            resolveTarget = panel.renderViewAt(t),
+            resolveTarget = panel.slotViews(t).attach,
             loadOp = "load",
             storeOp = "store",
           )
         else
           Obj.literal(
-            view = panel.renderViewAt(t),
+            view = panel.slotViews(t).attach,
             loadOp = "load",
             storeOp = "store",
           )
@@ -913,9 +913,9 @@ class Painter(
           queue.submit(Arr(curEncoder.finish()))
           curPass = null
 
-        val mipDstView = panel.textureViewAt(0, layer.mipTarget)
+        val mipDstView = panel.slotViews(0).perMip(layer.mipTarget)
         val mipSrcView =
-          if layer.mipSource >= 0 then panel.textureViewAt(0, layer.mipSource)
+          if layer.mipSource >= 0 then panel.slotViews(0).perMip(layer.mipSource)
           else srcView
 
         val enc = device.createCommandEncoder()
@@ -998,8 +998,8 @@ class Painter(
 
     // Swap slot-0 main ↔ pong so the post-pong result becomes the panel's
     // main texture — external samplers, `outputView` (used by `show()`), and
-    // the mip-generation below all read from `_textureViews(0)` /
-    // `_samplingViews(0)`, so they all see the layer output after the swap.
+    // the mip-generation below all read from `slotViews(0)`, so they all see the
+    // layer output after the swap.
     if hasPongLayers then panel.swapPongMain()
     panel.setOutputView(null)
 
@@ -1403,8 +1403,8 @@ class Painter(
 
     var i = 1
     while i < mipCount do
-      val srcView = panel.textureViewAt(0, i - 1)
-      val dstView = panel.textureViewAt(0, i)
+      val srcView = panel.slotViews(0).perMip(i - 1)
+      val dstView = panel.slotViews(0).perMip(i)
 
       val encoder = device.createCommandEncoder()
       val pass = encoder.beginRenderPass(
@@ -1551,7 +1551,8 @@ class Painter(
         if pb.notNull then
           val view =
             if pb.depth then pb.panel.depthSamplingView
-            else pb.panel.textureViewAt(pb.index, pb.mipLevel)
+            else if pb.mipLevel < 0 then pb.panel.slotViews(pb.index).sampling
+            else pb.panel.slotViews(pb.index).perMip(pb.mipLevel)
           entries.push(Obj.literal(binding = k, resource = view))
         k += 1
       if entries.length > 0 then
