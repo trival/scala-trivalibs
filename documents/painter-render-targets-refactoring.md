@@ -800,9 +800,9 @@ whether to allocate slot 1.
   instead of `panel.outputView`.
 
 Note: the interim `resultInPong` parity guard added during Stage 1 verification
-(to fix the `62e57d9` hotfix's even-count `swapPongMain` bug) is **removed here**
-— per-layer `swapPair` keeps slot 0 authoritative after every pong pass, so
-even/odd parity is handled structurally with no end-of-loop reconciliation.
+(to fix the `62e57d9` hotfix's even-count `swapPongMain` bug) is **removed
+here** — per-layer `swapPair` keeps slot 0 authoritative after every pong pass,
+so even/odd parity is handled structurally with no end-of-loop reconciliation.
 
 **Verify.** ✅ Done — build gate green (check, tests, all examples, all 7
 sketches).
@@ -817,7 +817,7 @@ sketches).
   pong) keep building after `_outputView` removal; mip `else`-source now reads
   `panel.textureView` (slot 0) in place of the dropped `srcView` local.
 - MSAA + pong panel (the canvases scene panel feeds the mirror reflection
-  + bloom util) keeps working without GPU validation errors in the console.
+  - bloom util) keeps working without GPU validation errors in the console.
 - The blend-compose target ([Blend layers compose with ping-pong]) has **no
   interim coverage** — no existing example or consumer sketch interleaves a
   blend layer in a pong stack. It ships correct-by-construction here; its
@@ -855,33 +855,35 @@ per-`Layer` `LayerBindCache` fast path.
   module-level `_panelIdSeq` in `panel.scala`, incremented in the `Panel` body
   (`private[painter] val panelId`). Global monotonic ids are strictly stronger
   than device-scoped (still process-unique) and — crucially — need no `painter`
-  reference, so the device-free `MrtPongInvariant` test (`new Panel(null)`) keeps
-  working. Same pattern as `Expr.Ref`'s `refCount`.
+  reference, so the device-free `MrtPongInvariant` test (`new Panel(null)`)
+  keeps working. Same pattern as `Expr.Ref`'s `refCount`.
 - `Layer.cache: Opt[LayerBindCache] = null`. `LayerBindCache` is a top-level
   `private[painter] final class` in `layer.scala` (not a nested/inner class —
   keeps `panel.slotViews`-style cross-file access simple) storing `panelId`,
   `epoch`, `valueGroup`, `panelGroup` (the last two `Opt[GPUBindGroup]`).
 - **Deviation — cache invalidation via a `Bindable.onBindingsChanged()` hook**,
-  not literally inside `bind`. `bind`/`processEntry` are `inline` and shared with
-  `Shape`; a non-inline `protected def onBindingsChanged(): Unit = ()` on
+  not literally inside `bind`. `bind`/`processEntry` are `inline` and shared
+  with `Shape`; a non-inline `protected def onBindingsChanged(): Unit = ()` on
   `Bindable`, called at the end of `processEntry`, is overridden by `Layer` to
   null its cache. Fires on in-place uniform re-sets too — harmless: a
   per-frame-rebinding layer just forgoes caching (today's rebuild-every-draw).
 - Split `setValueBindGroup`/`setPanelBindGroup` into `buildValueBindGroup`/
   `buildPanelBindGroup` (return `Opt[GPUBindGroup]`, null on the early-return
   conditions) + thin `set*` wrappers. Shapes keep using the `set*` wrappers.
-- Hit path inside `renderLayerOnPass` (static branch: `instanceCount == 0 &&
-  !hasPanelBinds`): if `cache.notNull && panel.notNull && panelId matches &&
-  epoch matches`, `setBindGroup` the cached groups (skipping nulls); else build
-  both, set, and store a fresh `LayerBindCache` (overwriting any stale entry —
-  the mismatch path never *uses* a stale `GPUBindGroup`). Instanced and
+- Hit path inside `renderLayerOnPass` (static branch:
+  `instanceCount == 0 && !hasPanelBinds`): if
+  `cache.notNull && panel.notNull && panelId matches && epoch matches`,
+  `setBindGroup` the cached groups (skipping nulls); else build both, set, and
+  store a fresh `LayerBindCache` (overwriting any stale entry — the mismatch
+  path never _uses_ a stale `GPUBindGroup`). Instanced and
   panel-runtime-override draws stay on the existing per-draw path.
 
 **Verify.** ✅ Build gate green (check, tests, all examples, all 7 sketches).
 Correctness reasoned through: static+stable → hits; auto-pong → epoch always
 advanced by its own `swapPair` ⇒ always rebuilds fresh (never a stale hit);
 per-frame-`.bind` → invalidates each frame; multi-panel reuse → `panelId`
-mismatch rebuilds; resize → epoch bump rebuilds. Remaining checks need a browser:
+mismatch rebuilds; resize → epoch bump rebuilds. Remaining checks need a
+browser:
 
 - Standard gate — all visuals unchanged.
 - Cache-invalidation correctness: trigger `swapPair` (any auto-pong sketch) and
@@ -899,27 +901,39 @@ mismatch rebuilds; resize → epoch bump rebuilds. Remaining checks need a brows
   before and after Stage 5. Expect a measurable drop on the layer-stack draw
   cost. The visual output must be identical.
 
-### Stage 6 — Documentation
+### Stage 6 — Documentation ✅ Done
 
-Doc-only stage. No code changes.
+Doc-only stage (plus the naming pass below, pulled forward from Future work).
 
 **Edits.**
 
-- `trivalibs/docs/guide/gotchas.md`: extend the existing "A layer's first
-  texture slot is auto-injected" note with a sentence saying MRT panels cannot
-  host auto-pong layers and must chain through a single-target panel for
-  post-processing.
-- `Layer` scaladoc: document the static bind-group cache and the two
-  invalidation triggers (`Bindable.bind` mutation; `Panel._bindEpoch` mismatch
-  from `swapPair` / `ensureSize` realloc).
-- `Panel` scaladoc: MSAA + auto-pong load-semantics note (see [Risks / open
-  questions]) — a subsequent paint with `clearColor = null` loads the previous
-  frame's _post-layer_ slot 0, same semantic as a no-pong load.
+- `trivalibs/docs/guide/gotchas.md`: extended the "A layer's first texture slot
+  is auto-injected" note — leaving the slot unbound makes the layer auto-pong,
+  and an MRT panel therefore can't host one (throws at construction; chain
+  single-format panels instead). A manually-bound slot is not auto-pong and is
+  fine on MRT.
+- `Layer` scaladoc: documents the static bind-group cache — keyed
+  `(panelId, epoch)`, invalidated by any `.bind(...)` (via `onBindingsChanged`)
+  and by an `epoch` bump from `swapPair` / `ensureSize` realloc; auto-pong
+  layers rebuild every frame; shared-`BufferBinding.set` value updates don't
+  touch it.
+- `Panel` scaladoc: ping-pong slot model + MRT restriction, and the MSAA +
+  auto-pong load-semantics note (`clearColor = null` loads the previous frame's
+  post-layer slot 0, same as a no-pong load).
 
-**Verify.**
+**Naming pass — drop "slot" (pulled forward, done).** Renamed the view-bundle
+type and field off the storage-layout name: `SlotViews` →
+**`TextureViewBundle`** (singular class name; avoids conflating with the WebGPU
+`textureView`) and `slotViews` → **`views`** (the field is a collection, so
+plural reads right at `panel.views(i).attach`). `buildSlotViews` → `buildViews`.
+`_pongSlotViews` was already gone (merged into slot 1 in Stage 4).
 
-- `cd trivalibs && bun run docs` — generated API site builds clean.
-- Visual spot-check of the gotchas page in the docs site.
+**Verify.** ✅
+
+- `cd trivalibs && bun run docs` — generated API site builds clean (1
+  pre-existing warning).
+- Full gate green after the rename + doc edits (check, tests, all examples, all
+  7 sketches).
 
 ## Deferred milestone: example coverage gaps
 
@@ -972,17 +986,8 @@ added) and joins the standard verification gate.
   in [Deferred milestone: example coverage gaps], designed then around concrete
   visuals/effects. Separate follow-up; the refactor itself relies on existing
   examples + consumer sketches for its safety net.
-- **Naming pass — drop "slot".** Once the refactor is landed and confirmed,
-  rename `SlotViews` / `slotViews` / `_pongSlotViews` to drop the "slot" prefix.
-  Two reasons: the slot dimension is already implicit in the index access
-  (`views(i)`), and — now that the bundle is an exposed `private[painter]` field
-  read directly in the rendering logic (`panel.slotViews(i).attach`,
-  `.perMip(n)`, `.sampling`) — the name is evaluated at its usage sites, where
-  it should describe its _function_ (the panel's texture views), not the storage
-  layout. The type's own API (`attach`, `sampling`, `perMip`) already conveys
-  what it is and how it's used. Deferred to a post-landing pass so the refactor
-  diffs stay easy to review against the old `_textureViews` / `_samplingViews` /
-  `_mipViews` names. Likely target: `TextureViews` / `views` / `_pongViews`.
+- ~~**Naming pass — drop "slot".**~~ Done in Stage 6 — `TextureViewBundle` /
+  `views` (see Stage 6).
 - Per-layer "writes target index N" for MRT post-processing, if the use case
   arises. Would be additive on top of this refactor.
 - A `mipBlitSampler`-style helper to copy pong slot 1 → slot 0 explicitly for

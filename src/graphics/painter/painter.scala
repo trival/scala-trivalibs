@@ -827,14 +827,14 @@ class Painter(
           if msaa then
             Obj.literal(
               view = panel.msaaViewAt(t),
-              resolveTarget = panel.slotViews(t).attach,
+              resolveTarget = panel.views(t).attach,
               loadOp = "clear",
               storeOp = "discard",
               clearValue = Obj.literal(r = r, g = g, b = b, a = a),
             )
           else
             Obj.literal(
-              view = panel.slotViews(t).attach,
+              view = panel.views(t).attach,
               loadOp = "clear",
               storeOp = "store",
               clearValue = Obj.literal(r = r, g = g, b = b, a = a),
@@ -842,13 +842,13 @@ class Painter(
         else if msaa then
           Obj.literal(
             view = panel.msaaViewAt(t),
-            resolveTarget = panel.slotViews(t).attach,
+            resolveTarget = panel.views(t).attach,
             loadOp = "load",
             storeOp = "store",
           )
         else
           Obj.literal(
-            view = panel.slotViews(t).attach,
+            view = panel.views(t).attach,
             loadOp = "load",
             storeOp = "store",
           )
@@ -912,9 +912,9 @@ class Painter(
           queue.submit(Arr(curEncoder.finish()))
           curPass = null
 
-        val mipDstView = panel.slotViews(0).perMip(layer.mipTarget)
+        val mipDstView = panel.views(0).perMip(layer.mipTarget)
         val mipSrcView =
-          if layer.mipSource >= 0 then panel.slotViews(0).perMip(layer.mipSource)
+          if layer.mipSource >= 0 then panel.views(0).perMip(layer.mipSource)
           else panel.textureView
 
         val enc = device.createCommandEncoder()
@@ -1395,8 +1395,8 @@ class Painter(
 
     var i = 1
     while i < mipCount do
-      val srcView = panel.slotViews(0).perMip(i - 1)
-      val dstView = panel.slotViews(0).perMip(i)
+      val srcView = panel.views(0).perMip(i - 1)
+      val dstView = panel.views(0).perMip(i)
 
       val encoder = device.createCommandEncoder()
       val pass = encoder.beginRenderPass(
@@ -1552,8 +1552,8 @@ class Painter(
         if pb.notNull then
           val view =
             if pb.depth then pb.panel.depthSamplingView
-            else if pb.mipLevel < 0 then pb.panel.slotViews(pb.index).sampling
-            else pb.panel.slotViews(pb.index).perMip(pb.mipLevel)
+            else if pb.mipLevel < 0 then pb.panel.views(pb.index).sampling
+            else pb.panel.views(pb.index).perMip(pb.mipLevel)
           entries.push(Obj.literal(binding = k, resource = view))
         k += 1
       if entries.length > 0 then

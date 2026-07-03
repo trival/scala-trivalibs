@@ -31,6 +31,17 @@ private[painter] final class LayerBindCache(
   * uniforms/panels with `.bind(...)`; add per-draw overrides via
   * `instances.add(...)`. Create through [[Painter.layer]]. See [[mipSource]] /
   * [[mipTarget]] / [[blendState]] for mip-chain and accumulation passes.
+  *
+  * Performance: a *static* draw (no instances, no panel runtime overrides) caches
+  * its two GPU bind groups in [[cache]] to skip the per-frame rebuild. The cache
+  * is keyed by `(panelId, epoch)` and is invalidated by (1) any `.bind(...)`
+  * mutation, via [[onBindingsChanged]]; and (2) an `epoch` bump from
+  * `Panel.swapPair` (ping-pong rotates slot 0) or an `ensureSize` realloc (new
+  * textures). Auto-pong layers therefore rebuild every frame (their own swap
+  * advances the epoch) — only genuinely static layers (e.g. a mip/composite
+  * stack on a stable panel) get the fast path. Uniform *value* updates through a
+  * shared `BufferBinding.set` don't touch the cache (the group references the
+  * stable buffer handle).
   */
 class Layer[U, P] private[painter] (
     val painter: Painter,
