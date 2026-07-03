@@ -41,6 +41,12 @@ class PanelBinding(
 
 type PanelBindingValue = BufferBinding[?, ?] | GPUSampler | Panel | PanelBinding
 
+// Monotonic per-panel id source. Global (not device-scoped) so it needs no
+// `painter` — every panel gets a process-unique id. Load-bearing for the layer
+// bind-group cache key (see `LayerBindCache`): a layer reused across panels must
+// key-mismatch and rebuild, never reuse another panel's bind group.
+private var _panelIdSeq: Int = 0
+
 /** A render target: owns one or more GPU textures and renders its ordered
   * [[shapes]] then ordered [[layers]] into them when passed to
   * [[Painter.paint]]. Create via [[Painter.panel]]; mutate later with [[set]].
@@ -60,6 +66,15 @@ class Panel private[painter] (val painter: Painter):
   // Public (not private[painter]) because the inline `bind` expands into
   // sketch code and references this field directly.
   var runtimeBindings: Dict[PanelBindingValue] = Dict[PanelBindingValue]()
+
+  // Process-unique id, part of the layer bind-group cache key.
+  private[painter] val panelId: Int =
+    _panelIdSeq += 1
+    _panelIdSeq
+  // Bumped whenever slot-0's view changes under a cached layer bind group:
+  // `swapPair` (rotates slot 0) and `ensureSize` realloc (new textures). The
+  // layer cache treats an epoch mismatch as "invalidate + rebuild".
+  private[painter] var bindEpoch: Int = 0
 
   // Slot-indexed render textures + their view bundles, lockstep. Length is
   // `formats.length` for a plain/MRT panel; a panel with auto-pong layers gets
@@ -130,6 +145,7 @@ class Panel private[painter] (val painter: Painter):
     val sv = slotViews(0)
     slotViews(0) = slotViews(1)
     slotViews(1) = sv
+    bindEpoch += 1
 
   private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(
     index,
@@ -542,3 +558,7 @@ class Panel private[painter] (val painter: Painter):
         slotViews.push(buildSlotViews(pongTex, mipCount))
 
       if depthTest then allocDepth()
+
+      // Textures (and their views) are all fresh — any cached layer bind group
+      // referencing the old ones is now stale.
+      bindEpoch += 1

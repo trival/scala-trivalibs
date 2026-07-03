@@ -1509,11 +1509,11 @@ class Painter(
   // Bind group helpers
   // =========================================================================
 
-  private def setValueBindGroup(
-      pass: GPURenderPassEncoder,
+  // Build the group-0 (uniform) bind group, or null when the layer has none.
+  private def buildValueBindGroup(
       shade: Shade[?, ?],
       bindings: BindingSlots,
-  ): Unit =
+  ): Opt[GPUBindGroup] =
     if bindings.length > 0 && shade.valueBindGroupLayout.notNull then
       val entries = Arr[js.Dynamic]()
       var i = 0
@@ -1521,17 +1521,26 @@ class Painter(
         val b = bindings(i)
         if b != null then entries.push(bindingEntry(i, b))
         i += 1
-      val bg = device.createBindGroup(
+      device.createBindGroup(
         Obj.literal(layout = shade.valueBindGroupLayout, entries = entries),
       )
-      pass.setBindGroup(0, bg)
+    else null
 
-  private def setPanelBindGroup(
+  private def setValueBindGroup(
       pass: GPURenderPassEncoder,
+      shade: Shade[?, ?],
+      bindings: BindingSlots,
+  ): Unit =
+    val bg = buildValueBindGroup(shade, bindings)
+    if bg.notNull then pass.setBindGroup(0, bg)
+
+  // Build the group-1 (panel-texture) bind group, or null when the layer has no
+  // panel layout or no entries.
+  private def buildPanelBindGroup(
       shade: Shade[?, ?],
       panelBindings: Arr[Opt[PanelBinding]],
       srcView: Opt[GPUTextureView] = null,
-  ): Unit =
+  ): Opt[GPUBindGroup] =
     if shade.panelBindGroupLayout.notNull then
       val entries = Arr[js.Dynamic]()
       if srcView.notNull then
@@ -1548,13 +1557,23 @@ class Painter(
           entries.push(Obj.literal(binding = k, resource = view))
         k += 1
       if entries.length > 0 then
-        val pg = device.createBindGroup(
+        device.createBindGroup(
           Obj.literal(
             layout = shade.panelBindGroupLayout,
             entries = entries,
           ),
         )
-        pass.setBindGroup(1, pg)
+      else null
+    else null
+
+  private def setPanelBindGroup(
+      pass: GPURenderPassEncoder,
+      shade: Shade[?, ?],
+      panelBindings: Arr[Opt[PanelBinding]],
+      srcView: Opt[GPUTextureView] = null,
+  ): Unit =
+    val pg = buildPanelBindGroup(shade, panelBindings, srcView)
+    if pg.notNull then pass.setBindGroup(1, pg)
 
   // =========================================================================
   // Per-shape render pass helper (shared by draw() and paint())
@@ -1655,6 +1674,7 @@ class Painter(
 
     if instanceCount == 0 then
       if hasPanelBinds then
+        // Dynamic path: panel runtime overrides merged per draw — not cached.
         copyToWork(layer.bindings, layer.panelBindings)
         applyPanelRuntimeBindings(
           panel,
@@ -1674,8 +1694,24 @@ class Painter(
           effectiveSrcView,
         )
       else
-        setValueBindGroup(pass, layer.shade, layer.bindings)
-        setPanelBindGroup(pass, layer.shade, layer.panelBindings, srcView)
+        // Static path: cacheable by (panelId, epoch). A hit skips the
+        // work-buffer copy + GPU bind-group build; a mismatch (or first draw)
+        // rebuilds and re-stores, dropping any stale entry.
+        val c = layer.cache
+        if c.notNull && panel.notNull
+          && c.panelId == panel.panelId && c.epoch == panel.bindEpoch
+        then
+          if c.valueGroup.notNull then pass.setBindGroup(0, c.valueGroup)
+          if c.panelGroup.notNull then pass.setBindGroup(1, c.panelGroup)
+        else
+          val vg = buildValueBindGroup(layer.shade, layer.bindings)
+          val pg = buildPanelBindGroup(layer.shade, layer.panelBindings, srcView)
+          if vg.notNull then pass.setBindGroup(0, vg)
+          if pg.notNull then pass.setBindGroup(1, pg)
+          layer.cache =
+            if panel.notNull then
+              LayerBindCache(panel.panelId, panel.bindEpoch, vg, pg)
+            else null
       pass.draw(3)
     else
       var i = 0

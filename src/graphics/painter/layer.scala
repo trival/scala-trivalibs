@@ -4,6 +4,26 @@ import trivalibs.utils.js.*
 
 type AnyLayer = Layer[?, ?]
 
+/** Cached bind groups for one layer's static draw (no instances, no panel
+  * runtime overrides), keyed by `(panelId, epoch)`.
+  *
+  * `panelId` in the key is **load-bearing for correctness**, not just cache
+  * efficiency: epochs are per-panel counters, so two panels routinely share an
+  * epoch value. A layer reused across panels must therefore key-mismatch on
+  * `panelId` and rebuild — dropping `panelId` would let panel B reuse a bind
+  * group that references panel A's textures (undefined rendering). Never remove
+  * it from the key.
+  *
+  * `valueGroup` / `panelGroup` are null when the layer has no such group (mirrors
+  * the build helpers' early-return, so the hit path skips `setBindGroup`).
+  */
+private[painter] final class LayerBindCache(
+    val panelId: Int,
+    val epoch: Int,
+    val valueGroup: Opt[GPUBindGroup],
+    val panelGroup: Opt[GPUBindGroup],
+)
+
 /** A full-screen post-processing pass attached to a [[Panel]], built from a
   * [[Painter.layerShade]]. Layers run in order after the panel's shapes, each
   * reading the previous pass's output (the panel auto-injects it as the first
@@ -26,6 +46,13 @@ class Layer[U, P] private[painter] (
   private[painter] var mipTarget: Int = -1
   var bindings: BindingSlots = Arr()
   var panelBindings: Arr[Opt[PanelBinding]] = Arr()
+
+  // Static bind-group cache (see [[LayerBindCache]]). Invalidated on binding
+  // mutation via `onBindingsChanged`; epoch/panel mismatch invalidates in the
+  // draw path.
+  private[painter] var cache: Opt[LayerBindCache] = null
+
+  override protected def onBindingsChanged(): Unit = cache = null
 
   /** Per-draw-call binding overrides; one rendered draw per added instance
     * (e.g. one additive draw per light). See [[InstanceList]].

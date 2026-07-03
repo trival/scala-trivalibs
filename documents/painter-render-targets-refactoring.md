@@ -846,25 +846,42 @@ per-`Layer` `LayerBindCache` fast path.
   panel) and a trivial `pass.setBindGroup(n, g)`. The hit path must skip
   `setBindGroup` for a null cached group, mirroring today's early return.
 
-**Edits.**
+**Edits.** ✅ Implemented (with two deviations, noted).
 
-- `Panel._bindEpoch: Int = 0`. Bump in `swapPair` and in `ensureSize` after the
-  texture-realloc branch.
-- `Layer._cache: LayerBindCache | Null = null` (small inner class storing
-  `panelId`, `epoch`, `valueGroup`, `panelGroup`).
-- Clear `_cache` in `Bindable.bind(...)` mutations.
-- Wire the hit path inside `renderLayerOnPass` (painter.scala:1640+):
-  - On entry, if
-    `instanceCount == 0 && !hasPanelBinds && _cache.notNull && panelId matches && epoch matches`,
-    set the cached bind groups and draw.
-  - On miss with the same static-draw predicate, build as today, then capture
-    into `_cache` before drawing.
-  - On miss with epoch mismatch, set `_cache = null` and fall through to rebuild
-    (drops references to any potentially-stale `GPUBindGroup`).
-  - Instanced and runtime-overridden draws stay on the existing per-draw build
-    path.
+- `Panel.bindEpoch: Int = 0` (named without the `_` per the `private[painter]`
+  convention). Bumped in `swapPair` and at the end of the `ensureSize` realloc
+  branch.
+- **Deviation — `panelId` is a global counter, not `Painter`-scoped.** A
+  module-level `_panelIdSeq` in `panel.scala`, incremented in the `Panel` body
+  (`private[painter] val panelId`). Global monotonic ids are strictly stronger
+  than device-scoped (still process-unique) and — crucially — need no `painter`
+  reference, so the device-free `MrtPongInvariant` test (`new Panel(null)`) keeps
+  working. Same pattern as `Expr.Ref`'s `refCount`.
+- `Layer.cache: Opt[LayerBindCache] = null`. `LayerBindCache` is a top-level
+  `private[painter] final class` in `layer.scala` (not a nested/inner class —
+  keeps `panel.slotViews`-style cross-file access simple) storing `panelId`,
+  `epoch`, `valueGroup`, `panelGroup` (the last two `Opt[GPUBindGroup]`).
+- **Deviation — cache invalidation via a `Bindable.onBindingsChanged()` hook**,
+  not literally inside `bind`. `bind`/`processEntry` are `inline` and shared with
+  `Shape`; a non-inline `protected def onBindingsChanged(): Unit = ()` on
+  `Bindable`, called at the end of `processEntry`, is overridden by `Layer` to
+  null its cache. Fires on in-place uniform re-sets too — harmless: a
+  per-frame-rebinding layer just forgoes caching (today's rebuild-every-draw).
+- Split `setValueBindGroup`/`setPanelBindGroup` into `buildValueBindGroup`/
+  `buildPanelBindGroup` (return `Opt[GPUBindGroup]`, null on the early-return
+  conditions) + thin `set*` wrappers. Shapes keep using the `set*` wrappers.
+- Hit path inside `renderLayerOnPass` (static branch: `instanceCount == 0 &&
+  !hasPanelBinds`): if `cache.notNull && panel.notNull && panelId matches &&
+  epoch matches`, `setBindGroup` the cached groups (skipping nulls); else build
+  both, set, and store a fresh `LayerBindCache` (overwriting any stale entry —
+  the mismatch path never *uses* a stale `GPUBindGroup`). Instanced and
+  panel-runtime-override draws stay on the existing per-draw path.
 
-**Verify.**
+**Verify.** ✅ Build gate green (check, tests, all examples, all 7 sketches).
+Correctness reasoned through: static+stable → hits; auto-pong → epoch always
+advanced by its own `swapPair` ⇒ always rebuilds fresh (never a stale hit);
+per-frame-`.bind` → invalidates each frame; multi-panel reuse → `panelId`
+mismatch rebuilds; resize → epoch bump rebuilds. Remaining checks need a browser:
 
 - Standard gate — all visuals unchanged.
 - Cache-invalidation correctness: trigger `swapPair` (any auto-pong sketch) and
