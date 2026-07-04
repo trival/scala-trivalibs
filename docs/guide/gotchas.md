@@ -20,6 +20,15 @@ auto-bound to its first panel slot. To read a **different** panel at that slot
 explicitly: `layer.bind("scene" := scenePanel, …)`. Then the painter uses your
 binding instead of the auto-injected one.
 
+Leaving the first slot unbound makes the layer *auto-pong*: the painter
+ping-pongs it against a scratch target so it can read the previous result and
+write the next. Consequence: **an MRT panel (multiple `formats`) cannot host an
+auto-pong layer** — ping-pong is single-target by design, so it can't
+post-process multiple render targets. The panel throws at construction; compose
+a chain of single-format panels instead (each panel does one thing, the next
+reads the previous panel's output). A layer that manually binds its first slot
+is *not* auto-pong and is fine on an MRT panel.
+
 ### Panel-level bindings fill a shape's _unbound_ slots — reuse a shape across panels
 
 `panel.bind("name" := value)` supplies a uniform / sampler / texture to every
@@ -36,7 +45,7 @@ rebinding, no duplicate shapes. (Works for group-0 uniforms, not just textures.)
 Sample a panel's depth attachment by binding `panel.binding(depth = true)` to a
 field declared with a `*DepthPanel` marker (`FragmentDepthPanel`, …); it reads as
 a `DepthTexture2D`. Two traps: (1) the depth attachment is **single-level** — the
-mip pyramid is built on the colour texture, so there's no depth `sampleLevel`;
+mip pyramid is built on the color texture, so there's no depth `sampleLevel`;
 use `.load` (no sampler) or `.sample`. (2) The depth texture is **lazily
 recreated as sampleable the first time it's sampled**, so the very first frame
 reads an empty depth — a one-frame startup glitch, harmless in an animation loop

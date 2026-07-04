@@ -240,7 +240,7 @@ truncates a float vec to texel coords; `tex.dimensions` gives the size in texels
 
 **Depth attachments.** A `DepthTexture2D` (from a `*DepthPanel` field bound with
 `panel.binding(depth = true)`) reads a single scalar. It has no mip pyramid (the
-colour texture carries one), so there's no depth `sampleLevel` — use `.load` (no
+color texture carries one), so there's no depth `sampleLevel` — use `.load` (no
 sampler) or `.sample`. A common use is reconstructing world position from
 depth + an inverse view-projection in a resolve pass:
 

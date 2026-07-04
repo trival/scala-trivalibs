@@ -38,6 +38,12 @@ trait Bindable[U, P]:
   var bindings: BindingSlots
   var panelBindings: Arr[Opt[PanelBinding]]
 
+  // Hook fired after any `.bind(...)` mutation. Default no-op; [[Layer]] overrides
+  // it to drop its static bind-group cache. (Fires on in-place uniform re-sets
+  // too — harmless: it just means a per-frame-rebinding layer forgoes caching,
+  // exactly today's rebuild-every-draw behaviour.)
+  protected def onBindingsChanged(): Unit = ()
+
   inline def bind[N1 <: String & Singleton, V1](
       e1: BindPair[N1, V1],
   ): this.type =
@@ -263,6 +269,7 @@ trait Bindable[U, P]:
       scala.compiletime.error(
         "Name not found in Uniforms or Panel bindings",
       )
+    onBindingsChanged()
 
 /** A drawable: a [[Form]] (geometry) rendered with a [[Shade]], plus its bound
   * uniforms/panels and optional per-instance draws. Create via

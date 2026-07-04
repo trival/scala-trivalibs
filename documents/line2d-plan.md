@@ -199,7 +199,7 @@ automatically.
 
 All strokes share one `Shade` that takes `position: Vec2`, `uv: Vec2`, and
 `localUv: Vec2` as vertex attributes and a time uniform. Fragment shader reads
-`localUv.y` for the cross-section gradient and `uv.x` for along-stroke colour:
+`localUv.y` for the cross-section gradient and `uv.x` for along-stroke color:
 
 ```wgsl
 let t = uniforms.time;

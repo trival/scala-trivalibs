@@ -827,14 +827,14 @@ class Painter(
           if msaa then
             Obj.literal(
               view = panel.msaaViewAt(t),
-              resolveTarget = panel.renderViewAt(t),
+              resolveTarget = panel.views(t).attach,
               loadOp = "clear",
               storeOp = "discard",
               clearValue = Obj.literal(r = r, g = g, b = b, a = a),
             )
           else
             Obj.literal(
-              view = panel.renderViewAt(t),
+              view = panel.views(t).attach,
               loadOp = "clear",
               storeOp = "store",
               clearValue = Obj.literal(r = r, g = g, b = b, a = a),
@@ -842,13 +842,13 @@ class Painter(
         else if msaa then
           Obj.literal(
             view = panel.msaaViewAt(t),
-            resolveTarget = panel.renderViewAt(t),
+            resolveTarget = panel.views(t).attach,
             loadOp = "load",
             storeOp = "store",
           )
         else
           Obj.literal(
-            view = panel.renderViewAt(t),
+            view = panel.views(t).attach,
             loadOp = "load",
             storeOp = "store",
           )
@@ -890,9 +890,10 @@ class Painter(
     // Layers are fullscreen quads that always render on top.
     // Consecutive non-ping-pong layers share a pass; ping-pong forces a new one.
 
-    var srcView = panel.textureView
-    var dstView = panel.pongView
-    var hasPongLayers = false
+    // Slot 0 is always the live result. Pong layers read it, write the scratch
+    // (slot 1), then `swapPair` so slot 0 holds their output again; non-pong
+    // layers load-compose into slot 0 in a shared pass. So every read of
+    // `panel.textureView` below is fresh — it reflects all prior layers.
 
     var curEncoder: Opt[GPUCommandEncoder] = null
     var curPass: Opt[GPURenderPassEncoder] = null
@@ -900,23 +901,21 @@ class Painter(
     var j = 0
     while j < panel.layers.length do
       val layer = panel.layers(j)
-      val hasPanelLayout = layer.shade.panelBindGroupLayout.notNull
-      val slot0Manual = hasPanelLayout &&
-        layer.panelBindings.length > 0 && layer.panelBindings(0).notNull
-      val needsPingPong = hasPanelLayout && !slot0Manual
+      val needsPingPong = layer.autoPongsSlot0
       val hasMipTarget = layer.mipTarget >= 0
 
       if hasMipTarget then
-        // Mip-targeted layer: render to specific mip level, no ping-pong
+        // Mip-targeted layer: render to a specific mip level, no ping-pong.
+        // Flush any open shared pass first so its slot-0 writes are visible.
         if curPass.notNull then
           curPass.end()
           queue.submit(Arr(curEncoder.finish()))
           curPass = null
 
-        val mipDstView = panel.textureViewAt(0, layer.mipTarget)
+        val mipDstView = panel.views(0).perMip(layer.mipTarget)
         val mipSrcView =
-          if layer.mipSource >= 0 then panel.textureViewAt(0, layer.mipSource)
-          else srcView
+          if layer.mipSource >= 0 then panel.views(0).perMip(layer.mipSource)
+          else panel.textureView
 
         val enc = device.createCommandEncoder()
         val mipPass = enc.beginRenderPass(
@@ -940,20 +939,21 @@ class Painter(
         mipPass.end()
         queue.submit(Arr(enc.finish()))
       else if needsPingPong then
-        hasPongLayers = true
-        // End current pass if open, submit
+        // Flush any open shared pass so a preceding non-pong blend layer's write
+        // to slot 0 is submitted before we sample it here.
         if curPass.notNull then
           curPass.end()
           queue.submit(Arr(curEncoder.finish()))
           curPass = null
 
-        // Ping-pong pass: render to dstView, inject srcView at slot 0
+        // Ping-pong pass: read slot 0 (auto-injected), write the scratch (slot
+        // 1), then swap so slot 0 becomes this layer's output.
         val enc = device.createCommandEncoder()
         val ppPass = enc.beginRenderPass(
           Obj.literal(
             colorAttachments = Arr(
               Obj.literal(
-                view = dstView,
+                view = panel.pongTargetView,
                 loadOp = "load",
                 storeOp = "store",
               ),
@@ -964,24 +964,23 @@ class Painter(
           ppPass,
           layer,
           formats = panelFormats,
-          srcView = srcView,
+          srcView = panel.textureView,
           panel = panel,
         )
         ppPass.end()
         queue.submit(Arr(enc.finish()))
 
-        val tmp = srcView
-        srcView = dstView
-        dstView = tmp
+        panel.swapPair()
       else
-        // Lazily open a pass on srcView if none is open
+        // Non-pong layer: lazily open a shared pass on slot 0 and load-compose
+        // (blend layers stack on top of the live result, which persists there).
         if curPass.isNull then
           curEncoder = device.createCommandEncoder()
           curPass = curEncoder.beginRenderPass(
             Obj.literal(
               colorAttachments = Arr(
                 Obj.literal(
-                  view = srcView,
+                  view = panel.textureView,
                   loadOp = "load",
                   storeOp = "store",
                 ),
@@ -995,10 +994,6 @@ class Painter(
     if curPass.notNull then
       curPass.end()
       queue.submit(Arr(curEncoder.finish()))
-
-    // Record the final output view for show()
-    if hasPongLayers then panel.setOutputView(srcView)
-    else panel.setOutputView(null)
 
     // Generate mipmaps if configured — but skip when any layer renders into a
     // mip target: those layers build the mip chain by hand, so auto-generation
@@ -1218,7 +1213,7 @@ class Painter(
       Obj.literal(
         layout = blitBindGroupLayout,
         entries = Arr(
-          Obj.literal(binding = 0, resource = panel.outputView),
+          Obj.literal(binding = 0, resource = panel.textureView),
           Obj.literal(binding = 1, resource = blitSampler),
         ),
       ),
@@ -1400,8 +1395,8 @@ class Painter(
 
     var i = 1
     while i < mipCount do
-      val srcView = panel.textureViewAt(0, i - 1)
-      val dstView = panel.textureViewAt(0, i)
+      val srcView = panel.views(0).perMip(i - 1)
+      val dstView = panel.views(0).perMip(i)
 
       val encoder = device.createCommandEncoder()
       val pass = encoder.beginRenderPass(
@@ -1514,11 +1509,11 @@ class Painter(
   // Bind group helpers
   // =========================================================================
 
-  private def setValueBindGroup(
-      pass: GPURenderPassEncoder,
+  // Build the group-0 (uniform) bind group, or null when the layer has none.
+  private def buildValueBindGroup(
       shade: Shade[?, ?],
       bindings: BindingSlots,
-  ): Unit =
+  ): Opt[GPUBindGroup] =
     if bindings.length > 0 && shade.valueBindGroupLayout.notNull then
       val entries = Arr[js.Dynamic]()
       var i = 0
@@ -1526,17 +1521,26 @@ class Painter(
         val b = bindings(i)
         if b != null then entries.push(bindingEntry(i, b))
         i += 1
-      val bg = device.createBindGroup(
+      device.createBindGroup(
         Obj.literal(layout = shade.valueBindGroupLayout, entries = entries),
       )
-      pass.setBindGroup(0, bg)
+    else null
 
-  private def setPanelBindGroup(
+  private def setValueBindGroup(
       pass: GPURenderPassEncoder,
+      shade: Shade[?, ?],
+      bindings: BindingSlots,
+  ): Unit =
+    val bg = buildValueBindGroup(shade, bindings)
+    if bg.notNull then pass.setBindGroup(0, bg)
+
+  // Build the group-1 (panel-texture) bind group, or null when the layer has no
+  // panel layout or no entries.
+  private def buildPanelBindGroup(
       shade: Shade[?, ?],
       panelBindings: Arr[Opt[PanelBinding]],
       srcView: Opt[GPUTextureView] = null,
-  ): Unit =
+  ): Opt[GPUBindGroup] =
     if shade.panelBindGroupLayout.notNull then
       val entries = Arr[js.Dynamic]()
       if srcView.notNull then
@@ -1548,17 +1552,28 @@ class Painter(
         if pb.notNull then
           val view =
             if pb.depth then pb.panel.depthSamplingView
-            else pb.panel.textureViewAt(pb.index, pb.mipLevel)
+            else if pb.mipLevel < 0 then pb.panel.views(pb.index).sampling
+            else pb.panel.views(pb.index).perMip(pb.mipLevel)
           entries.push(Obj.literal(binding = k, resource = view))
         k += 1
       if entries.length > 0 then
-        val pg = device.createBindGroup(
+        device.createBindGroup(
           Obj.literal(
             layout = shade.panelBindGroupLayout,
             entries = entries,
           ),
         )
-        pass.setBindGroup(1, pg)
+      else null
+    else null
+
+  private def setPanelBindGroup(
+      pass: GPURenderPassEncoder,
+      shade: Shade[?, ?],
+      panelBindings: Arr[Opt[PanelBinding]],
+      srcView: Opt[GPUTextureView] = null,
+  ): Unit =
+    val pg = buildPanelBindGroup(shade, panelBindings, srcView)
+    if pg.notNull then pass.setBindGroup(1, pg)
 
   // =========================================================================
   // Per-shape render pass helper (shared by draw() and paint())
@@ -1659,6 +1674,7 @@ class Painter(
 
     if instanceCount == 0 then
       if hasPanelBinds then
+        // Dynamic path: panel runtime overrides merged per draw — not cached.
         copyToWork(layer.bindings, layer.panelBindings)
         applyPanelRuntimeBindings(
           panel,
@@ -1678,8 +1694,24 @@ class Painter(
           effectiveSrcView,
         )
       else
-        setValueBindGroup(pass, layer.shade, layer.bindings)
-        setPanelBindGroup(pass, layer.shade, layer.panelBindings, srcView)
+        // Static path: cacheable by (panelId, epoch). A hit skips the
+        // work-buffer copy + GPU bind-group build; a mismatch (or first draw)
+        // rebuilds and re-stores, dropping any stale entry.
+        val c = layer.cache
+        if c.notNull && panel.notNull
+          && c.panelId == panel.panelId && c.epoch == panel.bindEpoch
+        then
+          if c.valueGroup.notNull then pass.setBindGroup(0, c.valueGroup)
+          if c.panelGroup.notNull then pass.setBindGroup(1, c.panelGroup)
+        else
+          val vg = buildValueBindGroup(layer.shade, layer.bindings)
+          val pg = buildPanelBindGroup(layer.shade, layer.panelBindings, srcView)
+          if vg.notNull then pass.setBindGroup(0, vg)
+          if pg.notNull then pass.setBindGroup(1, pg)
+          layer.cache =
+            if panel.notNull then
+              LayerBindCache(panel.panelId, panel.bindEpoch, vg, pg)
+            else null
       pass.draw(3)
     else
       var i = 0
