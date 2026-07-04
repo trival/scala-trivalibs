@@ -14,7 +14,8 @@ type ClearColor = (Double, Double, Double, Double)
   *   - `perMip` — one single-level view per mip level (length = `mipCount`).
   *     `perMip(0)` (aliased [[attach]]) is the render-attachment view; higher
   *     entries feed hand-built mip chains and `generateMipmaps`.
-  *   - `sampling` — a full-chain view for shader sampling (`textureSampleLevel`).
+  *   - `sampling` — a full-chain view for shader sampling
+  *     (`textureSampleLevel`).
   * Built once alongside the texture; travels with it through swaps.
   */
 private[painter] final class TextureViewBundle(
@@ -54,14 +55,14 @@ private var _panelIdSeq: Int = 0
   *
   * Ping-pong (auto-pong layers) uses a second texture slot; slot 0 always holds
   * the live result, so samplers, `show()`, and mip generation read it directly.
-  * MRT panels can't host auto-pong layers (ping-pong is single-target) — see the
-  * gotchas guide.
+  * MRT panels can't host auto-pong layers (ping-pong is single-target) — see
+  * the gotchas guide.
   *
-  * MSAA + auto-pong load semantics: the multisample shape pass resolves into slot
-  * 0, then pong layers read/write and swap. On the next paint, if `clearColor` is
-  * `null` (load), the shape pass loads the *previous frame's post-layer* slot 0 —
-  * the same "load from last frame's result" semantic as a no-pong load. Set a
-  * `clearColor` to start each frame fresh.
+  * MSAA + auto-pong load semantics: the multisample shape pass resolves into
+  * slot 0, then pong layers read/write and swap. On the next paint, if
+  * `clearColor` is `null` (load), the shape pass loads the *previous frame's
+  * post-layer* slot 0 — the same "load from last frame's result" semantic as a
+  * no-pong load. Set a `clearColor` to start each frame fresh.
   */
 class Panel private[painter] (val painter: Painter):
   private[painter] var specWidth: Int = 0
@@ -138,15 +139,19 @@ class Panel private[painter] (val painter: Painter):
   // single-sample texture after the shape pass. The render-target depth view to
   // read is [[depthView]]; the resolve target is [[resolvedDepthTarget]].
   private[painter] def needsDepthResolve: Boolean = _needsDepthResolve
-  private[painter] def resolvedDepthTarget: GPUTextureView = _resolvedDepthView.get
+  private[painter] def resolvedDepthTarget: GPUTextureView =
+    _resolvedDepthView.get
   private[painter] def msaaView: GPUTextureView = _msaaViews(0)
+  private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(
+    index,
+  )
 
   /** Rotate slot 0 ↔ slot 1 (texture + view bundle together) after a ping-pong
     * layer pass, so the just-written pong scratch (slot 1) becomes the live
     * result (slot 0). The view bundles travel with their textures, so nothing
-    * else needs invalidating. Called per pong layer, keeping slot 0 authoritative
-    * at every point — the next layer, external samplers, `show()`, and mip
-    * generation all read slot 0.
+    * else needs invalidating. Called per pong layer, keeping slot 0
+    * authoritative at every point — the next layer, external samplers,
+    * `show()`, and mip generation all read slot 0.
     */
   private[painter] def swapPair(): Unit =
     val t = _textures(0)
@@ -156,10 +161,6 @@ class Panel private[painter] (val painter: Painter):
     views(0) = views(1)
     views(1) = sv
     bindEpoch += 1
-
-  private[painter] def msaaViewAt(index: Int): GPUTextureView = _msaaViews(
-    index,
-  )
 
   // (Re)allocate the depth render texture (and, for a sampled MSAA panel, the
   // single-sample resolve texture). Shared by `ensureSize` and the lazy upgrade
