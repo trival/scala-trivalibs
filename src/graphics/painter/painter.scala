@@ -144,22 +144,6 @@ class Painter(
   // Shared samplers
   // =========================================================================
 
-  /** Shared nearest-filter sampler. Pass directly as a binding value (`"samp"
-    * := painter.samplerNearest`).
-    */
-  lazy val samplerNearest: GPUSampler =
-    device.createSampler(
-      Obj.literal(magFilter = "nearest", minFilter = "nearest"),
-    )
-
-  /** Shared linear-filter sampler. Pass directly as a binding value (`"samp" :=
-    * painter.samplerLinear`).
-    */
-  lazy val samplerLinear: GPUSampler =
-    device.createSampler(
-      Obj.literal(magFilter = "linear", minFilter = "linear"),
-    )
-
   /** Create a custom sampler. Use a `mipmapFilter` of `Linear` when sampling a
     * mip-mapped panel texture with trilinear filtering. Set `addressMode` to
     * `AddressMode.Repeat` to seamlessly tile a repeat-sampled texture; it
@@ -183,6 +167,20 @@ class Painter(
         addressModeV = addressModeV.orElse(addressMode).toJs,
       ),
     )
+
+  /** Shared nearest-filter sampler. Pass directly as a binding value (`"samp"
+    * := painter.samplerNearest`).
+    */
+  lazy val samplerNearest: GPUSampler = sampler()
+
+  /** Shared linear-filter sampler. Pass directly as a binding value (`"samp" :=
+    * painter.samplerLinear`).
+    */
+  lazy val samplerLinear: GPUSampler = sampler(
+    magFilter = FilterMode.Linear,
+    minFilter = FilterMode.Linear,
+    mipmapFilter = FilterMode.Linear,
+  )
 
   // =========================================================================
   // Shade factory
@@ -1705,7 +1703,8 @@ class Painter(
           if c.panelGroup.notNull then pass.setBindGroup(1, c.panelGroup)
         else
           val vg = buildValueBindGroup(layer.shade, layer.bindings)
-          val pg = buildPanelBindGroup(layer.shade, layer.panelBindings, srcView)
+          val pg =
+            buildPanelBindGroup(layer.shade, layer.panelBindings, srcView)
           if vg.notNull then pass.setBindGroup(0, vg)
           if pg.notNull then pass.setBindGroup(1, pg)
           layer.cache =

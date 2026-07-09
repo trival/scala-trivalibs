@@ -104,6 +104,20 @@ object Arr:
       a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A, j: A, k: A, l: A,
   ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i, j, k, l)
 
+/** Non-mutating append / prepend / concat, each compiling to a bare JS
+  * `.concat`. These shadow the same-named `SeqOps` methods that
+  * `js.ArrayOps` would otherwise supply via implicit conversion — those go
+  * through `View` + `IterableFactory` + builders, i.e. the Scala collections
+  * machinery this library keeps out of runtime paths.
+  *
+  * All three copy. Push onto the array directly when building one up in a hot
+  * loop.
+  */
+extension [A](arr: Arr[A])
+  inline def :+(a: A): Arr[A] = arr.concat(Arr(a))
+  inline def +:(a: A): Arr[A] = Arr(a).concat(arr)
+  inline def ++(other: Arr[A]): Arr[A] = arr.concat(other)
+
 // Core extensions for for-comprehension support
 extension [A](promise: js.Promise[A])
   inline def map[B](f: A => B): js.Promise[B] =
