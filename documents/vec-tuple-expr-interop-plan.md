@@ -23,7 +23,7 @@ immutable `Vec3Tuple`, and the GPU-side `Vec3Expr`. The doc comment at
 `src/graphics/math/cpu/vec3.scala:16` claims they "share method names and
 convert via givens" — but the givens are operation type classes, not
 `Conversion`s. **There is no conversion between the representations at all.**
-`toTuple`, `toGpu`, `asTuple` and `toVec` return zero hits across
+`toTuple`, `toExpr`, `asTuple` and `toVec` return zero hits across
 `trivalibs/src`.
 
 The cost shows up wherever one value needs to appear in more than one form.
@@ -98,11 +98,11 @@ New file `src/graphics/math/gpu/cpu_interop.scala`, package
 
 ```scala
 extension (v: Vec3)
-  def toGpu: Vec3Expr = Vec3Expr(
+  def toExpr: Vec3Expr = Vec3Expr(
     s"vec3<f32>(${floatToWgsl(v.x)}, ${floatToWgsl(v.y)}, ${floatToWgsl(v.z)})",
   )
 
-given Conversion[Vec3, Vec3Expr] = _.toGpu
+given Conversion[Vec3, Vec3Expr] = _.toExpr
 ```
 
 Same for `Vec2` / `Vec4`, and for `Mat2` / `Mat3` / `Mat4` emitting column-major
@@ -136,7 +136,7 @@ givens precisely because they collide with `Vec4`'s.
 
 A `Conversion[Tuple4, Mat2]` would therefore make `Conversion[Tuple4, Vec4]`
 ambiguous at every call site. Omitting matrix tuple conversions isn't just scope
-trimming — it's the only option that works. `Mat*` gets `toGpu` only.
+trimming — it's the only option that works. `Mat*` gets `toExpr` only.
 
 ### 2.4 Color APIs → `Vec4`
 
@@ -300,26 +300,26 @@ the existing left-scalar pattern (`Double * Vec3Expr`, `gpu/expr.scala:563`).
 
 ```scala
 extension (v: Vec3)
-  @targetName("vec3MulFloatExpr") def *(e: FloatExpr): Vec3Expr = v.toGpu * e
-  @targetName("vec3MulVec3Expr")  def *(e: Vec3Expr):  Vec3Expr = v.toGpu * e
+  @targetName("vec3MulFloatExpr") def *(e: FloatExpr): Vec3Expr = v.toExpr * e
+  @targetName("vec3MulVec3Expr")  def *(e: Vec3Expr):  Vec3Expr = v.toExpr * e
 ```
 
 It compiles (with `@targetName`, since the opaque `Expr` types all erase to
 `Expr`). **It also silently breaks CPU arithmetic:**
 
 ```
-val d: Vec3 = Tint * 2.0
+val d: Vec3 = CeilTint * 2.0
               ^^^^^^^^^^  Found: gpu.Vec3Expr  Required: cpu.Vec3
-val e: Vec3 = Tint * Vec3(1.0, 1.0, 1.0)
+val e: Vec3 = CeilTint * Vec3(1.0, 1.0, 1.0)
               ^^^^^^^^^^^^^^^^^^^^^^^^^  Found: gpu.Vec3Expr  Required: cpu.Vec3
 ```
 
 A _direct_ extension method takes precedence over the one supplied by
-`given Vec3ImmutableOps[Vec3]`. So `Tint * 2.0` binds the new overload (via
+`given Vec3ImmutableOps[Vec3]`. So `CeilTint * 2.0` binds the new overload (via
 `Double → FloatExpr`) and yields a GPU expression instead of a CPU vector — and
-`Tint * someVec3` does the same via `Vec3 → Vec3Expr`. Every existing CPU `Vec3`
-multiplication in the codebase changes meaning. **Do not do this.** It is
-strictly worse than the `.toGpu` it was meant to avoid, because it fails
+`CeilTint * someVec3` does the same via `Vec3 → Vec3Expr`. Every existing CPU
+`Vec3` multiplication in the codebase changes meaning. **Do not do this.** It is
+strictly worse than the `.toExpr` it was meant to avoid, because it fails
 silently at sites that still typecheck.
 
 #### ✅ Adopted: `vec2/vec3/vec4(cpuVec)` constructor overloads
@@ -328,13 +328,13 @@ silently at sites that still typecheck.
 object vec3:
   def apply(scalar: FloatExpr): Vec3Expr = …   // existing
   def apply(scalar: Double): Vec3Expr = …      // NEW — required, see below
-  def apply(v: Vec3): Vec3Expr = v.toGpu      // NEW
+  def apply(v: Vec3): Vec3Expr = v.toExpr      // NEW
 ```
 
-This _preserves_ the case distinction rather than eroding it — `vec3(Tint)`
+This _preserves_ the case distinction rather than eroding it — `vec3(CeilTint)`
 reads as "lift this CPU value into the GPU domain", with the lowercase marking
 the domain crossing explicitly. It gives a natural spelling at operator sites
-that receiver conversion can't serve (§4): `vec3(Tint) * noise`.
+that receiver conversion can't serve (§4): `vec3(CeilTint) * noise`.
 
 **The constraint:** `object vec3` is already overloaded, but at _distinct
 arities_, so `vec3(0.5)` resolves by arity first and then converts. Adding
@@ -345,7 +345,7 @@ exactly the established in-repo pattern; see the comment at
 `gpu/float_expr.scala:56-67`, which documents the same trap for `NumOps`.
 
 Verified working in a standalone model (`vec3(0.5)`, `vec3(1.0, 0.5, 0.25)` and
-`vec3(Tint)` all compile together). Confirm against the library during
+`vec3(CeilTint)` all compile together). Confirm against the library during
 implementation.
 
 **Scope:** apply to all three of `vec2` / `vec3` / `vec4`. Each needs its CPU
@@ -354,15 +354,68 @@ constructor's existing overload set for other same-arity collisions before
 adding — `vec4` in particular already has `apply(xyz: Vec3Expr, w: FloatExpr)`
 and `apply(xy: Vec2Expr, z, w)`, so only the 1-arity slot is at issue there.
 
-#### ✅ Adopted: `toGpu`, not `toExpr` — and no type rename
+**Same-arity only.** Each constructor takes the CPU vector of its _own_ arity —
+`vec3(v: Vec3)`, never `vec3(v: Vec4)`. Narrowing is spelled at the call site
+with the existing inline swizzles in `cpu/swizzles.scala:22-33`, which compose
+with these overloads for free:
 
-The crossing method is named **`toGpu`**, matching the `toJs` method convention
-(21 uses; all-caps `GPU` is reserved for the WebGPU facade types). `toExpr`
-describes a change of _representation_; `toGpu` describes crossing a _hardware
-domain_, which is the thing a reader needs to see when CPU and GPU code sit in
-the same function — as they do throughout `Painter.init`.
+```scala
+vec3(tint.rgb)    // color — alpha explicitly discarded
+vec3(v4.xyz)      // geometric
+vec2(v3.xy)
+vec2(v4.zw)       // which half is taken stays visible
+```
 
-A broader rename of `*Expr` → `*GPU` was considered and **rejected**:
+Rationale for adding no narrowing overloads:
+
+- **`.rgb` states the intent a constructor would hide.** "Take the color
+  channels, drop alpha" is what `.rgb` _means_; `vec3(tint)` only implies it.
+- **It would defeat the purpose.** With `vec3(Vec4)` available, `vec3(tint)` is
+  legal whether `tint` is a `Vec3` or a `Vec4` — a reader can no longer infer
+  the arity from the call, and the difference now silently changes behaviour.
+- **CPU/GPU symmetry.** WGSL forbids `vec3<f32>(v4)`, so the GPU side has no
+  such overload and cannot have one. A CPU-only narrowing constructor would make
+  `vec3(x)` compile or fail depending on which domain `x` came from — the wrong
+  asymmetry to introduce in mixed-domain code.
+- Fewer same-arity overloads also means fewer collisions to guard.
+
+#### ✅ Adopted: `toExpr` — and no type rename
+
+The crossing method is **`toExpr`**, and the `*Expr` types keep their names.
+
+A `toGpu` spelling was considered, on the grounds that the hardware barrier is
+what a reader needs to see when CPU and GPU code share a function, as they do
+throughout `Painter.init`. Rejected, on these grounds:
+
+- **Name symmetry.** `toTuple` yields `Vec3Tuple`; `toExpr` yields `Vec3Expr`.
+  Each conversion is named for the representation it produces.
+  `toGpu → Vec3Expr` breaks that pairing for no gain.
+- **One way to do things.** An alias pair (`toGpu` = `toExpr`) was considered
+  and rejected outright — two spellings for one operation is worse than either
+  alone; it duplicates the ambiguity instead of resolving it.
+- **`Expr` says AST, not value.** These are nodes you can assemble, fold and
+  reuse at build time, which is a genuine distinction from a CPU `Vec3` — and it
+  is what the method produces.
+
+**Not** claimed as a reason: that `Expr` is backend-neutral. It isn't. The base
+class is `class Expr(val wgsl: String)` (`gpu/expr.scala:25`) and every
+construction site emits WGSL syntax literally (`s"vec3<f32>(…)"`). Retargeting
+would mean rewriting every emitter, not swapping a backend — so "`toExpr`
+survives a second backend" is not a live argument today, and this decision does
+not lean on it.
+
+The domain crossing stays visible at the call site through `vec3(…)` versus
+`Vec3(…)` (the case convention, §Non-goals) and the explicit `.toExpr` call
+itself, rather than through a hardware word in the method name.
+
+**Revisit after implementation.** This is a naming call made before seeing the
+crossings in real sketch code. Once `Canvases.scala` is converted, re-read the
+mixed CPU/GPU lines: if `.toExpr` genuinely fails to signal the barrier there,
+renaming a single method (or adding the alias, accepting its cost) is a cheap,
+localised change — far cheaper than the type rename it was entangled with.
+
+A broader rename of `*Expr` → `*GPU` was considered and **rejected** on
+independent grounds:
 
 - **Ratio.** `*Expr` appears 1722× in `trivalibs/src` and 661× in `examples/`,
   but only **44×** across `sketches/` + `src/`. The confusion is felt at the 44;
@@ -379,7 +432,7 @@ A broader rename of `*Expr` → `*GPU` was considered and **rejected**:
   `def shadowMask(uv: Vec2Expr, rect: Vec4Expr): FloatExpr` every parameter is
   GPU and the context already says so. The line that misleads is
   `col := CeilTint * roomNoise(…)` — and the fix there is the crossing marker
-  (`.toGpu`, `vec3(…)`), not the type name.
+  (`.toExpr`, `vec3(…)`), not the type name.
 
 `Expr` also carries real information the domain name would lose: these are AST
 nodes, not values, which is what makes build-time shader logic possible.
@@ -431,8 +484,8 @@ This was the open question. It is now answered empirically against the real
 types, and the answer is **no**:
 
 ```scala
-val Tint = Vec3(0.86, 0.86, 0.85)
-val a: Vec3Expr = Tint * noise   // ERROR
+val CeilTint = Vec3(0.86, 0.86, 0.85)
+val a: Vec3Expr = CeilTint * noise   // ERROR
 ```
 
 ```
@@ -448,13 +501,13 @@ which is why it was re-tested against `trivalibs/src` — the `*G` trait machine
 resolves differently from plain top-level extensions. Treat model results in
 this area as unreliable.)
 
-Plain positions are unaffected — `val c: Vec3Expr = Tint` compiles.
+Plain positions are unaffected — `val c: Vec3Expr = CeilTint` compiles.
 
 **Consequence for the sketch.** Operator sites need an explicit domain crossing.
 Both spellings are available; pick per readability:
 
 ```scala
-col := CeilTint.toGpu * roomNoise(wp, normal)   // via §2.2
+col := CeilTint.toExpr * roomNoise(wp, normal)   // via §2.2
 col := vec3(CeilTint) * roomNoise(wp, normal)    // via §2.6, if adopted
 ```
 
@@ -471,7 +524,7 @@ changes domain, consistent with the `Vec3` / `vec3` case convention.
 | File                                               | Change                                                                 |
 | -------------------------------------------------- | ---------------------------------------------------------------------- |
 | `src/graphics/math/cpu/vec{2,3,4}.scala`           | `toTuple` / `toVecN` + both `Conversion`s per companion                |
-| `src/graphics/math/gpu/cpu_interop.scala`          | **new** — `toGpu` + `Conversion` for `Vec2-4`, `Mat2-4`                |
+| `src/graphics/math/gpu/cpu_interop.scala`          | **new** — `toExpr` + `Conversion` for `Vec2-4`, `Mat2-4`               |
 | `src/graphics/math/gpu/float_expr.scala`           | `vec2/vec3/vec4` CPU overload + `apply(scalar: Double)` guard (§2.6)   |
 | `src/graphics/painter/panel.scala`                 | `ClearColor = Vec4`; copy-on-set                                       |
 | `src/graphics/painter/painter.scala`               | param types + 2 destructuring sites                                    |
