@@ -78,3 +78,6 @@ object Vec2 extends Vec2ImmutableOps[Vec2]:
       inline def y_=(value: Double) = v.y = value
 
   given Vec2MutableOps[Vec2] = new Vec2MutableOps[Vec2] {}
+
+  given Conversion[Vec2, Vec2Tuple] = _.toTuple
+  given Conversion[Vec2Tuple, Vec2] = _.toVec2

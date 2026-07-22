@@ -29,11 +29,13 @@ given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
   * edge-first spelling keeps a constant→constant interpolation with a variable
   * `t` legible — `mix(0.45, 1.0, n)` reads as "from `0.45` to `1.0` by `n`".
   * Edges and `t` accept plain `Double` literals. [[lerp]] is the same op under
-  * the conventional name; the `a.mix(b, t)` method form also exists. */
+  * the conventional name; the `a.mix(b, t)` method form also exists.
+  */
 def mix(a: FloatExpr, b: FloatExpr, t: FloatExpr): FloatExpr = a.mix(b, t)
 
 /** Linear interpolation `a + (b - a) * t` — `lerp(a, b, t)`, the conventional
-  * name for [[mix]] (edges first, `t` the moving parameter). */
+  * name for [[mix]] (edges first, `t` the moving parameter).
+  */
 def lerp(a: FloatExpr, b: FloatExpr, t: FloatExpr): FloatExpr = a.mix(b, t)
 
 // ---------------------------------------------------------------------------
@@ -739,6 +741,18 @@ object vec2:
   @annotation.targetName("vec2FromUVec2")
   def apply(v: UVec2Expr): Vec2Expr = Vec2Expr(s"vec2<f32>(${v.wgsl})")
 
+  /** Lift a CPU [[Vec2]] into the shader — `vec2(someVec2)`. Narrow a wider CPU
+    * vector with a swizzle first (`vec2(v3.xy)`, `vec2(v4.zw)`) so the
+    * discarded components stay visible at the call site.
+    */
+  def apply(v: Vec2): Vec2Expr = v.toExpr
+
+  /** Literal broadcast. Required explicitly: the `Vec2` overload above makes
+    * this a same-arity overload set, and Scala will not apply the
+    * `Conversion[Double, FloatExpr]` through one (see the `NumOps` note above).
+    */
+  def apply(scalar: Double): Vec2Expr = apply(scalar: FloatExpr)
+
 /** GPU `vec3<f32>` constructor: `vec3(x, y, z)`, `vec3(xy, z)`, or
   * `vec3(scalar)`.
   */
@@ -750,6 +764,16 @@ object vec3:
   )
   def apply(xy: Vec2Expr, z: FloatExpr): Vec3Expr =
     Vec3Expr(s"vec3<f32>(${xy.wgsl}, ${z.wgsl})")
+
+  /** Lift a CPU [[Vec3]] into the shader — `vec3(CeilTint)`. Useful in operator
+    * receiver position, where implicit conversion does not fire:
+    * `vec3(CeilTint) * noise`. Narrow a [[Vec4]] with a swizzle first
+    * (`vec3(tint.rgb)`, `vec3(v4.xyz)`).
+    */
+  def apply(v: Vec3): Vec3Expr = v.toExpr
+
+  /** Literal broadcast — see the note on `vec2.apply(scalar: Double)`. */
+  def apply(scalar: Double): Vec3Expr = apply(scalar: FloatExpr)
 
 /** GPU `vec4<f32>` constructor: `vec4(x,y,z,w)`, `vec4(xyz, w)`, `vec4(xy, z,
   * w)`, or `vec4(scalar)`. Common for colors: `vec4(rgb, 1.0)`.
@@ -764,3 +788,9 @@ object vec4:
   def apply(scalar: FloatExpr): Vec4Expr = Vec4Expr(
     s"vec4<f32>(${scalar.wgsl})",
   )
+
+  /** Lift a CPU [[Vec4]] into the shader — `vec4(wallColor)`. */
+  def apply(v: Vec4): Vec4Expr = v.toExpr
+
+  /** Literal broadcast — see the note on `vec2.apply(scalar: Double)`. */
+  def apply(scalar: Double): Vec4Expr = apply(scalar: FloatExpr)

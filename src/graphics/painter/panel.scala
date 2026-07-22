@@ -2,13 +2,18 @@ package trivalibs.graphics.painter
 
 import trivalibs.graphics.buffers.BufferBinding
 import trivalibs.graphics.buffers.UniformValue
+import trivalibs.graphics.math.cpu.Vec4
 import trivalibs.graphics.painter.*
 import trivalibs.utils.js.*
 
 import scala.compiletime.summonFrom
 import scala.scalajs.js
 
-type ClearColor = (Double, Double, Double, Double)
+/** RGBA clear color for a render pass. A `(r, g, b, a)` tuple converts
+  * implicitly, so `clearColor = (0.5, 0.6, 0.7, 1.0)` is still accepted
+  * alongside `clearColor = Vec4(...)` or a shared `Vec4` constant.
+  */
+type ClearColor = Vec4
 
 /** The eager view bundle for one panel texture:
   *   - `perMip` — one single-level view per mip level (length = `mipCount`).
@@ -243,7 +248,13 @@ class Panel private[painter] (val painter: Painter):
   ): this.type =
     width.foreach(v => this.specWidth = v)
     height.foreach(v => this.specHeight = v)
-    clearColor.foreach(v => this.clearColor = v)
+    // Copied, not aliased: `Vec4` is mutable, so retaining the caller's
+    // instance would let a later `someColor.x = …` silently change this
+    // panel's clear color.
+    clearColor.foreach: v =>
+      this.clearColor =
+        if v.isNull then null
+        else Vec4(v.get.x, v.get.y, v.get.z, v.get.w)
     depthTest.foreach(v => this.depthTest = v)
     multisample.foreach(v => this.multisample = v)
     mips.foreach(v => if v then this.mipLevels = 0)

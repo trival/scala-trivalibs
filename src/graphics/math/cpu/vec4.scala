@@ -106,3 +106,6 @@ object Vec4 extends Vec4ImmutableOps[Vec4]:
       inline def w_=(value: Double) = v.w = value
 
   given Vec4MutableOps[Vec4] = new Vec4MutableOps[Vec4] {}
+
+  given Conversion[Vec4, Vec4Tuple] = _.toTuple
+  given Conversion[Vec4Tuple, Vec4] = _.toVec4

@@ -88,6 +88,16 @@ no import, consistent with `cpu/package.scala:12-22` re-exporting `Vec3.given`.
 `inline` keeps the emitted JS to a bare tuple or constructor literal — no
 wrapper function per conversion.
 
+> **Amended during implementation — split across two locations.** The
+> `given Conversion`s stay in each class companion (implicit scope, no import
+> needed — this is what keeps the untouched `clearColor = (r, g, b, a)` call
+> sites compiling). The _named_ `toTuple` / `toVecN` methods moved to a single
+> new file `cpu/tuple_interop.scala`, for two reasons: companion members are not
+> reached by `import …math.cpu.*` (the companion is not exported, only its
+> `.given` is), and Scala 3 requires all overloads of a top-level name to live
+> in one group of top-level definitions — `toTuple` is overloaded per arity.
+> Same arrangement as `cpu/swizzles.scala`.
+
 `Vec2Tuple` / `Vec3Tuple` / `Vec4Tuple` already exist (`cpu/vec3.scala:50` and
 siblings). Reuse them; introduce no new aliases.
 
@@ -101,9 +111,25 @@ extension (v: Vec3)
   def toExpr: Vec3Expr = Vec3Expr(
     s"vec3<f32>(${floatToWgsl(v.x)}, ${floatToWgsl(v.y)}, ${floatToWgsl(v.z)})",
   )
-
-given Conversion[Vec3, Vec3Expr] = _.toExpr
 ```
+
+> **Amended during implementation — no `given Conversion[Vec*, Vec*Expr]`.** The
+> plan originally paired each `toExpr` with an implicit conversion, so that
+> plain positions would need no ceremony. That turned out to be unshippable: a
+> `Conversion[Vec3, Vec3Expr]` makes every **GPU** extension applicable to a
+> **CPU** value, which collides with the identically-named CPU ones. `v3.xy`
+> then fails with _"Ambiguous extension methods: both `cpu.xy(v)` and
+> `gpu.xy(conversion(v))`"_ in any file importing both namespaces — i.e. the
+> standard sketch preamble. It broke 36 assertions in
+> `test/math/Swizzle.test.scala`, including one named _"CPU + GPU swizzles
+> coexist (sanity)"_ — an invariant the library deliberately tests for.
+>
+> Dropping the conversions cost nothing measurable: receiver position never
+> worked anyway (§4), and plain positions are served by the `vec2`/`vec3`/`vec4`
+> constructors (§2.6). Tests, examples and all seven sketches compile unchanged
+> without them. **Crossing into the GPU domain is therefore always explicit.**
+> The `Vec* ↔ tuple` conversions of §2.1 are unaffected — tuples have no
+> competing GPU extension set.
 
 Same for `Vec2` / `Vec4`, and for `Mat2` / `Mat3` / `Mat4` emitting column-major
 `mat4x4<f32>(…)` to match what the existing `Mat*Expr` ops emit.
@@ -524,7 +550,8 @@ changes domain, consistent with the `Vec3` / `vec3` case convention.
 | File                                               | Change                                                                 |
 | -------------------------------------------------- | ---------------------------------------------------------------------- |
 | `src/graphics/math/cpu/vec{2,3,4}.scala`           | `toTuple` / `toVecN` + both `Conversion`s per companion                |
-| `src/graphics/math/gpu/cpu_interop.scala`          | **new** — `toExpr` + `Conversion` for `Vec2-4`, `Mat2-4`               |
+| `src/graphics/math/cpu/tuple_interop.scala`        | **new** — the named `toTuple` / `toVecN` (top-level, one file)         |
+| `src/graphics/math/gpu/cpu_interop.scala`          | **new** — `toExpr` for `Vec2-4`, `Mat2-4`; **no** implicit conversions |
 | `src/graphics/math/gpu/float_expr.scala`           | `vec2/vec3/vec4` CPU overload + `apply(scalar: Double)` guard (§2.6)   |
 | `src/graphics/painter/panel.scala`                 | `ClearColor = Vec4`; copy-on-set                                       |
 | `src/graphics/painter/painter.scala`               | param types + 2 destructuring sites                                    |
@@ -554,3 +581,56 @@ changes domain, consistent with the `Vec3` / `vec3` case convention.
    warnings, proving `-language:implicitConversions` (§2.4) covers every
    position. Worth doing before the change too, to record the pre-existing
    warning count rather than silently inheriting it.
+
+---
+
+## 7. Implementation outcome
+
+Implemented. Everything below was run and passed.
+
+| Check                                   | Result                                        |
+| --------------------------------------- | --------------------------------------------- |
+| `trivalibs` test suite                  | **292 tests, 0 failed**                       |
+| `trivalibs/src` + `examples` compile    | clean                                         |
+| All 7 affected sketches compile         | clean                                         |
+| Feature warnings (`-feature` on)        | **0**                                         |
+| Untouched `clearColor = (…)` call sites | all 21 compile unchanged                      |
+| `main.js` (rooms/canvases)              | 752 376 → 754 036 bytes (**+1 660, +0.22 %**) |
+
+### Pixel-identity
+
+Rather than eyeballing the render, the emitted WGSL was compared directly — the
+image is fully determined by it. Every lifted constant produces a byte-identical
+string, because `toExpr` and the old `Double → FloatExpr` literal path both
+route through `floatToWgsl`:
+
+```
+floor    vec3<f32>(0.8, 0.78, 0.75)      IDENTICAL
+ceil     vec3<f32>(0.86, 0.86, 0.85)     IDENTICAL
+halo     vec3<f32>(8.0, 7.6, 6.8)        IDENTICAL
+wallLow  vec3<f32>(0.96, 0.96, 0.95)     IDENTICAL
+wallHigh vec3<f32>(0.88, 0.88, 0.87)     IDENTICAL
+clearColor tuple → Vec4                  IDENTICAL
+Vec4(fogColor, 1.0)                      IDENTICAL
+```
+
+### What the plan got wrong
+
+Two design points did not survive contact with the compiler. Both are recorded
+inline above (§2.1 and §2.2 amendments); summarised here because both were
+asserted confidently at planning time:
+
+1. **The implicit `Conversion[Vec*, Vec*Expr]` was unshippable** — it breaks CPU
+   swizzles for any file importing both namespaces. Caught only by the test
+   suite; every sketch and example still compiled, because none of them happens
+   to call a swizzle on a CPU vector. A latent landmine, not a visible break.
+2. **Companion-placed extension methods are unreachable** via
+   `import …math.cpu.*`, and top-level overloads must share one file — hence
+   `cpu/tuple_interop.scala`.
+
+The methodological lesson worth carrying forward: in this codebase, a simplified
+stand-in model of the math types **gives false positives** for anything touching
+extension-method resolution. The `*G` trait machinery resolves differently from
+plain top-level extensions. Both §4's receiver question and the swizzle
+collision compiled fine in a model and failed against `trivalibs/src`. Always
+probe against the real sources.

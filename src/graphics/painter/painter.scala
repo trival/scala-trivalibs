@@ -711,8 +711,8 @@ class Painter(
     * layers, rendered by [[paint]]. Defaults to the canvas size and the
     * preferred format; all options are also settable later via `panel.set`.
     *
-    *   - `clearColor` — `(r, g, b, a)`; omit to load (not clear) previous
-    *     contents.
+    *   - `clearColor` — a [[ClearColor]] (`Vec4`); an `(r, g, b, a)` tuple
+    *     converts implicitly. Omit to load (not clear) previous contents.
     *   - `shape`/`shapes`, `layer`/`layers` — singular sugar for one item; the
     *     plural form takes precedence.
     *   - `width`/`height` — fixed size; omit to track the canvas.
@@ -772,19 +772,19 @@ class Painter(
     */
   def draw(
       shape: AnyShape,
-      clearColor: Opt[(Double, Double, Double, Double)] = null,
+      clearColor: Opt[ClearColor] = null,
   ): Unit =
     val encoder = device.createCommandEncoder()
     val textureView = context.getCurrentTexture().createView()
 
     val colorAttachment =
       if clearColor.notNull then
-        val (r, g, b, a) = clearColor
+        val c = clearColor.get
         Obj.literal(
           view = textureView,
           loadOp = "clear",
           storeOp = "store",
-          clearValue = Obj.literal(r = r, g = g, b = b, a = a),
+          clearValue = Obj.literal(r = c.r, g = c.g, b = c.b, a = c.a),
         )
       else
         Obj.literal(
@@ -821,21 +821,21 @@ class Painter(
     while t < panel.targetCount do
       val attachment =
         if panel.clearColor.notNull then
-          val (r, g, b, a) = panel.clearColor
+          val c = panel.clearColor.get
           if msaa then
             Obj.literal(
               view = panel.msaaViewAt(t),
               resolveTarget = panel.views(t).attach,
               loadOp = "clear",
               storeOp = "discard",
-              clearValue = Obj.literal(r = r, g = g, b = b, a = a),
+              clearValue = Obj.literal(r = c.r, g = c.g, b = c.b, a = c.a),
             )
           else
             Obj.literal(
               view = panel.views(t).attach,
               loadOp = "clear",
               storeOp = "store",
-              clearValue = Obj.literal(r = r, g = g, b = b, a = a),
+              clearValue = Obj.literal(r = c.r, g = c.g, b = c.b, a = c.a),
             )
         else if msaa then
           Obj.literal(

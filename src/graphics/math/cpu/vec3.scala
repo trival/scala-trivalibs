@@ -95,3 +95,6 @@ object Vec3 extends Vec3ImmutableOps[Vec3]:
       inline def z_=(value: Double) = v.z = value
 
   given Vec3MutableOps[Vec3] = new Vec3MutableOps[Vec3] {}
+
+  given Conversion[Vec3, Vec3Tuple] = _.toTuple
+  given Conversion[Vec3Tuple, Vec3] = _.toVec3
