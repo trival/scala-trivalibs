@@ -1,6 +1,8 @@
 //> using scala 3.8.4
 //> using platform js
 //> using option -Wconf:msg=differs.only.in.case:s
+//> using option -feature
+//> using option -language:implicitConversions
 
 //> using jsVersion 1.21.0
 //> using jsMode full
