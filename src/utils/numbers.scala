@@ -42,7 +42,8 @@ object NumOps:
   * .min .max .clamp .clamp01 .mix .lerp .step .smoothstep .fit0111 .fit1101`,
   * etc. Prefer these over `math.*` (`x.sin`, not `math.sin(x)`) — the same
   * names exist on the GPU `Expr` types, so CPU and shader math read alike.
-  * `import trivalibs.utils.numbers.NumExt.given` to use them. */
+  * `import trivalibs.utils.numbers.NumExt.given` to use them.
+  */
 trait NumExt[P]:
   extension (p: P)
     def sqrt: P
@@ -55,6 +56,12 @@ trait NumExt[P]:
     def round: P
     def trunc: P
     def fract: P
+
+    /** Euclidean remainder: always in `[0, |other|)` regardless of sign, unlike
+      * the truncated `%`. Defined as `self - floor(self / |other|) * |other|`.
+      */
+    def rem(other: P): P
+
     def exp: P
     def exp2: P
     def log: P
@@ -138,6 +145,9 @@ object NumExt:
       inline def round = Math.round(p).toDouble
       inline def trunc = if p < 0.0 then Math.ceil(p) else Math.floor(p)
       inline def fract = p - Math.floor(p)
+      inline def rem(other: Double) =
+        val o = Math.abs(other)
+        p - Math.floor(p / o) * o
       inline def exp = Math.exp(p)
       inline def exp2 = Math.pow(2.0, p)
       inline def log = Math.log(p)
@@ -185,6 +195,9 @@ object NumExt:
       inline def trunc =
         (if p < 0f then Math.ceil(p) else Math.floor(p)).toFloat
       inline def fract = p - Math.floor(p).toFloat
+      inline def rem(other: Float) =
+        val o = Math.abs(other)
+        (p - Math.floor(p / o) * o)
       inline def exp = Math.exp(p).toFloat
       inline def exp2 = Math.pow(2.0, p).toFloat
       inline def log = Math.log(p).toFloat

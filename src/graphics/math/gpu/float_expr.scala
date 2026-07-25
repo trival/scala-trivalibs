@@ -122,6 +122,14 @@ given NumExt[FloatExpr]:
     def round: FloatExpr = FloatExpr(s"round(${a.wgsl})")
     def trunc: FloatExpr = FloatExpr(s"trunc(${a.wgsl})")
     def fract: FloatExpr = FloatExpr(s"fract(${a.wgsl})")
+
+    /** Euclidean remainder — always in `[0, |b|)`, unlike WGSL's truncated `%`.
+      * Lowers to `a - floor(a / abs(b)) * abs(b)`.
+      */
+    def rem(b: FloatExpr): FloatExpr =
+      FloatExpr(
+        s"(${a.wgsl} - floor(${a.wgsl} / abs(${b.wgsl})) * abs(${b.wgsl}))",
+      )
     def exp: FloatExpr = FloatExpr(s"exp(${a.wgsl})")
     def exp2: FloatExpr = FloatExpr(s"exp2(${a.wgsl})")
     def log: FloatExpr = FloatExpr(s"log(${a.wgsl})")
