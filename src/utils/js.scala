@@ -118,6 +118,13 @@ extension [A](arr: Arr[A])
   inline def +:(a: A): Arr[A] = Arr(a).concat(arr)
   inline def ++(other: Arr[A]): Arr[A] = arr.concat(other)
 
+  /** In-place append — mutates `arr`, compiling to a bare JS `.push`. Shadows
+    * the `Growable.+=` that `js.ArrayOps` would otherwise supply via implicit
+    * conversion (which drags in the Scala collections machinery). Use it to
+    * build an array up in a loop: `arr += x`.
+    */
+  inline def +=(a: A): Unit = arr.push(a)
+
 // Core extensions for for-comprehension support
 extension [A](promise: js.Promise[A])
   inline def map[B](f: A => B): js.Promise[B] =

@@ -427,6 +427,12 @@ given Conversion[Stmt, Block] = s => s
 object Block:
   /** Combine statements into a shader body: `Block(out.color := …, …)`. */
   def apply(stmts: Stmt*): Block = stmts.mkString("\n")
+
+  /** Combine a dynamically-built array of statements into a shader body — the
+    * js-native counterpart to the varargs `apply`, for statements accumulated
+    * in an `Arr` (e.g. build-time-unrolled loops). Compiles to `Array.join`.
+    */
+  def apply(stmts: Arr[Stmt]): Block = stmts.join("\n")
   def empty: Block = ""
   def unwrap(b: Block): String = b.asInstanceOf[String]
 
