@@ -2,12 +2,11 @@
 
 This plan has been split into two independent feature documents:
 
-- [documents/geometry3d-plan.md](/home/trival/code/personal/scala/webgpu/documents/geometry3d-plan.md)
-  — **Grid, Cuboid, Quad factories, Sphere** — 3D geometry helpers + rendered
-  scene example.
-- [documents/line2d-plan.md](/home/trival/code/personal/scala/webgpu/documents/line2d-plan.md)
-  — **2D Line geometry** — variable-width polyline builder, mitre joins, UV
-  export + animated stroke example.
+- [documents/geometry3d-plan.md](geometry3d-plan.md) — **Grid, Cuboid, Quad
+  factories, Sphere** — 3D geometry helpers + rendered scene example.
+- [documents/line2d-plan.md](../line2d-plan.md) — **2D Line geometry** —
+  variable-width polyline builder, mitre joins, UV export + animated stroke
+  example.
 
 ## Prerequisites (all done)
 
@@ -46,7 +45,7 @@ bounds, `Option` chains). Scala 3 replacements used throughout both plans:
 
 ## Rust source reference
 
-[documents/rust-painter/repomix-trivalibs-core.xml](/home/trival/code/personal/scala/webgpu/documents/rust-painter/repomix-trivalibs-core.xml)
+[documents/rust-painter/repomix-trivalibs-core.xml](../rust-painter/repomix-trivalibs-core.xml)
 
 - Lines 119–1755: `data/grid`, `data/neighbour_list`
 - Lines 3136–3946: `rendering/line_2d`

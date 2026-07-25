@@ -4,6 +4,12 @@
 
 ### 🔄 `Form.set()` — destroy-always is wrong for dynamic geometry
 
+> **Scheduled** — folded into phase 1 of the strokes-painting roadmap
+> (`documents/strokes-painting-port-plan.md` in the consuming sketch repo),
+> together with multi-buffer forms: `Form` gets an `Arr[FormBuffers]`, each
+> record tracking `maxSize` / `currentSize` exactly as described below. Do the
+> two together — they touch the same upload path.
+
 **Current Scala** (`src/graphics/painter/form.scala`):
 
 ```scala
@@ -81,6 +87,13 @@ the param row to the Panel table in §3.
 
 ### 🔄 Port missing `Random` helpers from `trivalibs_core`
 
+> **Scheduled** — phase 3 of the strokes-painting roadmap
+> (`documents/strokes-painting-port-plan.md` in the consuming sketch repo) needs
+> `randInt`, `randBool`, `randSign`, `randNormal01` / `randNormal11` and `Arr`
+> `.pick` / `.shuffle` (Rust `rand_utils.rs`,
+> `rust-painter/repomix-trivalibs-core.xml` L6227–6345). Add the vector helpers
+> listed below in the same touch.
+
 **Current state:**
 [trivalibs/src/utils/random.scala](../trivalibs/src/utils/random.scala) only
 exposes `rand()` and `randInRange(min, max)`. Rust
@@ -139,13 +152,14 @@ hold" rule above is only correct for resources the object allocated itself. The
 painter has several cases where ownership is conditional:
 
 - **`Shape` / instances** allocate and manage their **own** bindings when handed
-  a **raw value** instead of a pre-existing `BufferBinding`. Those self-allocated
-  bindings are owned by the shape/instance and are candidates to destroy on its
-  teardown; a binding **passed in** by the caller is not — destroying it would
-  pull the rug out from under the owner. So `destroy()` must track provenance
-  (allocated-here vs. supplied) and only free the former.
-- **`Panel` bindings** (not only its textures) fall under the same rule — a panel
-  similarly owns bindings it created from raw values but not ones it was given.
+  a **raw value** instead of a pre-existing `BufferBinding`. Those
+  self-allocated bindings are owned by the shape/instance and are candidates to
+  destroy on its teardown; a binding **passed in** by the caller is not —
+  destroying it would pull the rug out from under the owner. So `destroy()` must
+  track provenance (allocated-here vs. supplied) and only free the former.
+- **`Panel` bindings** (not only its textures) fall under the same rule — a
+  panel similarly owns bindings it created from raw values but not ones it was
+  given.
 
 So the full design needs an ownership/provenance flag per binding before any
 class can safely cascade `destroy()` into its bindings. Until that's worked out,

@@ -6,12 +6,18 @@ exporter that feeds directly into the painter.
 
 Companion documents:
 
-- [documents/done/mesh-geometry-port-plan.md](/home/trival/code/personal/scala/webgpu/documents/mesh-geometry-port-plan.md)
-  — original combined plan (now an index); all prerequisites listed there are
+- **`documents/strokes-painting-port-plan.md`** in the consuming sketch repo —
+  the roadmap this plan is phase 2 of (multi-buffer `Form` → line2d → CPU
+  helpers → the strokes painting sketch). Read it for how the pieces fit
+  together; read this one for the `line_2d` port itself. Note the ordering: the
+  multi-buffer `Form` lands **before** this plan, so the example in §3 can draw
+  all its fragments from one form.
+- [documents/done/mesh-geometry-port-plan.md](done/mesh-geometry-port-plan.md) —
+  original combined plan (now an index); all prerequisites listed there are
   done.
-- [documents/done/geometry3d-plan.md](/home/trival/code/personal/scala/webgpu/documents/geometry3d-plan.md)
-  — sibling plan for Grid / Cuboid / Sphere (independent feature).
-- [documents/rust-painter/repomix-trivalibs-core.xml](/home/trival/code/personal/scala/webgpu/documents/rust-painter/repomix-trivalibs-core.xml)
+- [documents/done/geometry3d-plan.md](done/geometry3d-plan.md) — sibling plan
+  for Grid / Cuboid / Sphere (independent feature).
+- [documents/rust-painter/repomix-trivalibs-core.xml](rust-painter/repomix-trivalibs-core.xml)
   — Rust source bundle. Key section: lines 3136–3946 (`rendering/line_2d`).
 
 ---
@@ -27,12 +33,12 @@ painter pipeline consumes unchanged via `Form` / `Shape`.
 
 ### Design decisions vs. Rust
 
-| Rust pattern                          | Scala replacement                                                                                                          |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `LineData<EmptyData>` type alias      | `Line[Unit]` — `EmptyData` is `Unit`                                                                                       |
-| `Lerp<f32>` bound on `T` everywhere   | `using Lerp[T]` only at operations that need it (smooth, cleanup, `toBufferedGeometry`)                                    |
-| `NeighbourList<T>` doubly-linked list | Inlined `forEachWithNeighbours` helper (~15 lines) — the only consumer                                                     |
-| Hard-coded `VertexData` struct        | `type LineAttribs = (position: Vec2, width: F32, length: F32, uv: Vec2, localUv: Vec2)` — `allocateAttribs` derives layout |
+| Rust pattern                          | Scala replacement                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `LineData<EmptyData>` type alias      | `Line[Unit]` — `EmptyData` is `Unit`                                                                                           |
+| `Lerp<f32>` bound on `T` everywhere   | `using Lerp[T]` only at operations that need it (smooth, cleanup, `toBufferedGeometry`)                                        |
+| `NeighbourList<T>` doubly-linked list | Inlined `forEachWithNeighbours` helper (~15 lines) — the only consumer                                                         |
+| Hard-coded `VertexData` struct        | `type LineAttribs = (position: Vec2, width: Float, length: Float, uv: Vec2, localUv: Vec2)` — `allocateAttribs` derives layout |
 
 ### Non-goals
 
@@ -46,7 +52,10 @@ painter pipeline consumes unchanged via `Form` / `Shape`.
 ## 2. Implementation
 
 **New file:** `src/graphics/geometry/line2d.scala`  
-**New test:** `test/geometry/Line2d.test.scala`
+**New test:** `test/geometry/Line2d.test.scala`  
+**Edit:** `src/graphics/geometry/package.scala` — add a `Lerp[Unit]` given next
+to `doubleLerp` / `vec2Lerp` (it does **not** exist yet, and `Line[Unit]` needs
+it).
 
 ### 2.1 Inline neighbour iterator
 
@@ -124,7 +133,7 @@ object Line:
 Fixed vertex layout matching Rust `VertexData` at lines 3154–3162:
 
 ```scala
-type LineAttribs = (position: Vec2, width: F32, length: F32, uv: Vec2, localUv: Vec2)
+type LineAttribs = (position: Vec2, width: Float, length: Float, uv: Vec2, localUv: Vec2)
 
 class LineGeometryProps(
     val smoothDepth:            Int     = 0,
@@ -174,47 +183,42 @@ per segment so stroke continuity is the default.
 
 ---
 
-## 3. Example — `examples/line2d_stroke/`
+## 3. Example — `examples/bevel_lines_2d/`
 
-An animated 2D canvas that draws several polyline strokes using `Line` +
-`toBufferedGeometry`.
+A port of the original TypeScript/wasm test bed for the Rust line
+implementation,
+`/home/trival/code/personal/trivialspace/playground/src/public/tests/shapes/bevel-lines-2d-wasm`
+(`crate/src/lib.rs`) — random points with wildly varying widths, put through
+every transformation in §2.2. It is the visual acceptance test for this port,
+and it is the second consumer of the **multi-buffer `Form`** (roadmap phase 1,
+already in place by the time this lands), since `splitAtAngle` produces several
+fragments drawn from one form.
 
-### 3.1 Scene description
+### 3.1 Geometry (CPU, rebuilt on resize)
 
-Three stroke tracks drawn each frame with updated vertex widths:
-
-**Sine ribbon** — 60-point `Line[Unit]` following `y = sin(x · f + t)` across
-the canvas width, with width pulsing between 4 and 14 px via
-`sin(t · 1.3) · 5 + 9`. Re-built from `Line.fromPoints` each frame.
-
-**Spiral** — A 120-point `Line[Unit]` tracing a shrinking Archimedean spiral
-`(r·cos θ, r·sin θ)` centred on the canvas, radius decaying from 0.4 to 0.02
-over the arc. Constant width 6 px, `smoothEdges(0.5, 3.0)` applied once.
-
-**Branching path** — Three short `Line[Unit]` segments sharing a junction point,
-rendered via `toBufferedGeometries` so UV continuity threads across the join
-automatically.
+1. `Line[Unit](20.0)`, ~20 random points spread over 1.5× the canvas, random
+   widths in `[20, 300]`.
+2. `flatMapWithNeighbours` inserting two extra vertices at `lerp 0.333` /
+   `lerp 0.666` with fresh random widths.
+3. `cleanup(0.5, 0.1, 0.1)`.
+4. `splitAtAngle(Pi * 3 / 4)` — the corner split.
+5. `toBufferedGeometries(LineGeometryProps(smoothDepth = 4, smoothAngleThreshold = 0.001, smoothMinLength = 5.0))`.
 
 ### 3.2 Rendering
 
-All strokes share one `Shade` that takes `position: Vec2`, `uv: Vec2`, and
-`localUv: Vec2` as vertex attributes and a time uniform. Fragment shader reads
-`localUv.y` for the cross-section gradient and `uv.x` for along-stroke color:
+One `Form` holding **all** fragment geometries
+(`p.form(geometries = …, topology = PrimitiveTopology.TriangleStrip)`), one
+`Shape`, one draw sequence.
 
-```wgsl
-let t = uniforms.time;
-let band = smoothstep(0.0, 0.15, localUv.y) * smoothstep(0.0, 0.15, 1.0 - localUv.y);
-let hue = uv.x + t * 0.1;
-fragColor = vec4(hsv2rgb(vec3(hue, 0.7, 0.9)) * band, band);
-```
+`Attribs = LineAttribs`, `Varyings = (uv: Vec2, localUv: Vec2)`,
+`Uniforms = (size: VertexUniform[Vec2])`. Vert:
+`pos = (position / size).fit0111`, output `vec4(pos.x, -pos.y, 0, 1)`. Frag:
+`vec4(uv, 1, 1)` — the original test's uv debug color, which makes mitre and uv
+errors immediately visible. White clear color; `onResize` regenerates the
+geometry and updates `size`.
 
-The stroke widths and vertex counts are small enough that the `Form` is
-re-uploaded from CPU each frame (testing the `Form.set` buffer-reuse path).
-
-### 3.3 Vertex layout
-
-`LineAttribs` is used directly — no additional per-vertex data needed. A single
-`uniforms` bind group carries `time: f32`.
+**Gate:** clean mitre joins, no gaps at the `splitAtAngle` corners, uv gradient
+continuous across fragments.
 
 ---
 
@@ -224,37 +228,39 @@ re-uploaded from CPU each frame (testing the `Form.set` buffer-reuse path).
    transformation methods.
 2. **`toBufferedGeometry`** — mitre join algorithm + index emission.
 3. **`Line2d.test.scala`** — all §2.4 cases passing.
-4. **Example** — `examples/line2d_stroke/`, verified visually with
-   `bun run dev`.
+4. **Example** — `examples/bevel_lines_2d/`, verified visually. Uses the
+   multi-buffer `Form` from roadmap phase 1, which is done before this plan
+   starts.
 
 ---
 
 ## 5. Critical files
 
-| File                                                                        | Action  |
-| --------------------------------------------------------------------------- | ------- |
-| [src/graphics/geometry/line2d.scala](../src/graphics/geometry/line2d.scala) | **New** |
-| [test/geometry/Line2d.test.scala](../test/geometry/Line2d.test.scala)       | **New** |
-| [examples/line2d_stroke/](../examples/line2d_stroke/)                       | **New** |
+| File                                                                          | Action                  |
+| ----------------------------------------------------------------------------- | ----------------------- |
+| [src/graphics/geometry/line2d.scala](../src/graphics/geometry/line2d.scala)   | **New**                 |
+| [test/geometry/Line2d.test.scala](../test/geometry/Line2d.test.scala)         | **New**                 |
+| [src/graphics/geometry/package.scala](../src/graphics/geometry/package.scala) | Edit — add `Lerp[Unit]` |
+| [examples/bevel_lines_2d/](../examples/bevel_lines_2d/)                       | **New**                 |
 
 ### Existing files to reuse
 
 - [src/graphics/geometry/buffers.scala](../src/graphics/geometry/buffers.scala)
   — `BufferedGeometry[F]`
 - [src/graphics/geometry/package.scala](../src/graphics/geometry/package.scala)
-  — `Lerp[Unit]` given, `Lerp[Vec2]` given
+  — `Lerp[Vec2]` given (`Lerp[Unit]` is added by this plan)
 - [src/graphics/buffers/attributes.scala](../src/graphics/buffers/attributes.scala)
   — `allocateAttribs[LineAttribs]`
-- [trivalibs/src/utils/js.scala](../trivalibs/src/utils/js.scala) — `Arr`, `Opt`
-- [trivalibs/src/utils/numbers.scala](../trivalibs/src/utils/numbers.scala) —
-  `NumExt` (`.sin`, `.cos`, `.sqrt`)
+- [src/utils/js.scala](../src/utils/js.scala) — `Arr`, `Opt`
+- [src/utils/numbers.scala](../src/utils/numbers.scala) — `NumExt` (`.sin`,
+  `.cos`, `.sqrt`)
 
 ---
 
 ## 6. Verification
 
 ```bash
-bun run build   # zero errors
-bun run test    # Line2d.test.scala passes
-bun run dev     # open :3000/line2d_stroke — three animated strokes visible
+bun run check            # library type-checks in isolation
+bun run test             # Line2d.test.scala passes
+bun run examples:build   # then examples:dev → bevel_lines_2d
 ```

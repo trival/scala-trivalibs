@@ -6,12 +6,11 @@ a rendered scene that exercises all three features together.
 
 Companion documents:
 
-- [documents/mesh-geometry-port-plan.md](/home/trival/code/personal/scala/webgpu/documents/mesh-geometry-port-plan.md)
-  — original combined plan (now an index); prerequisites listed there are all
-  done.
-- [documents/line2d-plan.md](/home/trival/code/personal/scala/webgpu/documents/line2d-plan.md)
-  — sibling plan for 2D line geometry (independent feature).
-- [documents/rust-painter/repomix-trivalibs-core.xml](/home/trival/code/personal/scala/webgpu/documents/rust-painter/repomix-trivalibs-core.xml)
+- [documents/mesh-geometry-port-plan.md](mesh-geometry-port-plan.md) — original
+  combined plan (now an index); prerequisites listed there are all done.
+- [documents/line2d-plan.md](../line2d-plan.md) — sibling plan for 2D line
+  geometry (independent feature).
+- [documents/rust-painter/repomix-trivalibs-core.xml](../rust-painter/repomix-trivalibs-core.xml)
   — Rust source bundle. Key sections: lines 119–1755 (`data/grid`), 5307–5893
   (`rendering/mesh_geometry/utils`, `rendering/shapes/*`).
 
@@ -333,10 +332,10 @@ drawn in the same render pass.
 
 ## 5. Implementation order
 
-1. ✅ **Grid** — `grid.scala` + `Grid.test.scala`. Pure CPU; no GPU. Done when §2.5
-   passes.
-2. ✅ **Shapes** — `shapes.scala` + `Shapes.test.scala`. Extend `object Quad`; add
-   `Cuboid`; add `sphereMesh`. Done when §3.4 passes.
+1. ✅ **Grid** — `grid.scala` + `Grid.test.scala`. Pure CPU; no GPU. Done when
+   §2.5 passes.
+2. ✅ **Shapes** — `shapes.scala` + `Shapes.test.scala`. Extend `object Quad`;
+   add `Cuboid`; add `sphereMesh`. Done when §3.4 passes.
 3. ✅ **Scene example** — `examples/geometry3d_scene/`. Verify visually with
    `bun run dev`. Grid wave surface, three cuboids, two spheres, diffuse
    lighting.
@@ -389,6 +388,7 @@ bun run dev     # open :3000/geometry3d_scene — wave terrain + boxes + spheres
   present — no manual pre-triangulation needed in user code.
 - `painter.panel` / `Panel.set` gained a `[S <: Shape[?, ?]]` type parameter so
   `Arr(s1, s2, ...)` can be passed without explicit type annotation.
-- `type AnyShape = Shape[?, ?]` added to painter package for empty-array construction.
+- `type AnyShape = Shape[?, ?]` added to painter package for empty-array
+  construction.
 - Scene shader uses the Scala DSL (`program.vert` / `program.frag`) rather than
   raw WGSL strings.
