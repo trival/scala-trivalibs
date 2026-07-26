@@ -110,6 +110,18 @@ class Line[T](
   /** Sum of all segment lengths (excluding [[lenOffset]]). */
   var totalLength: Double = 0.0
 
+  /** The length this line will have once fully built, if it is known ahead of
+    * time. `localUv.x` is normalised against it instead of [[totalLength]].
+    *
+    * Set it when rendering a line that is still being built — e.g. animating a
+    * brush travelling along its path. Without it `localUv.x` spans 0..1 over
+    * whatever has been added so far, so anything keyed on it (an end fade, a
+    * texture) rescales and slides every time a vertex is appended. With it,
+    * `localUv.x` only reaches the fraction actually drawn, and the geometry's
+    * own end cap tapers the unfinished tip.
+    */
+  var plannedLength: Opt[Double] = null
+
   def vertCount: Int = verts.length
   def get(i: Int): LineVertex[T] = verts(i)
   def getOpt(i: Int): Opt[LineVertex[T]] =
@@ -455,6 +467,7 @@ object Line:
         d += 1
 
       val uvLength = totalLength.getOr(lineLength)
+      val localLength = line.plannedLength.getOr(line.totalLength)
       val topCount = topLine.vertCount
       val bottomCount = bottomLine.vertCount
       val out = StructArray.allocate[LineAttribsBuffer](topCount + bottomCount)
@@ -488,7 +501,7 @@ object Line:
             topLen,
             topLen / uvLength,
             uvY,
-            (topLen - line.lenOffset) / line.totalLength,
+            (topLen - line.lenOffset) / localLength,
           )
           indices.push(nextIdx)
           topIdx = nextIdx
@@ -510,7 +523,7 @@ object Line:
             bottomLen,
             bottomLen / uvLength,
             uvY,
-            (bottomLen - line.lenOffset) / line.totalLength,
+            (bottomLen - line.lenOffset) / localLength,
           )
           indices.push(nextIdx)
           bottomIdx = nextIdx
