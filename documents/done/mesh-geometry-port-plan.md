@@ -4,7 +4,7 @@ This plan has been split into two independent feature documents:
 
 - [documents/geometry3d-plan.md](geometry3d-plan.md) — **Grid, Cuboid, Quad
   factories, Sphere** — 3D geometry helpers + rendered scene example.
-- [documents/line2d-plan.md](../line2d-plan.md) — **2D Line geometry** —
+- [documents/done/line2d-plan.md](line2d-plan.md) — **2D Line geometry** —
   variable-width polyline builder, mitre joins, UV export + animated stroke
   example.
 

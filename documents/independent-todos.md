@@ -127,6 +127,41 @@ scale; revisit when a sketch churns GPU resources at runtime.
 
 ---
 
+## Painter
+
+### 🔄 Precompute the invariant parts of the pipeline cache key
+
+**Gap:** `Painter.getPipeline` builds its `Dict` lookup key from scratch on
+**every draw call** — a nested `blendKeyStr(...)` string, a
+`formats.join(",")`, then a nine-part interpolation into a ~60-char string that
+then gets hashed. Two of those three allocations are recomputable-once values:
+
+- `blendKeyStr(bs)` is a pure function of an immutable `BlendState` (a
+  `js.Object` of `val`s). Compute it lazily on first use and cache it on the
+  `BlendState` itself.
+- the `formats.join(",")` is stable per render target — cache it on the `Panel`
+  (or wherever the format `Arr` is owned) rather than re-joining per shape.
+
+That leaves a single interpolation of ready-made pieces per draw call, with no
+change to the cache's structure or semantics.
+
+**Deliberately not doing (yet):** memoizing the resolved pipeline on the `Shape`
+(all nine key inputs are stable per shape/target pair, so nine cheap identity
+comparisons could skip the string entirely, with the `Dict` still the
+authoritative fallback), and the endgame of a bit-packed integer key over a
+`js.Map[Int, _]` — that one needs interned numeric ids for `BlendState` and for
+format sets. Both are real wins only at thousands of draw calls per frame.
+
+**Priority:** Low — at current draw-call counts (tens of shapes per frame) the
+key building is far below measurable. Revisit if `getPipeline` ever shows up in
+a profile, e.g. if a sketch moves a large paint loop from `init` into the frame
+loop.
+
+**Already done:** the lookup itself is a single `at` + undefined check, not the
+`has` + `at` pair it used to be.
+
+---
+
 ## ✅ Completed
 
 ---

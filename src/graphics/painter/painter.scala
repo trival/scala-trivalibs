@@ -1606,6 +1606,7 @@ class Painter(
       shape.form.topology,
       shape.cullMode,
       shape.form.frontFace,
+      shape.form.indexFormat,
     )
 
     pass.setPipeline(pipeline)
@@ -1788,10 +1789,27 @@ class Painter(
       topology: PrimitiveTopology = PrimitiveTopology.TriangleList,
       cullMode: CullMode = CullMode.None,
       frontFace: FrontFace = FrontFace.CCW,
+      indexFormat: Opt[String] = null,
   ): GPURenderPipeline =
+    // Only strip topologies take a stripIndexFormat, and they *must* have one
+    // to be drawn indexed — the primitive restart index depends on it.
+    val stripIndexFormat: Opt[String] =
+      if indexFormat.notNull &&
+        (topology == PrimitiveTopology.TriangleStrip ||
+          topology == PrimitiveTopology.LineStrip)
+      then indexFormat
+      else null
+    // Only ever "", "2" or "4" — no separator needed, and it keeps the key
+    // this builds on every draw call from growing.
+    val stripKey =
+      if stripIndexFormat.isNull then ""
+      else if stripIndexFormat.get == "uint32" then "4"
+      else "2"
     val key =
-      s"${shade.id}|${blendKeyStr(blendState)}|${formats.asInstanceOf[Arr[String]].join(",")}|$depthTest|$multisample|${topology}|${cullMode}|${frontFace}"
-    if pipelineCache.has(key) then pipelineCache.at(key)
+      s"${shade.id}|${blendKeyStr(blendState)}|${formats.asInstanceOf[Arr[String]].join(",")}|$depthTest|$multisample|${topology}|${cullMode}|${frontFace}$stripKey"
+    // One lookup, not a `has` + `at` pair — this runs per draw call.
+    val cached = pipelineCache.at(key)
+    if !js.isUndefined(cached.asInstanceOf[js.Any]) then cached
     else
       val targets = Arr[js.Dynamic]()
       var ti = 0
@@ -1829,6 +1847,8 @@ class Painter(
           frontFace = frontFace.toJs,
         ),
       )
+      if stripIndexFormat.notNull then
+        desc.primitive.stripIndexFormat = stripIndexFormat.get
       if depthTest then
         desc.depthStencil = Obj.literal(
           format = "depth24plus",

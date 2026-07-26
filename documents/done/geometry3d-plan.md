@@ -8,7 +8,7 @@ Companion documents:
 
 - [documents/mesh-geometry-port-plan.md](mesh-geometry-port-plan.md) — original
   combined plan (now an index); prerequisites listed there are all done.
-- [documents/line2d-plan.md](../line2d-plan.md) — sibling plan for 2D line
+- [documents/done/line2d-plan.md](line2d-plan.md) — sibling plan for 2D line
   geometry (independent feature).
 - [documents/rust-painter/repomix-trivalibs-core.xml](../rust-painter/repomix-trivalibs-core.xml)
   — Rust source bundle. Key sections: lines 119–1755 (`data/grid`), 5307–5893

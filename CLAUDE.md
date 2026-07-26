@@ -243,6 +243,12 @@ mode.
   Previous examples are never deleted and must keep compiling.
 - When writing new shader code in examples, prefer the scala shader DSL over raw
   WGSL strings.
+- **No props / options classes.** Rust needs a props struct (plus a `Default`
+  impl and `..default()` spread) because it has no optional arguments; Scala
+  does. When porting such an API, expand the struct into default parameters on
+  the method itself, or into overloads — don't carry the wrapper class over.
+  E.g. Rust's `LineGeometryProps` became the default parameters of
+  `Line.toBufferedGeometry`. Drop fields the Rust original never reads.
 - **Shader DSL: no type-ascription casts in user-facing code.** Write shader
   expressions naturally — `0.5`, `(1.0 - uv.y)`, `band * vec3(...)`,
   `lod.min(4.0)` etc. — without `: FloatExpr` (or similar) annotations. If a

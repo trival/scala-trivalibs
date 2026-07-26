@@ -1,14 +1,14 @@
 package trivalibs.graphics.painter
 
-import trivalibs.graphics.geometry.BufferedGeometry
 import trivalibs.bufferdata.StructArray
-import trivalibs.utils.js.*
+import trivalibs.graphics.geometry.BufferedGeometry
 import trivalibs.graphics.painter.*
+import trivalibs.utils.js.*
 
 import scala.scalajs.js.typedarray.ArrayBuffer
-import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.js.typedarray.Uint16Array
 import scala.scalajs.js.typedarray.Uint32Array
+import scala.scalajs.js.typedarray.Uint8Array
 
 /** WebGPU buffer sizes and writes must be a non-zero multiple of 4 bytes. */
 private inline def paddedBufferSize(size: Int): Int =
@@ -49,8 +49,16 @@ private[painter] class FormBuffers:
 class Form private[painter] (private[painter] val painter: Painter):
   private[painter] val buffers: Arr[FormBuffers] = Arr()
   private[painter] var activeBuffers: Int = 0
-  private[painter] var topology: PrimitiveTopology = PrimitiveTopology.TriangleList
+  private[painter] var topology: PrimitiveTopology =
+    PrimitiveTopology.TriangleList
   private[painter] var frontFace: FrontFace = FrontFace.CCW
+
+  /** The index format shared by all indexed buffers of this form, or `null`
+    * when nothing is indexed. A strip-topology pipeline has to declare it (see
+    * `stripIndexFormat` in `Painter.getPipeline`), which is why all buffers are
+    * normalized to one format on upload.
+    */
+  private[painter] var indexFormat: Opt[String] = null
 
   /** (Re)upload geometry and set topology/front-face; returns `this`. Only
     * provided args change.
@@ -75,35 +83,61 @@ class Form private[painter] (private[painter] val painter: Painter):
     topology.foreach(v => this.topology = v)
     frontFace.foreach(v => this.frontFace = v)
     geometry.foreach: geo =>
-      upload(0, geo.vertices, geo.indices)
+      upload(0, geo.vertices, geo.indices, false)
       activeBuffers = 1
+      refreshIndexFormat()
     vertices.foreach: verts =>
-      upload(0, verts, null)
+      upload(0, verts, null, false)
       activeBuffers = 1
+      refreshIndexFormat()
     geometries.foreach: geos =>
+      // One form draws all its buffers through one pipeline, and a
+      // strip-topology pipeline declares a single index format — so if any
+      // geometry needs 32-bit indices, they all get widened to 32 bit.
+      var use32 = false
       var i = 0
       while i < geos.length do
+        val idx = geos(i).indices
+        if idx.notNull && idx.isInstanceOf[Uint32Array] then use32 = true
+        i += 1
+      i = 0
+      while i < geos.length do
         val geo = geos(i)
-        upload(i, geo.vertices, geo.indices)
+        upload(i, geo.vertices, geo.indices, use32)
         i += 1
       activeBuffers = geos.length
+      refreshIndexFormat()
     verticesAll.foreach: all =>
       var i = 0
       while i < all.length do
-        upload(i, all(i), null)
+        upload(i, all(i), null, false)
         i += 1
       activeBuffers = all.length
+      refreshIndexFormat()
     this
+
+  /** The format of the first indexed active buffer — they all share one after
+    * `set` (see the widening above), so the first one speaks for the form.
+    */
+  private def refreshIndexFormat(): Unit =
+    var format: Opt[String] = null
+    var i = 0
+    while i < activeBuffers do
+      val b = buffers(i)
+      if format.isNull && b.indexCount > 0 then format = b.indexFormat
+      i += 1
+    indexFormat = format
 
   private def upload[F <: Tuple](
       index: Int,
       verts: StructArray[F],
       indices: Opt[Uint16Array | Uint32Array],
+      widenTo32: Boolean,
   ): Unit =
     while buffers.length <= index do buffers.push(FormBuffers())
     val b = buffers(index)
     uploadVertices(b, verts)
-    if indices.notNull then uploadIndices(b, indices)
+    if indices.notNull then uploadIndices(b, indices, widenTo32)
     else
       b.indexCount = 0
       b.indexBufferCurrentSize = 0
@@ -131,10 +165,21 @@ class Form private[painter] (private[painter] val painter: Painter):
   private def uploadIndices(
       b: FormBuffers,
       raw: Uint16Array | Uint32Array,
+      widenTo32: Boolean,
   ): Unit =
     var data: ArrayBuffer = null
     var count = 0
-    if raw.isInstanceOf[Uint16Array] then
+    if raw.isInstanceOf[Uint16Array] && widenTo32 then
+      val u16 = raw.asInstanceOf[Uint16Array]
+      val u32 = new Uint32Array(u16.length)
+      var i = 0
+      while i < u16.length do
+        u32(i) = u16(i)
+        i += 1
+      data = u32.buffer
+      count = u32.length
+      b.indexFormat = "uint32"
+    else if raw.isInstanceOf[Uint16Array] then
       val u16 = raw.asInstanceOf[Uint16Array]
       data = u16.buffer
       count = u16.length
