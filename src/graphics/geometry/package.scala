@@ -47,38 +47,6 @@ inline given [T <: AnyNamedTuple]
   => (Elem[T, PositionIndex[Names[T]]] =:= Vec3) => Position[T] =
   positionAtIndex[T](constValue[PositionIndex[Names[T]]])
 
-// lerp type class and givens
-
-/** Linear interpolation for `T` — given for `Double`, `Unit` and the `Vec2-4`
-  * types. Enables vertex interpolation in subdivision / plane clipping
-  * (`Quad.subdivide*`, `Grid.subdivide`, `splitByPlane`) and in the [[Line]]
-  * transformations.
-  */
-trait Lerp[T]:
-  extension (a: T) def lerp(b: T, t: Double): T
-
-// The givens live in the companion so implicit search finds them without an
-// `import trivalibs.graphics.geometry.given` at every call site.
-object Lerp:
-  given doubleLerp: Lerp[Double]:
-    extension (a: Double)
-      def lerp(b: Double, t: Double): Double = a + (b - a) * t
-
-  /** For data-less generic containers — `Line[Unit]` needs a `Lerp` even though
-    * there is nothing to interpolate.
-    */
-  given unitLerp: Lerp[Unit]:
-    extension (a: Unit) def lerp(b: Unit, t: Double): Unit = ()
-
-  given vec3Lerp: [V] => Vec3Base[V] => Vec3ImmutableOps[V] => Lerp[V]:
-    extension (a: V) def lerp(b: V, t: Double): V = a.mix(b, t)
-
-  given vec2Lerp: [V] => Vec2Base[V] => Vec2ImmutableOps[V] => Lerp[V]:
-    extension (a: V) def lerp(b: V, t: Double): V = a.mix(b, t)
-
-  given vec4Lerp: [V] => Vec4Base[V] => Vec4ImmutableOps[V] => Lerp[V]:
-    extension (a: V) def lerp(b: V, t: Double): V = a.mix(b, t)
-
 // geometry types
 
 /** An infinite plane `normal · p = d`, used to clip/split polygons

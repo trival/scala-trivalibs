@@ -16,8 +16,8 @@ Companion documents:
 External shader references checked into the noise lib for cross-checking
 implementations (`src/graphics/shader/lib/random/`):
 
-- [noisy_bevy.wgsl](../src/graphics/shader/lib/random/noisy_bevy.wgsl) —
-  source the 2D/3D simplex + Worley + seeded variants were ported from.
+- [noisy_bevy.wgsl](../src/graphics/shader/lib/random/noisy_bevy.wgsl) — source
+  the 2D/3D simplex + Worley + seeded variants were ported from.
 - [psrdnoise2.wgsl](../src/graphics/shader/lib/random/psrdnoise2.wgsl),
   [psrdnoise3.wgsl](../src/graphics/shader/lib/random/psrdnoise3.wgsl) — Stefan
   Gustavson's psrdnoise, source for the rotating/tiling/derivative variants.
@@ -25,8 +25,8 @@ implementations (`src/graphics/shader/lib/random/`):
   canonical Ashima/Stegu GLSL `snoise(vec4)`. Reference for diagnosing 4D bugs.
 - [snoise_lygia.wgsl](../src/graphics/shader/lib/random/snoise_lygia.wgsl),
   [snoise_lygia_helpers.wgsl](../src/graphics/shader/lib/random/snoise_lygia_helpers.wgsl)
-  — LYGIA WGSL port of `snoise4` plus its `grad4` / `permute` / `mod289`
-  helpers (snoise file `#include`s them).
+  — LYGIA WGSL port of `snoise4` plus its `grad4` / `permute` / `mod289` helpers
+  (snoise file `#include`s them).
 
 > **Note on the `done/` design docs.** These were the blueprint while the DSL
 > was being built and remain useful for understanding intent and rationale. When
@@ -44,16 +44,16 @@ implementations (`src/graphics/shader/lib/random/`):
 
 ## Implementation Status
 
-| Phase | Description                                            | Status                              |
-| ----- | ------------------------------------------------------ | ----------------------------------- |
-| 1     | Integer DSL integration                                | ✅ Complete                         |
-| 2     | Port `hash.rs`                                         | ✅ Complete                         |
-| 3     | Port `color.rs` + `coords.rs`                          | ✅ Complete                         |
-| 4a    | Simplex noise — Gustavson classic 2D/3D + fBm + Worley | ✅ Complete                         |
-| 4a    | Simplex noise — 4D + tiling via torus                  | ✅ Complete                         |
-| 4b    | PSRD-noise 2D + 3D (tiling, rotating, derivatives)     | ✅ Complete                         |
-| 5     | Gaussian blur library consolidation                    | ✅ Complete                         |
-| 6     | `noise_tests` example                                  | ✅ Complete                         |
+| Phase | Description                                            | Status      |
+| ----- | ------------------------------------------------------ | ----------- |
+| 1     | Integer DSL integration                                | ✅ Complete |
+| 2     | Port `hash.rs`                                         | ✅ Complete |
+| 3     | Port `color.rs` + `coords.rs`                          | ✅ Complete |
+| 4a    | Simplex noise — Gustavson classic 2D/3D + fBm + Worley | ✅ Complete |
+| 4a    | Simplex noise — 4D + tiling via torus                  | ✅ Complete |
+| 4b    | PSRD-noise 2D + 3D (tiling, rotating, derivatives)     | ✅ Complete |
+| 5     | Gaussian blur library consolidation                    | ✅ Complete |
+| 6     | `noise_tests` example                                  | ✅ Complete |
 
 **Files shipped:**
 
@@ -87,11 +87,11 @@ implementations (`src/graphics/shader/lib/random/`):
   name (`rgb2hsv`) and provides a proper `rgb2hsl` alongside.
 - Phase 4a: `simplexNoise4d` and `tilingSimplexNoise2d` were initially skipped
   but later added (ported from the same Rust source). Three porting bugs were
-  found and fixed against the canonical Stegu GLSL + LYGIA WGSL references:
-  (1) `step` arg order swapped on `is_x` / `is_yz` rank-sort, (2) `permute_1_`
-  used `+ 10.0` instead of `+ 1.0`, (3) `grad_4_` sign correction inverted
-  (`step(0, p)` instead of `lessThan(p, 0)`, fixed by `1.0 - step(0, p)`).
-  Both shaders now render correctly. References are checked into
+  found and fixed against the canonical Stegu GLSL + LYGIA WGSL references: (1)
+  `step` arg order swapped on `is_x` / `is_yz` rank-sort, (2) `permute_1_` used
+  `+ 10.0` instead of `+ 1.0`, (3) `grad_4_` sign correction inverted
+  (`step(0, p)` instead of `lessThan(p, 0)`, fixed by `1.0 - step(0, p)`). Both
+  shaders now render correctly. References are checked into
   `src/graphics/shader/lib/random/` (see Companion documents above).
 - Phase 4a: seeded variants (`simplexNoise2dSeeded`, `simplexNoise3dSeeded`,
   `fbmSimplex2dSeeded`, `fbmSimplex3dSeeded`) were added beyond the plan scope,
@@ -101,13 +101,12 @@ implementations (`src/graphics/shader/lib/random/`):
   `psrdNoise2d` alias — more descriptive and consistent with the upstream
   prefix.
 - Phase 6: 18 panels (vs. plan's 7) — all hash and noise variants are exercised
-  individually rather than grouped: hash, 2D/3D/4D simplex, 2D/3D seeded,
-  2D/3D fBm + seeded, tiling simplex 2D, Worley, plus six psrdnoise
-  sub-functions. The 18 shaders are now generated through a nested
-  `aspectShade(fns*)((uv, t, r, out) => Block)` helper that bakes in the
-  shared boilerplate (program.fn registrations including `aspectUv`, plus
-  ctx access). Hash and tiling-simplex shaders stay inline (different
-  shape).
+  individually rather than grouped: hash, 2D/3D/4D simplex, 2D/3D seeded, 2D/3D
+  fBm + seeded, tiling simplex 2D, Worley, plus six psrdnoise sub-functions. The
+  18 shaders are now generated through a nested
+  `aspectShade(fns*)((uv, t, r, out) => Block)` helper that bakes in the shared
+  boilerplate (program.fn registrations including `aspectUv`, plus ctx access).
+  Hash and tiling-simplex shaders stay inline (different shape).
 
 ---
 
@@ -930,6 +929,11 @@ identically to the Rust semantics of the bit-level ops.
 | `hsv2rgb_smooth`    | `val hsv2rgbSmooth`    | `WgslFn[(c: Vec3), Vec3]` |
 | `hsv2rgb_smoother`  | `val hsv2rgbSmoother`  | `WgslFn[(c: Vec3), Vec3]` |
 | `hsv2rgb_smoothest` | `val hsv2rgbSmoothest` | `WgslFn[(c: Vec3), Vec3]` |
+
+`hsv2rgb_smoothest` has since been **removed** — it was an experiment, and three
+`cos` calls per fragment buy a result visually indistinguishable from
+`hsv2rgbSmooth`. The rest are also exposed as receiver extensions on `Vec3Expr`,
+with CPU mirrors in `math/cpu/color.scala`.
 
 Rust uses `NumExt` helpers (`clamp01`, `fit1101`, `smoothen`) and `VecExt`
 helpers (`sin`, `cos`, `frct`). All already exist on `FloatExpr` / `Vec3Expr` in

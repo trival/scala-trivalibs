@@ -83,7 +83,11 @@ with minimal low-level overhead.
 
 - `src/graphics/math/` — Vec2–4, Mat2–4 with three representations each (mutable
   class, immutable tuple, buffer type). Operations via type class traits
-  (`Vec3Base[Num, Vec]`, `Vec3Mutable`, `Vec3ImmutableOps`).
+  (`Vec3Base[Num, Vec]`, `Vec3Mutable`, `Vec3ImmutableOps`). Also
+  `interpolation.scala` (the `Lerp` type class, for code generic in the value it
+  interpolates) and `math/cpu/color.scala` / `math/cpu/coords.scala` (CPU
+  mirrors of the shader-lib conversions — see the receiver-extension rule
+  below).
 - `src/graphics/shader/` — `ShaderDef` with 7 type parameters. Named tuple type
   params → compile-time WGSL structs + WebGPU layouts. Key files: `types.scala`
   (WGSLType type class), `derive.scala` (WGSL generation), `layouts.scala`
@@ -168,10 +172,10 @@ minimal JS:
 - **No Scala/Java exceptions**: never `throw new NoSuchElementException`,
   `IllegalArgumentException`, `RuntimeException`, etc. — Scala.js renders these
   with their Java namespace (e.g. `java.util.NoSuchElementException`) in the JS
-  console, leaking implementation details to consumers. Throw a plain JS
-  `Error` instead via `throw jsError(message)` (`jsError` from `utils/js.scala`
-  only constructs the throwable — always pair it with `throw`). Use
-  `js.Error(...)` directly when rejecting a `js.Promise`.
+  console, leaking implementation details to consumers. Throw a plain JS `Error`
+  instead via `throw jsError(message)` (`jsError` from `utils/js.scala` only
+  constructs the throwable — always pair it with `throw`). Use `js.Error(...)`
+  directly when rejecting a `js.Promise`.
 - **Trivalibs helpers everywhere**: `Arr`, `Dict`, `Obj.literal`, `Opt`,
   `Maybe`, `maybe()`.
 
@@ -249,14 +253,33 @@ mode.
   the method itself, or into overloads — don't carry the wrapper class over.
   E.g. Rust's `LineGeometryProps` became the default parameters of
   `Line.toBufferedGeometry`. Drop fields the Rust original never reads.
+- **Helpers that exist on both CPU and GPU are receiver extensions, named
+  identically.** CPU and shader code routinely share a file, so a helper that
+  has both a CPU and a shader form must not be reachable by the same unqualified
+  name in two namespaces. Resolve it the way `NumExt` / `Vec*ImmutableOpsG`
+  already do — **one name, dispatched by the receiver's type**:
+
+  ```scala
+  val bg: Vec3     = Vec3(hue, 0.8, 0.5).hsv2rgb   // CPU, math.cpu
+  val c: Vec3Expr  = vec3(hue, 0.8, 0.5).hsv2rgb   // shader body, shader.lib.color
+  ```
+
+  The shader-side `WgslFn` objects (`Color`, `Polar`, …) stay the definition
+  sites — the extensions are `inline` wrappers that erase to the identical WGSL,
+  and raw-WGSL composition still calls the object form. Applies to color
+  (`shader/lib/color` ↔ `math/cpu/color.scala`), coords (`shader/lib/coords` ↔
+  `math/cpu/coords.scala`), and to noise when a CPU version lands. Not to
+  `shader/lib/random/hash` (its CPU counterpart is `utils/random`, a different
+  API by nature) or `shader/lib/blur` (GPU only).
+
 - **Shader DSL: no type-ascription casts in user-facing code.** Write shader
   expressions naturally — `0.5`, `(1.0 - uv.y)`, `band * vec3(...)`,
   `lod.min(4.0)` etc. — without `: FloatExpr` (or similar) annotations. If a
-  natural-looking expression fails to compile, that's a **library-API gap**:
-  it usually points to a missing overload, conversion, or scalar/vector
-  broadcast. Ask the user whether to fix it library-side (add the missing
-  overload / conversion / extension) or accept the annotation locally; default
-  is the library fix. Common gap shapes:
+  natural-looking expression fails to compile, that's a **library-API gap**: it
+  usually points to a missing overload, conversion, or scalar/vector broadcast.
+  Ask the user whether to fix it library-side (add the missing overload /
+  conversion / extension) or accept the annotation locally; default is the
+  library fix. Common gap shapes:
   - missing left-operand overloads (e.g. `FloatExpr * Vec3Expr` — fixed by
     sibling overloads in the same NumOps extension block, see
     `gpu/float_expr.scala`);
@@ -298,6 +321,6 @@ mode.
   as `animate` provides) — not an absolute timestamp. E.g. `CanvasInput.update`,
   `HoldGesture.update`, `BasicFirstPersonCameraController.update`. This keeps
   stepping consistent, pauses/resumes cleanly with the render loop, and avoids
-  wall-clock coupling. Time-since-event *queries* are the exception (e.g.
+  wall-clock coupling. Time-since-event _queries_ are the exception (e.g.
   `keyHeldMs`, `pointerDownMs`, `buttonHeldMs`): they take an optional
   `now = js.Date.now()` because they measure real elapsed time.

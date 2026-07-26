@@ -1,5 +1,6 @@
 package trivalibs.graphics.geometry
 
+import trivalibs.graphics.math.Lerp
 import trivalibs.utils.js.*
 import trivalibs.utils.numbers.IntExt.given
 
@@ -35,11 +36,12 @@ class Vertex[T](
   inline def bottom: Opt[Vertex[T]] = next(0, 1)
 
 /** A 2D grid of values `T` — the basis for plane/terrain-style geometry. Build
-  * it (`addCol`/`addRow`, `Grid.fromCols`/`fromRows`), navigate via
-  * [[Vertex]] neighbours, `map`/`flatMap`, and (with [[Lerp]]) `subdivide`.
-  * Turn it into mesh faces with `.quads` (= `.ccwQuads`) → `Mesh(grid.quads)` →
+  * it (`addCol`/`addRow`, `Grid.fromCols`/`fromRows`), navigate via [[Vertex]]
+  * neighbours, `map`/`flatMap`, and (with [[Lerp]]) `subdivide`. Turn it into
+  * mesh faces with `.quads` (= `.ccwQuads`) → `Mesh(grid.quads)` →
   * [[toBufferedGeometry]]. `coordOps` sets edge behaviour (clamp vs wrap) for
-  * neighbour lookups. */
+  * neighbour lookups.
+  */
 class Grid[T](val coordOps: CoordOps = CoordOps.ClampToEdge):
   private val _cols: Arr[Arr[T]] = Arr()
 
@@ -149,8 +151,9 @@ class Grid[T](val coordOps: CoordOps = CoordOps.ClampToEdge):
     val qh = if coordOps.circleRows then height else height - 1
     (qw, qh)
 
-  /** The grid cells as CCW (front-facing) [[Quad]]s — feed to `Mesh(grid.quads)`.
-    * Aliased as `.quads`. */
+  /** The grid cells as CCW (front-facing) [[Quad]]s — feed to
+    * `Mesh(grid.quads)`. Aliased as `.quads`.
+    */
   def ccwQuads: Arr[Quad[T]] =
     val (qw, qh) = quadCount
     val result = Arr[Quad[T]]()

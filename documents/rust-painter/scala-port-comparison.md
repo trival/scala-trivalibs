@@ -296,21 +296,22 @@ Values may be: `BufferBinding[T, F]`, `GPUSampler`, a raw value matching a
 uniform field (auto-boxed into a `BufferBinding`), a `Panel`, or a
 `PanelBinding`.
 
-**Pitfall — typed-shape erasure.** `Shape.bind` / `shape.instances.add` look
-up the named field at compile time against the shape's `Uniforms` schema. If
-you put shapes into a helper with a generic-erased type (e.g.
+**Pitfall — typed-shape erasure.** `Shape.bind` / `shape.instances.add` look up
+the named field at compile time against the shape's `Uniforms` schema. If you
+put shapes into a helper with a generic-erased type (e.g.
 `def addInstance(s: Shape[?, ?], …)`), the named lookup loses the schema and
-fails with *"Name not found in Uniforms or Panel bindings"*. Either keep
-shapes typed concretely (one helper per shape, or `inline def` closing over
-the concrete `val`), or write the bindings at the call site.
+fails with _"Name not found in Uniforms or Panel bindings"_. Either keep shapes
+typed concretely (one helper per shape, or `inline def` closing over the
+concrete `val`), or write the bindings at the call site.
 
 **Panel-level shared bindings.** Uniforms that every shape on a panel needs
-(e.g. `viewProj`) can be bound on the **panel** with `panel.bind("viewProj" := …)`
-— the value flows into each shape's bind group. Per-shape `shape.bind("tex" := otherPanel)`
-or per-instance overrides win over the panel-level value. See
-`examples/instances/Instances.scala` (panel-level `viewProj`, per-instance
-`model`/`tint`) and `sketches/rooms/grid-ceiling/GridCeiling.scala` (panel-level
-`tex = rowTex`, per-shape `tex = colTex` override).
+(e.g. `viewProj`) can be bound on the **panel** with
+`panel.bind("viewProj" := …)` — the value flows into each shape's bind group.
+Per-shape `shape.bind("tex" := otherPanel)` or per-instance overrides win over
+the panel-level value. See `examples/instances/Instances.scala` (panel-level
+`viewProj`, per-instance `model`/`tint`) and
+`sketches/rooms/grid-ceiling/GridCeiling.scala` (panel-level `tex = rowTex`,
+per-shape `tex = colTex` override).
 
 ### Panel (Rust `Layer`)
 
@@ -875,18 +876,19 @@ and the procedural builders Rust sketches reach for:
 - **`Grid[V]`** ([grid.scala](../../src/graphics/geometry/grid.scala)) →
   `Mesh(grid.ccwQuads)`. Used in `examples/geometry3d_scene/`.
 - **`Quad.fromDimensionsCenter[T](w, h, normal, center)((pos, uv) => v)`**
-  ([polygon.scala](../../src/graphics/geometry/polygon.scala)) — the direct
-  Rust `Quad3D::from_dimensions_center_f` analog. Builds an arbitrary-orientation
-  quad from a normal + centre. Wrap in `Mesh(Arr(quad))` for `toBufferedGeometry`.
-  Prefer this over a thin `Box` for single-quad planes (ground, walls).
+  ([polygon.scala](../../src/graphics/geometry/polygon.scala)) — the direct Rust
+  `Quad3D::from_dimensions_center_f` analog. Builds an arbitrary-orientation
+  quad from a normal + centre. Wrap in `Mesh(Arr(quad))` for
+  `toBufferedGeometry`. Prefer this over a thin `Box` for single-quad planes
+  (ground, walls).
 
 Mesh → form pipeline:
 `p.form(geometry = toBufferedGeometry(mesh, MeshBufferType.…))`.
 `MeshBufferType.FaceVerticesWithFaceNormal` / `…WithVertexNormal` append a
-generated normal — matches the Rust `face_normal` / `face_props` pattern.
-**You don't need to pass `normal=` to `mesh.addFace` / `Mesh(faces)` when using
-a `…WithNormal` buffer type** — `toBufferedGeometry` computes the normal from
-the face geometry itself.
+generated normal — matches the Rust `face_normal` / `face_props` pattern. **You
+don't need to pass `normal=` to `mesh.addFace` / `Mesh(faces)` when using a
+`…WithNormal` buffer type** — `toBufferedGeometry` computes the normal from the
+face geometry itself.
 
 2D-line builders are not yet ported.
 
@@ -899,23 +901,23 @@ noise, blur) are now ported as `WgslFn` libraries under
 [shader/lib/](../../src/graphics/shader/lib/). Remaining gaps tracked in
 [trivalibs-nostd-port-plan.md](../trivalibs-nostd-port-plan.md).
 
-| Rust path                                                                   | Scala path                                                                      | Status  | Notes                                                                                                                                                                                          |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `trivalibs_core::glam::*`                                                   | [graphics/math/cpu/](../../src/graphics/math/cpu/)                              | Ported  | Vec2-4, Mat2-4, Quat; three representations each.                                                                                                                                              |
-| `trivalibs::math::transform::Transform`                                     | [scene/transform.scala](../../src/graphics/scene/transform.scala)               | Ported  | Mutable TRS; `from*` factories; `toMatrix` extension.                                                                                                                                          |
-| `trivalibs::rendering::camera::{PerspectiveCamera, CamProps}`               | [scene/camera.scala](../../src/graphics/scene/camera.scala)                     | Ported  | FPS-style; cached projection; no second `CamProps` type.                                                                                                                                       |
-| `trivalibs::rendering::scene::SceneObject`                                  | [scene/scene_object.scala](../../src/graphics/scene/scene_object.scala)         | Ported  | Scala typeclass: `given SceneObject[T]` with `.modelMat`, `.modelViewProjMat(cam)`.                                                                                                            |
-| `trivalibs_nostd::color::{hsv2rgb, hsl2rgb, rgb2hsv, rgb2hsl}`              | [shader/lib/color.scala](../../src/graphics/shader/lib/color.scala)             | Ported  | `Color.hsv2rgb` / `hsl2rgb` / `rgb2hsv` / `rgb2hsl` as `WgslFn`s, plus `hsv2rgbSmooth` / `Smoother` / `Smoothest` variants.                                                                    |
-| `trivalibs_nostd::random::hash::*`                                          | [shader/lib/random/hash.scala](../../src/graphics/shader/lib/random/hash.scala) | Ported  | Hash WgslFns available alongside the noise modules.                                                                                                                                            |
-| `trivalibs_nostd::random::simplex` (3D/4D simplex, rot_noise_3d, psrdnoise) | [shader/lib/random/](../../src/graphics/shader/lib/random/)                     | Ported  | `Simplex.simplexNoise3d` (used in `sketches/rooms/base/`), `psrdnoise2`/`psrdnoise3`, `Psrdnoise.rotNoise3d` (used in `sketches/rooms/grid-ceiling/`). **Return packing:** value+gradient WgslFns (`rotNoise3d`, `tilingRotNoise3d`, `psrdnoise3`) are typed `Vec4` = `vec4(value, gradX, gradY, gradZ)`. Rust `NG3.0` → Scala `.x`. |
-| `trivalibs_nostd::num_ext::NumExt`                                          | [trivalibs/utils/numbers.scala](../../trivalibs/src/utils/numbers.scala)        | Ported  | CPU-side scalar `NumExt` (incl. `fract`, `fit0111`, `fit1101`). GPU DSL has the same ops on `Float/Vec2/Vec3/Vec4` Exprs. Integer GPU ops (`IntExpr`/`UIntExpr`) deferred to integer DSL work. |
-| `trivalibs_nostd::vec_ext::VecExt`                                          | [math/gpu/float_expr.scala](../../src/graphics/math/gpu/float_expr.scala)       | Ported  | `Vec2Expr` / `Vec3Expr` / `Vec4Expr` carry `.fract`, `.fit0111`, `.fit1101`, `.clamp01`, `.normalize`, `.length`, swizzles, etc.                                                               |
-| `trivalibs_nostd::blur::{gaussian_blur, gaussian_blur_9, gaussian_blur_13}` | [shader/lib/blur.scala](../../src/graphics/shader/lib/blur.scala)               | Ported  | `Blur.gaussianBlur` / `gaussianBlur5` / `gaussianBlur9` / `gaussianBlur13` / `boxBlur` as `WgslFn`s. Used by `sketches/post/bloom/`.                                                           |
-| `trivalibs::prelude::*`                                                     | —                                                                               | N/A     | Use explicit imports; no prelude wildcard on Scala side.                                                                                                                                       |
-| `trivalibs::map!` macro                                                     | named-tuple `bind(...)` / `Arr(...)`                                            | N/A     | No macro needed.                                                                                                                                                                               |
-| `Arr`, `Dict`, `Opt`, `Obj.literal`                                         | [trivalibs/utils/js.scala](../../trivalibs/src/utils/js.scala)                  | Ported  | `Arr[T] = js.Array[T]`, `Dict[V] = js.Dictionary[V]`, `Opt[T] = T \| Null`.                                                                                                                    |
-| `StructArray`, `StructRef`                                                  | [trivalibs/utils/bufferdata.scala](../../trivalibs/src/utils/bufferdata.scala)  | Ported  | Zero-cost typed binary buffers (F32/F64/U8/U16/U32/I8/I16/I32).                                                                                                                                |
-| `Random` (`rand_range`, `rand_sign`, `rand_vec3`)                           | [trivalibs/utils/random.scala](../../trivalibs/src/utils/random.scala)          | Partial | `rand()`, `randInRange(lo, hi)` available; `rand_vec3_range` etc. not yet.                                                                                                                     |
+| Rust path                                                                   | Scala path                                                                      | Status | Notes                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `trivalibs_core::glam::*`                                                   | [graphics/math/cpu/](../../src/graphics/math/cpu/)                              | Ported | Vec2-4, Mat2-4, Quat; three representations each.                                                                                                                                                                                                                                                                                    |
+| `trivalibs::math::transform::Transform`                                     | [scene/transform.scala](../../src/graphics/scene/transform.scala)               | Ported | Mutable TRS; `from*` factories; `toMatrix` extension.                                                                                                                                                                                                                                                                                |
+| `trivalibs::rendering::camera::{PerspectiveCamera, CamProps}`               | [scene/camera.scala](../../src/graphics/scene/camera.scala)                     | Ported | FPS-style; cached projection; no second `CamProps` type.                                                                                                                                                                                                                                                                             |
+| `trivalibs::rendering::scene::SceneObject`                                  | [scene/scene_object.scala](../../src/graphics/scene/scene_object.scala)         | Ported | Scala typeclass: `given SceneObject[T]` with `.modelMat`, `.modelViewProjMat(cam)`.                                                                                                                                                                                                                                                  |
+| `trivalibs_nostd::color::{hsv2rgb, hsl2rgb, rgb2hsv, rgb2hsl}`              | [shader/lib/color.scala](../../src/graphics/shader/lib/color.scala)             | Ported | `Color.hsv2rgb` / `hsl2rgb` / `rgb2hsv` / `rgb2hsl` as `WgslFn`s, plus `hsv2rgbSmooth` / `Smoother` variants, all also as receiver extensions on `Vec3Expr`. `hsv2rgb_smoothest` dropped — cosine-based, far pricier and near-identical to `Smooth`.                                                                                 |
+| `trivalibs_nostd::random::hash::*`                                          | [shader/lib/random/hash.scala](../../src/graphics/shader/lib/random/hash.scala) | Ported | Hash WgslFns available alongside the noise modules.                                                                                                                                                                                                                                                                                  |
+| `trivalibs_nostd::random::simplex` (3D/4D simplex, rot_noise_3d, psrdnoise) | [shader/lib/random/](../../src/graphics/shader/lib/random/)                     | Ported | `Simplex.simplexNoise3d` (used in `sketches/rooms/base/`), `psrdnoise2`/`psrdnoise3`, `Psrdnoise.rotNoise3d` (used in `sketches/rooms/grid-ceiling/`). **Return packing:** value+gradient WgslFns (`rotNoise3d`, `tilingRotNoise3d`, `psrdnoise3`) are typed `Vec4` = `vec4(value, gradX, gradY, gradZ)`. Rust `NG3.0` → Scala `.x`. |
+| `trivalibs_nostd::num_ext::NumExt`                                          | [trivalibs/utils/numbers.scala](../../trivalibs/src/utils/numbers.scala)        | Ported | CPU-side scalar `NumExt` (incl. `fract`, `fit0111`, `fit1101`). GPU DSL has the same ops on `Float/Vec2/Vec3/Vec4` Exprs. Integer GPU ops (`IntExpr`/`UIntExpr`) deferred to integer DSL work.                                                                                                                                       |
+| `trivalibs_nostd::vec_ext::VecExt`                                          | [math/gpu/float_expr.scala](../../src/graphics/math/gpu/float_expr.scala)       | Ported | `Vec2Expr` / `Vec3Expr` / `Vec4Expr` carry `.fract`, `.fit0111`, `.fit1101`, `.clamp01`, `.normalize`, `.length`, swizzles, etc.                                                                                                                                                                                                     |
+| `trivalibs_nostd::blur::{gaussian_blur, gaussian_blur_9, gaussian_blur_13}` | [shader/lib/blur.scala](../../src/graphics/shader/lib/blur.scala)               | Ported | `Blur.gaussianBlur` / `gaussianBlur5` / `gaussianBlur9` / `gaussianBlur13` / `boxBlur` as `WgslFn`s. Used by `sketches/post/bloom/`.                                                                                                                                                                                                 |
+| `trivalibs::prelude::*`                                                     | —                                                                               | N/A    | Use explicit imports; no prelude wildcard on Scala side.                                                                                                                                                                                                                                                                             |
+| `trivalibs::map!` macro                                                     | named-tuple `bind(...)` / `Arr(...)`                                            | N/A    | No macro needed.                                                                                                                                                                                                                                                                                                                     |
+| `Arr`, `Dict`, `Opt`, `Obj.literal`                                         | [trivalibs/utils/js.scala](../../trivalibs/src/utils/js.scala)                  | Ported | `Arr[T] = js.Array[T]`, `Dict[V] = js.Dictionary[V]`, `Opt[T] = T \| Null`.                                                                                                                                                                                                                                                          |
+| `StructArray`, `StructRef`                                                  | [trivalibs/utils/bufferdata.scala](../../trivalibs/src/utils/bufferdata.scala)  | Ported | Zero-cost typed binary buffers (F32/F64/U8/U16/U32/I8/I16/I32).                                                                                                                                                                                                                                                                      |
+| `Random` (`rand_range`, `rand_sign`, `rand_vec3`)                           | [trivalibs/utils/random.scala](../../trivalibs/src/utils/random.scala)          | Ported | Scalars, `randVec2/3/4(InRange)`, `randNormal01/11`, and `Arr.pick()` / `.shuffle()` / `.shuffled()`. Rust's `rand_in_unit_sphere` / `rand_vec3_unit` not ported (no consumer yet).                                                                                                                                                  |
 
 ---
 
@@ -974,8 +976,6 @@ updates, and `painter.draw`.
   line-strip + icosphere builders still missing.
 - **Integer GPU DSL.** `IntExpr` / `UIntExpr` exist as types but `NumExt`-style
   ops are not yet exposed.
-- **Random helpers.** `rand_vec3_range`, `rand_sign`, `rand_vec4` are missing on
-  the CPU side; compose them from `rand()` / `randInRange(a, b)`.
 - **`remember_window_dimensions`.** Not planned — the browser already persists
   window dimensions across sessions, so no Scala-side equivalent is needed.
 - **`AppConfig.show_fps` toggle.** FPS logging is always on inside `Animator`.

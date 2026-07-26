@@ -29,36 +29,30 @@ the param row to the Panel table in §3.
 
 ---
 
-## Random helpers
+## CPU / GPU mirrored helpers
 
-### 🔄 Port missing `Random` helpers from `trivalibs_core`
+### 🔄 CPU noise, mirroring `shader/lib/random/`
 
-> **Scheduled** — phase 3 of the strokes-painting roadmap
-> (`documents/strokes-painting-port-plan.md` in the consuming sketch repo) needs
-> `randInt`, `randBool`, `randSign`, `randNormal01` / `randNormal11` and `Arr`
-> `.pick` / `.shuffle` (Rust `rand_utils.rs`,
-> `rust-painter/repomix-trivalibs-core.xml` L6227–6345). Add the vector helpers
-> listed below in the same touch.
+**Deferred, but the API shape is decided.** Color and coords now exist on both
+sides as **receiver extensions** with identical names — `c.hsv2rgb` on a CPU
+`Vec3` and on a `Vec3Expr`, `p.polarToCart` on a CPU `Vec2` and on a `Vec2Expr`.
+Dispatch is by receiver type, so a sketch imports both
+`trivalibs.graphics.math.cpu.*` and `trivalibs.graphics.shader.lib.color.*` and
+writes the same call in CPU setup code and in a shader body with no clash. The
+shader-side `Color` / `Polar` objects stay the WgslFn definition sites; the
+extensions are `inline` and erase to the identical WGSL.
 
-**Current state:**
-[trivalibs/src/utils/random.scala](../trivalibs/src/utils/random.scala) only
-exposes `rand()` and `randInRange(min, max)`. Rust
-`trivalibs_core::rendering::scene::Random` additionally provides `rand_sign`,
-`rand_vec2` / `rand_vec2_range`, `rand_vec3` / `rand_vec3_range`, `rand_vec4` /
-`rand_vec4_range`.
+When CPU noise lands (simplex / psrdnoise / fbm), it follows the same rule:
+`uv.simplexNoise2d`, `uv.fbmSimplex2d(octaves, lacunarity, gain)` as extensions
+on the CPU `Vec2` and on `Vec2Expr`, mirroring
+`trivalibs/src/graphics/shader/lib/random/simplex.scala`.
 
-**Required additions** to `trivalibs/src/utils/random.scala`:
+**Out of scope for the mirroring rule:** `shader/lib/random/hash` (shader-side
+pseudo-randomness — the CPU equivalent is `utils/random`, a different API by
+nature) and `shader/lib/blur` (GPU only).
 
-- `randSign(): Double` — `if rand() < 0.5 then -1.0 else 1.0`.
-- `randVec2()` / `randVec3()` / `randVec4()` — components in `[0, 1)`.
-- `randVec2InRange(min: Vec2, max: Vec2)` and the Vec3 / Vec4 analogues —
-  componentwise `randInRange`.
-
-**Doc follow-up:** Once added, remove the "Random helpers" bullet in
-[scala-port-comparison.md §12](rust-painter/scala-port-comparison.md) and update
-the `Random` row in §10 to `Ported`.
-
-**Priority:** Low — one-liners, do when a sketch first needs them.
+**Priority:** Low — no CPU consumer for noise yet. Do it when a sketch first
+needs to evaluate noise on the CPU.
 
 ---
 
@@ -132,9 +126,9 @@ scale; revisit when a sketch churns GPU resources at runtime.
 ### 🔄 Precompute the invariant parts of the pipeline cache key
 
 **Gap:** `Painter.getPipeline` builds its `Dict` lookup key from scratch on
-**every draw call** — a nested `blendKeyStr(...)` string, a
-`formats.join(",")`, then a nine-part interpolation into a ~60-char string that
-then gets hashed. Two of those three allocations are recomputable-once values:
+**every draw call** — a nested `blendKeyStr(...)` string, a `formats.join(",")`,
+then a nine-part interpolation into a ~60-char string that then gets hashed. Two
+of those three allocations are recomputable-once values:
 
 - `blendKeyStr(bs)` is a pure function of an immutable `BlendState` (a
   `js.Object` of `val`s). Compute it lazily on first use and cache it on the
@@ -163,6 +157,33 @@ loop.
 ---
 
 ## ✅ Completed
+
+---
+
+### ✅ Random — missing `Random` helpers from `trivalibs_core`
+
+[trivalibs/src/utils/random.scala](../src/utils/random.scala) now carries
+`randInt` / `randIntInRange`, `randBool`, `randSign`, `randNormal01` /
+`randNormal11`, `randVec2/3/4()` plus scalar- and per-component-bounded
+`randVec*InRange`, and the `Arr` extensions `.pick()`, `.shuffle()` (in place,
+Fisher–Yates) and `.shuffled()` (copying). Rust's `rand_in_unit_sphere` /
+`rand_vec3_unit` are not ported — no consumer yet.
+
+### ✅ CPU color / coordinate conversions mirroring the shader lib
+
+[math/cpu/color.scala](../src/graphics/math/cpu/color.scala) and
+[math/cpu/coords.scala](../src/graphics/math/cpu/coords.scala) — CPU `hsv2rgb`
+(+ `Smooth` / `Smoother`), `hsl2rgb`, `rgb2hsv`, `rgb2hsl`, `polarToCart`,
+`cartToPolar`, same IQ formulation as the WGSL versions. Both sides are receiver
+extensions with identical names (see the CPU/GPU mirroring note above); the
+shader lib gained matching `Vec3Expr` / `Vec2Expr` extensions.
+
+### ✅ Math — `quadraticBezier` / `cubicBezier` on Vec2 / Vec3
+
+Ported from Rust `math/interpolation` as statics on the CPU immutable-ops
+traits: `Vec2.cubicBezier(t, a, c1, c2, b)`, matching Rust's
+`Vec2::cubic_bezier` argument order. Available on `Vec2`/`Vec3` and their
+`*Tuple` siblings.
 
 ---
 

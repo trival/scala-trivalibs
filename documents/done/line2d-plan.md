@@ -15,10 +15,17 @@ Companion documents:
 - [documents/done/mesh-geometry-port-plan.md](mesh-geometry-port-plan.md) —
   original combined plan (now an index); all prerequisites listed there are
   done.
-- [documents/done/geometry3d-plan.md](geometry3d-plan.md) — sibling plan
-  for Grid / Cuboid / Sphere (independent feature).
+- [documents/done/geometry3d-plan.md](geometry3d-plan.md) — sibling plan for
+  Grid / Cuboid / Sphere (independent feature).
 - [documents/rust-painter/repomix-trivalibs-core.xml](../rust-painter/repomix-trivalibs-core.xml)
   — Rust source bundle. Key section: lines 3136–3946 (`rendering/line_2d`).
+
+**Changed since this was written:** `Lerp` no longer lives in
+`src/graphics/geometry/package.scala` — it moved to
+[src/graphics/math/interpolation.scala](../../src/graphics/math/interpolation.scala)
+during phase 3 of the roadmap above, `Lerp[Unit]` and the companion-object
+arrangement included. Everything below describes the geometry package as it
+stood at the time; read those `Lerp` locations as historical.
 
 ---
 
@@ -53,8 +60,8 @@ painter pipeline consumes unchanged via `Form` / `Shape`.
 
 Landed as `src/graphics/geometry/line2d.scala` +
 `test/geometry/Line2d.test.scala` + `examples/bevel_lines_2d/`. The algorithms
-follow the Rust source verbatim; the API deviates from the sketch below in
-these places.
+follow the Rust source verbatim; the API deviates from the sketch below in these
+places.
 
 **No `LineGeometryProps`.** Rust needs a props struct because it has no default
 arguments — Scala does. `toBufferedGeometry` takes the seven options as default
@@ -102,13 +109,13 @@ the implicit scope of both `Line[T]` and `Arr[Line[T]]`, so call sites are
 unchanged.
 
 **`Lerp` givens moved into an `object Lerp` companion** (along with the new
-`Lerp[Unit]`), so implicit search finds them without
-`import trivalibs.graphics.geometry.given` at every call site.
+`Lerp[Unit]`), so implicit search finds them without a `given` import at every
+call site.
 
 **Painter fix pulled in by this port:** a strip-topology pipeline must declare
 `primitive.stripIndexFormat` to be usable with `drawIndexed` — the
 primitive-restart sentinel differs between `uint16` and `uint32`. `line2d` is
-the first geometry in the codebase that is both indexed *and* strip-topology, so
+the first geometry in the codebase that is both indexed _and_ strip-topology, so
 every draw was rejected with `IndexFormat::Undefined`. `Form` now records the
 index format its buffers were uploaded with (`Form.indexFormat`), and
 `getPipeline` sets `stripIndexFormat` from it for strip topologies only (it must
@@ -273,8 +280,8 @@ fragments drawn from one form.
 
 ### 3.1 Geometry (CPU, rebuilt on resize)
 
-1. `Line(20.0)`, ~20 random points spread over 1.5× the canvas, random
-   widths in `[20, 300]`.
+1. `Line(20.0)`, ~20 random points spread over 1.5× the canvas, random widths in
+   `[20, 300]`.
 2. `flatMapWithNeighbours` inserting two extra vertices at `lerp 0.333` /
    `lerp 0.666` with fresh random widths.
 3. `cleanup(0.5, 0.1, 0.1)`.
@@ -288,12 +295,11 @@ One `Form` holding **all** fragment geometries
 `Shape`, one draw sequence.
 
 `Attribs = LineAttribs`, `Varyings = (uv: Vec2, localUv: Vec2)`,
-`Uniforms = (size: VertexUniform[Vec2])`. Vert:
-`pos = position / size`, output `vec4(pos.x, -pos.y, 0, 1)` (no `fit0111` — the
-points are generated centred on the origin, as in the original test). Frag:
-`vec4(uv, 1, 1)` — the original test's uv debug color, which makes mitre and uv
-errors immediately visible. White clear color; `onResize` regenerates the
-geometry and updates `size`.
+`Uniforms = (size: VertexUniform[Vec2])`. Vert: `pos = position / size`, output
+`vec4(pos.x, -pos.y, 0, 1)` (no `fit0111` — the points are generated centred on
+the origin, as in the original test). Frag: `vec4(uv, 1, 1)` — the original
+test's uv debug color, which makes mitre and uv errors immediately visible.
+White clear color; `onResize` regenerates the geometry and updates `size`.
 
 **Gate:** clean mitre joins, no gaps at the `splitAtAngle` corners, uv gradient
 continuous across fragments. Served at `/bevel_lines_2d/`.
@@ -314,8 +320,8 @@ continuous across fragments. Served at `/bevel_lines_2d/`.
 
 ## 5. Critical files
 
-| File                                                                          | Action                  |
-| ----------------------------------------------------------------------------- | ----------------------- |
+| File                                                                             | Action                  |
+| -------------------------------------------------------------------------------- | ----------------------- |
 | [src/graphics/geometry/line2d.scala](../../src/graphics/geometry/line2d.scala)   | **New**                 |
 | [test/geometry/Line2d.test.scala](../../test/geometry/Line2d.test.scala)         | **New**                 |
 | [src/graphics/geometry/package.scala](../../src/graphics/geometry/package.scala) | Edit — add `Lerp[Unit]` |

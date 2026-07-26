@@ -126,6 +126,39 @@ trait Vec2ImmutableOps[Vec]:
   def from[Vec2_](other: Vec2_)(using Vec2Base[Vec2_]): Vec =
     create(other.x, other.y)
 
+  /** Quadratic Bézier at `t` — `a` and `b` are the endpoints, `c` the single
+    * control point. `t = 0` gives `a`, `t = 1` gives `b`.
+    */
+  def quadraticBezier(t: Double, a: Vec, c: Vec, b: Vec)(using
+      Vec2Base[Vec]
+  ): Vec =
+    val oneT = 1.0 - t
+    val oneT2 = oneT * oneT
+    val t2 = t * t
+    create(
+      c.x + (a.x - c.x) * oneT2 + (b.x - c.x) * t2,
+      c.y + (a.y - c.y) * oneT2 + (b.y - c.y) * t2
+    )
+
+  /** Cubic Bézier at `t` — `a` and `b` are the endpoints, `c1` the control
+    * point pulling out of `a`, `c2` the one pulling into `b`. `t = 0` gives
+    * `a`, `t = 1` gives `b`.
+    */
+  def cubicBezier(t: Double, a: Vec, c1: Vec, c2: Vec, b: Vec)(using
+      Vec2Base[Vec]
+  ): Vec =
+    val oneT = 1.0 - t
+    val oneT2 = oneT * oneT
+    val oneT3 = oneT2 * oneT
+    val t2 = t * t
+    val t3 = t2 * t
+    val w1 = oneT2 * t * 3.0
+    val w2 = oneT * t2 * 3.0
+    create(
+      a.x * oneT3 + c1.x * w1 + c2.x * w2 + b.x * t3,
+      a.y * oneT3 + c1.y * w1 + c2.y * w2 + b.y * t3
+    )
+
   extension (v: Vec)(using Vec2Base[Vec])
     @scala.annotation.targetName("addVec")
     def +(other: Vec): Vec = create(v.x + other.x, v.y + other.y)

@@ -39,11 +39,6 @@ class ColorFnsTest extends FunSuite:
     assert(data.src.contains("fn hsv2rgb_smoother(c: vec3<f32>)"), data.src)
     assert(data.src.contains("t * (t * 6.0 - 15.0) + 10.0"), data.src)
 
-  test("hsv2rgbSmoothest applies cosine-based smoothing"):
-    val data = Color.hsv2rgbSmoothest.asInstanceOf[WgslFnData]
-    assert(data.src.contains("fn hsv2rgb_smoothest(c: vec3<f32>)"), data.src)
-    assert(data.src.contains("cos((t + vec3<f32>(1.0)) * pi)"), data.src)
-
   test("hsl2rgb scales chroma by 1 - |2L - 1|"):
     val data = Color.hsl2rgb.asInstanceOf[WgslFnData]
     assert(data.src.contains("fn hsl2rgb(c: vec3<f32>)"), data.src)

@@ -14,8 +14,26 @@ package trivalibs.graphics.shader.lib.color
 // in it.
 
 import trivalibs.graphics.math.cpu.Vec3
+import trivalibs.graphics.math.gpu.Vec3Expr
 import trivalibs.graphics.shader.dsl.WgslFn
 import trivalibs.graphics.shader.given
+
+/** Shader-side color conversions as postfix ops — `c.hsv2rgb` instead of
+  * `Color.hsv2rgb(c)`.
+  *
+  * These mirror the CPU extensions on `Vec3` in `trivalibs.graphics.math.cpu`
+  * one for one: same names, same channel conventions, same formulation. Because
+  * both dispatch on their receiver, a sketch can import both and write the same
+  * call on a `Vec3` and on a `Vec3Expr` without a name clash. The [[Color]]
+  * object below stays the definition site — use it when composing raw WGSL.
+  */
+extension (c: Vec3Expr)
+  inline def rgb2hsv: Vec3Expr = Color.rgb2hsv(c)
+  inline def rgb2hsl: Vec3Expr = Color.rgb2hsl(c)
+  inline def hsv2rgb: Vec3Expr = Color.hsv2rgb(c)
+  inline def hsv2rgbSmooth: Vec3Expr = Color.hsv2rgbSmooth(c)
+  inline def hsv2rgbSmoother: Vec3Expr = Color.hsv2rgbSmoother(c)
+  inline def hsl2rgb: Vec3Expr = Color.hsl2rgb(c)
 
 object Color:
 
@@ -85,17 +103,6 @@ object Color:
     WgslFn.raw("hsv2rgb_smoother"):
       """  let t = clamp(abs(((c.x * 6.0 + vec3<f32>(0.0, 4.0, 2.0)) % 6.0) - 3.0) - 1.0, vec3<f32>(0.0), vec3<f32>(1.0));
   let rgb = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-  return c.z * mix(vec3<f32>(1.0), rgb, c.y);"""
-
-  /** HSV → RGB with cosine-based smoothing. Experimental — visually almost
-    * identical to [[hsv2rgbSmooth]] but evaluates three `cos`es per fragment.
-    * Prefer [[hsv2rgbSmooth]] in practice;
-    */
-  val hsv2rgbSmoothest: WgslFn[(c: Vec3), Vec3] =
-    WgslFn.raw("hsv2rgb_smoothest"):
-      """  let t = clamp(abs(((c.x * 6.0 + vec3<f32>(0.0, 4.0, 2.0)) % 6.0) - 3.0) - 1.0, vec3<f32>(0.0), vec3<f32>(1.0));
-  let pi = 3.14159265358979;
-  let rgb = cos((t + vec3<f32>(1.0)) * pi) * 0.5 + 0.5;
   return c.z * mix(vec3<f32>(1.0), rgb, c.y);"""
 
   // ---------------------------------------------------------------------------
