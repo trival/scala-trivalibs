@@ -528,20 +528,29 @@ object Line:
       * fragments' directions through so the result reads as a single continuous
       * brush mark. Feed straight into
       * `painter.form(geometries = …, topology = PrimitiveTopology.TriangleStrip)`.
+      *
+      * `totalLength` overrides the length `uv.x` is normalised against, which is
+      * otherwise the sum of `lines`. Pass the finished stroke's length when
+      * rendering a **partial** stroke — e.g. animating a brush travelling along
+      * its path — so `uv.x` keeps its final scale instead of restretching over
+      * the growing prefix every frame.
       */
     def toBufferedGeometries(
         smoothDepth: Int = 0,
         smoothAngleThreshold: Double = 0.05,
         smoothMinLength: Double = 3.0,
+        totalLength: Opt[Double] = null,
     ): Arr[BufferedGeometry[LineAttribsBuffer]] =
       var total = 0.0
-      var i = 0
-      while i < lines.length do
-        total += lines(i).totalLength
-        i += 1
+      if totalLength.notNull then total = totalLength.get
+      else
+        var i = 0
+        while i < lines.length do
+          total += lines(i).totalLength
+          i += 1
 
       val out = Arr[BufferedGeometry[LineAttribsBuffer]]()
-      i = 0
+      var i = 0
       while i < lines.length do
         val prevDir: Opt[Vec2] = if i == 0 then null else lines(i - 1).last.dir
         val nextDir: Opt[Vec2] =
