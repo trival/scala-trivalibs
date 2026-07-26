@@ -16,8 +16,15 @@ bun run test             # Run all tests
 bun run examples:build   # Build all examples → examples/out/
 bun run examples:watch   # Incremental examples build with file watching
 bun run examples:dev     # Bun static dev server for examples
+bun run examples:dist    # Assemble the deployable examples site → dist/
+bun run deploy           # examples:dist + wrangler deploy → trivalibs-examples.trivialspace.net
 bun run publish:local    # Publish a Scala artifact to ~/.ivy2/local
 ```
+
+Examples are deployed manually (`bun run deploy`), not by CI — unlike the
+consuming sketch repo, building them needs the Scala toolchain, and library
+examples change far less often than sketches. Run it once after an example is
+added or changed.
 
 All scripts run from the repo root and pass `src` / `examples` / `test` plus
 `project.scala` explicitly as scala-cli inputs (never a bare `.` — that pulls in

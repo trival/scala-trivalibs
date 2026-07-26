@@ -172,12 +172,24 @@ bun run test             # run all tests
 bun run examples:build   # build all examples → examples/out/
 bun run examples:watch   # incremental examples build with file watching
 bun run examples:dev     # static dev server for the examples (port 5000)
+bun run examples:dist    # assemble the deployable examples site → dist/
+bun run deploy           # examples:dist + wrangler deploy (manual, see below)
 bun run docs             # generate the Scaladoc API site → docs/api/html/
 bun run publish:local    # publish a Scala artifact to ~/.ivy2/local
 ```
 
 Run `examples:watch` and `examples:dev` side-by-side to iterate on the library
 and its examples together.
+
+### Deploying the examples
+
+The live examples site is
+[trivalibs-examples.trivialspace.net](https://trivalibs-examples.trivialspace.net/),
+a Cloudflare Worker serving static assets (`wrangler.jsonc`). Deployment is
+**manual** (`bun run deploy`) rather than CI-driven: building the examples needs
+the Scala toolchain, and this library's examples change far less often than the
+consuming sketch repo (which Cloudflare rebuilds automatically from Vite on
+every push). Run it once after adding or changing an example.
 
 ## Documentation
 
