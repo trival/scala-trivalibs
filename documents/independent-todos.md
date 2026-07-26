@@ -1,59 +1,5 @@
 # TODOs that don't require full feature documents.
 
-## Form
-
-### 🔄 `Form.set()` — destroy-always is wrong for dynamic geometry
-
-> **Scheduled** — folded into phase 1 of the strokes-painting roadmap
-> (`documents/strokes-painting-port-plan.md` in the consuming sketch repo),
-> together with multi-buffer forms: `Form` gets an `Arr[FormBuffers]`, each
-> record tracking `maxSize` / `currentSize` exactly as described below. Do the
-> two together — they touch the same upload path.
-
-**Current Scala** (`src/graphics/painter/form.scala`):
-
-```scala
-if vertexBuffer.notNull then vertexBuffer.get.destroy()
-// always creates a new GPUBuffer
-val buf = painter.device.createBuffer(...)
-painter.queue.writeBuffer(buf, ...)
-```
-
-**Rust approach** (`form.rs` — `update_form` fn):
-
-- Tracks `vertex_buffer_max_size` (allocated GPU capacity) separately from
-  `vertex_buffer_current_size` (bytes actually used).
-- On update: if new data fits within `max_size`, calls `queue.write_buffer` into
-  the existing buffer — **no destroy, no realloc**.
-- Only destroys + recreates when new data **exceeds** `max_size`.
-
-**Required Scala changes in `Form.set()`:**
-
-- Add `var bufferCapacity: Int = 0` to `Form` alongside `vertexCount`.
-- Replace the unconditional destroy+create with a reuse-or-grow branch:
-  ```scala
-  val newSize = verts.arrayBuffer.byteLength
-  if vertexBuffer.isNull || newSize > bufferCapacity then
-    if vertexBuffer.notNull then vertexBuffer.get.destroy()
-    vertexBuffer = painter.device.createBuffer(...)
-    bufferCapacity = newSize
-  painter.queue.writeBuffer(vertexBuffer.get, 0, verts.arrayBuffer)
-  vertexCount = verts.length
-  ```
-- Ensure the render pass draws only `vertexCount` vertices, not capacity, so
-  using a smaller-than-capacity buffer produces correct output.
-
-**Why this matters:** Any per-frame geometry update (particles, procedural
-animation, future `dynamic_shapes` example) will thrash the GPU allocator with
-the current implementation. With the Rust strategy the buffer is allocated once
-to the high-water mark and reused every frame with a plain `writeBuffer` call.
-
-**Doc follow-up:** Remove the sentence in §3 (Form) — _"The old GPU buffer is
-destroyed and a new one allocated (no in-place resize yet)"_ — once this is
-fixed.
-
----
-
 ## Panel / Textures
 
 ### 🔄 `with_static_texture_data(bytes)` on Panel
@@ -128,9 +74,10 @@ now; capture the design here until it's worth doing.
 
 Add a public `destroy(): Unit` to the painter classes that own GPU resources:
 
-- **`Form`** (`form.scala`) — destroy `vertexBuffer` + `indexBuffer`. The
-  teardown already exists internally (it runs on `set`, `form.scala:59/72`);
-  expose it.
+- **`Form`** (`form.scala`) — destroy the `vertexBuffer` / `indexBuffer` of
+  every entry in `buffers`. The teardown already exists internally (it runs on
+  `set` when an upload outgrows its allocation); expose it as a public sweep
+  over all buffers.
 - **`BufferBinding`** (`buffers/…`) — destroy the underlying `GPUBuffer` (the
   WebGPU facade already has `GPUBuffer.destroy()`, `webgpu.scala:139`). This is
   the one the baker would actually use (free the transient `model` binding after
@@ -183,6 +130,18 @@ scale; revisit when a sketch churns GPU resources at runtime.
 ## ✅ Completed
 
 ---
+
+### ✅ Form — multiple geometry buffers + grow-only buffer reuse
+
+`Form` now holds an `Arr[FormBuffers]`, each record tracking
+`vertexBuffer/indexBuffer` with separate `maxSize` (allocated) and `currentSize`
+(in use). Uploads reuse the existing `GPUBuffer` while the new data fits and
+only reallocate when it grows; the draw binds the live slice, so a smaller
+upload can't leak stale geometry. `form(geometries = …)` /
+`form.set(verticesAll = …)` take an `Arr` of buffers, drawn in sequence by one
+shape sharing pipeline, bind groups, topology and front face (Rust
+`Form::update_all` / `currently_active_buffers`). Verified by
+`examples/random_lines`.
 
 ### ✅ Documentation — `painter.shape` arg order in docs
 

@@ -117,6 +117,27 @@ val form = p.form(vertices = verts)
 
 Reach for the `Mesh` path (2a) as soon as the geometry is non-trivial.
 
+### 2a″. Several buffers in one form, and per-frame updates
+
+A form can hold **several geometry buffers**, drawn in sequence by one shape
+with the same pipeline, bind groups, topology and front face. Use it when one
+logical thing is made of many chunks — e.g. a polyline that `line2d` split into
+fragments at its sharp corners:
+
+```scala
+val form = p.form(
+  geometries = fragments,                      // Arr[BufferedGeometry[F]]
+  topology   = PrimitiveTopology.TriangleStrip,
+)
+// raw-vertex sibling: p.form(verticesAll = arrOfStructArrays)
+```
+
+Reassigning geometry (`form.set(...)`, same params) is cheap enough to do per
+frame: buffers are reused while the new data still fits and only reallocated
+when it grows, and each draw binds only the live slice — so a **smaller** upload
+never leaves stale vertices from a larger one behind. Buffers left over from a
+longer previous upload simply go inactive. See the `random_lines` example.
+
 ### 2b. Full-screen layer (post-processing / procedural)
 
 A `Layer` needs no `Form` — it's a fragment shader over a full-screen triangle,

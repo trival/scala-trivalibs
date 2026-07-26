@@ -26,7 +26,7 @@ teaching.
 | -------------------- | ------------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `Painter`            | `Painter`                | [painter.scala](../../src/graphics/painter/painter.scala)           | Central registry + frame driver.                                            |
 | `Shade`              | `Shade[U, P]`            | [shade.scala](../../src/graphics/painter/shade.scala)               | Shader module + bind-group layouts + pipeline layout.                       |
-| `Form`               | `Form`                   | [form.scala](../../src/graphics/painter/form.scala)                 | Vertex buffer + topology / front face.                                      |
+| `Form`               | `Form`                   | [form.scala](../../src/graphics/painter/form.scala)                 | One or more vertex buffers (+ indices) + topology / front face.             |
 | `Shape`              | `Shape[U, P]`            | [shape.scala](../../src/graphics/painter/shape.scala)               | Drawable: Form + Shade + bindings + instances.                              |
 | `Effect`             | **`Layer[U, P]`**        | [layer.scala](../../src/graphics/painter/layer.scala)               | Fullscreen post-processing pass (no Form, fragment-only Shade).             |
 | `Layer`              | **`Panel`**              | [panel.scala](../../src/graphics/painter/panel.scala)               | Render target: textures + ordered shapes + ordered layers.                  |
@@ -234,13 +234,30 @@ val form = painter.form(
 val form = painter.form(vertices = verts)
 ```
 
-Reassigning geometry after creation: call `form.set(vertices = newVerts)`. The
-old GPU buffer is destroyed and a new one allocated (no in-place resize yet).
+Reassigning geometry after creation: call `form.set(vertices = newVerts)`.
+Uploads are grow-only, as in Rust — the existing `GPUBuffer` is reused whenever
+the new data still fits its allocated capacity, and only reallocated when it
+grows. The draw binds just the live slice, so a smaller upload can't leak
+vertices from a previous, larger one.
 
-Index buffers are not supported by `Form` yet — both the
-`examples/buffer_triangle` and the raw simple triangle draw non-indexed. If you
-need indexed draws today, you fall through to the raw WebGPU path as in
-[BufferTriangle.scala](../../examples/buffer_triangle/BufferTriangle.scala).
+Indexed geometry goes through `form(geometry = …)` with a `BufferedGeometry`
+carrying a `Uint16Array` / `Uint32Array` index buffer (the geometry/mesh helpers
+produce these).
+
+Multiple geometry buffers per form (Rust `Form::update_all` /
+`currently_active_buffers`) are supported via the plural params — they are drawn
+in sequence sharing pipeline, bind groups, topology and front face:
+
+```scala
+val form = painter.form(
+  geometries = lineFragments,                  // Arr[BufferedGeometry[F]]
+  topology   = PrimitiveTopology.TriangleStrip,
+)
+form.set(verticesAll = newBuffers)             // Arr[StructArray[F]]
+```
+
+See [examples/random_lines](../../examples/random_lines/RandomLines.scala) — the
+port of the Rust example of the same name.
 
 ### Shape
 
@@ -914,10 +931,10 @@ noise, blur) are now ported as `WgslFn` libraries under
 | `blur`            | [blur](../../examples/blur/)                                                                                                                                         | Ported      | `WgslFn.raw` inlines the gaussian kernel; `bind_const_f32/vec2` → `binding(...)`.       |
 | `deferred_light`  | [deferred](../../examples/deferred/)                                                                                                                                 | Ported      | MRT panel + instance-based lighting layer w/ `BlendState.Additive`.                     |
 | `mipmap`          | [mipmaps](../../examples/mipmaps/)                                                                                                                                   | Ported      | `mipLevels = 0` for full chain; `sampleLevel` in DSL.                                   |
-| `random_lines`    | —                                                                                                                                                                    | **Not yet** | Would need a line-primitive example + per-frame geometry updates.                       |
+| `random_lines`    | [random_lines](../../examples/random_lines/)                                                                                                                         | Ported      | Multi-buffer form + grow-only buffer reuse under per-second geometry updates.           |
 | `ball`            | —                                                                                                                                                                    | **Not yet** | 3D sphere + normal-mapped lighting; needs ball geometry generator.                      |
 | `geometries`      | [geometry3d_scene](../../examples/geometry3d_scene/)                                                                                                                 | Ported      | Exercises `Box`, `sphereMesh`, `Grid` + `toBufferedGeometry`.                           |
-| `dynamic_shapes`  | —                                                                                                                                                                    | **Not yet** | Runtime `form.set(vertices = ...)` works, but no example yet.                           |
+| `dynamic_shapes`  | partial via [random_lines](../../examples/random_lines/)                                                                                                             | Partial     | Runtime `form.set(...)` is covered there; no dedicated shape-morphing example yet.      |
 | `dynamic_texture` | —                                                                                                                                                                    | **Not yet** | Render-to-texture feedback loop.                                                        |
 | `shader_image`    | —                                                                                                                                                                    | **Not yet** | Procedural image shader — trivial once samplers/panel-as-source are used.               |
 | `mouse_color`     | —                                                                                                                                                                    | Skipped     | Not worth porting — trivial demo of the event-pipeline gap ([§7](#7-app-loop--events)). |
@@ -1016,7 +1033,9 @@ Work top-to-bottom for a methodical port:
 - **Bindable** — trait in [shape.scala](../../src/graphics/painter/shape.scala)
   implemented by `Shape`, `Layer`, `Instance`. Provides the 8 overloads of
   `bind(...)`.
-- **Form** — `graphics.painter.Form` — vertex buffer + topology + front face.
+- **Form** — `graphics.painter.Form` — one or more vertex buffers (each with an
+  optional index buffer) + topology + front face. Multiple buffers are drawn in
+  sequence by one shape.
 - **FragmentPanel** — marker type in the uniform named tuple signalling a
   panel-texture binding readable in fragment stage only.
 - **FragmentUniform[T] / VertexUniform[T]** — wrappers in

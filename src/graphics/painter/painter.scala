@@ -628,18 +628,29 @@ class Painter(
   // Form factory
   // =========================================================================
 
-  /** Create a [[Form]] (vertex buffer + topology). Provide geometry as either a
-    * `BufferedGeometry` (from the geometry/mesh helpers, supports indices) or a
-    * raw `StructArray` of vertices (from `allocateAttribs`). `topology`
-    * defaults to triangle-list and `frontFace` to CCW. Reassign later with
-    * `form.set(...)` (reallocates the GPU buffer).
+  /** Create a [[Form]] (vertex buffers + topology). Provide geometry as either
+    * a `BufferedGeometry` (from the geometry/mesh helpers, supports indices) or
+    * a raw `StructArray` of vertices (from `allocateAttribs`). `geometries` /
+    * `verticesAll` take an `Arr` of those instead: several geometry buffers
+    * drawn in sequence as one shape (see [[Form]]). `topology` defaults to
+    * triangle-list and `frontFace` to CCW. Reassign later with `form.set(...)`,
+    * which reuses the GPU buffers while the new data fits.
     */
   def form[F <: Tuple](
       geometry: Maybe[BufferedGeometry[F]] = Maybe.Not,
       vertices: Maybe[StructArray[F]] = Maybe.Not,
+      geometries: Maybe[Arr[BufferedGeometry[F]]] = Maybe.Not,
+      verticesAll: Maybe[Arr[StructArray[F]]] = Maybe.Not,
       topology: Maybe[PrimitiveTopology] = Maybe.Not,
       frontFace: Maybe[FrontFace] = Maybe.Not,
-  ): Form = Form(this).set(geometry, vertices, topology, frontFace)
+  ): Form = Form(this).set(
+    geometry,
+    vertices,
+    geometries,
+    verticesAll,
+    topology,
+    frontFace,
+  )
 
   // =========================================================================
   // Binding factory
@@ -1598,17 +1609,35 @@ class Painter(
     )
 
     pass.setPipeline(pipeline)
-    pass.setVertexBuffer(0, shape.form.vertexBuffer)
-    val hasIndex = shape.form.indexBuffer.notNull
-    if hasIndex then
-      pass.setIndexBuffer(shape.form.indexBuffer.get, shape.form.indexFormat)
 
+    val form = shape.form
+    val bufferCount = form.activeBuffers
     val instanceCount = shape.instances.length
     val hasPanelBinds = hasPanelRuntimeBindings(panel)
 
+    // A form can hold several geometry buffers (e.g. the fragments of a split
+    // polyline); they are drawn in sequence sharing pipeline and bind groups.
     inline def drawCall(): Unit =
-      if hasIndex then pass.drawIndexed(shape.form.indexCount)
-      else pass.draw(shape.form.vertexCount)
+      var b = 0
+      while b < bufferCount do
+        val buf = form.buffers(b)
+        if buf.vertexCount > 0 then
+          pass.setVertexBuffer(
+            0,
+            buf.vertexBuffer.get,
+            0.0,
+            buf.vertexBufferCurrentSize,
+          )
+          if buf.indexCount > 0 then
+            pass.setIndexBuffer(
+              buf.indexBuffer.get,
+              buf.indexFormat,
+              0.0,
+              buf.indexBufferCurrentSize,
+            )
+            pass.drawIndexed(buf.indexCount)
+          else pass.draw(buf.vertexCount)
+        b += 1
 
     if instanceCount == 0 then
       if hasPanelBinds then
