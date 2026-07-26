@@ -1,0 +1,21 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "trivalibs-examples",
+	"compatibility_date": "2026-07-26",
+	// Static-assets-only Worker: no `main` script, just the assembled examples
+	// site. Deployment is manual (`bun run deploy`) — unlike the sketches repo,
+	// the JS artifacts are not committed and building them needs the Scala
+	// toolchain, which is not worth wiring into CI for a rarely-changing site.
+	"assets": {
+		"directory": "./dist"
+	},
+	// trivialspace.net is already on this Cloudflare account (shared across
+	// several graphics projects); wrangler provisions the DNS record and TLS
+	// for this subdomain on first deploy.
+	"routes": [
+		{
+			"pattern": "trivalibs-examples.trivialspace.net",
+			"custom_domain": true
+		}
+	]
+}

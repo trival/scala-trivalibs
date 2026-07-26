@@ -9,3 +9,5 @@ examples/out/
 examples/**/main.min.js
 *.semanticdb
 docs/api/html/
+
+dist/

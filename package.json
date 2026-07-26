@@ -7,11 +7,14 @@
 		"examples:build": "scala-cli --power package src examples project.scala --js -o examples/out -f",
 		"examples:watch": "scala-cli --power package src examples project.scala --js -o examples/out -f -w",
 		"examples:dev": "bun --bun serve.ts",
+		"examples:dist": "bun run examples:build && bun build-dist.ts",
+		"deploy": "bun run examples:dist && wrangler deploy",
 		"test": "scala-cli test src test project.scala",
 		"publish:local": "scala-cli --power publish local src project.scala --organization xyz.trival --name trivalibs --project-version 0.1.0-SNAPSHOT"
 	},
 	"devDependencies": {
-		"@types/bun": "latest"
+		"@types/bun": "latest",
+		"wrangler": "^4"
 	},
 	"dependencies": {
 		"@webgpu/types": "^0.1.69"
