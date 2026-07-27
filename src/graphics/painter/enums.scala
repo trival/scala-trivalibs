@@ -104,7 +104,9 @@ object BlendOp:
   val Max: BlendOp = "max"
 
 /** One blend equation (`src * srcFactor` ⊕ `dst * dstFactor`) for either the
-  * color or the alpha channel of a [[BlendState]].
+  * color or the alpha channel of a [[BlendState]]. `src` is the new value
+  * coming out of the fragment shader (the incoming draw); `dst` is the value
+  * already sitting in the render target (the existing pixel it draws over).
   */
 class BlendFn(
     val srcFactor: BlendFactor,
