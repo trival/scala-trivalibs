@@ -12,6 +12,7 @@ extension (v: Vec2) inline def yx: Vec2 = Vec2(v.y, v.x)
 
 extension (v: Vec3)
   inline def xy: Vec2 = Vec2(v.x, v.y)
+  inline def xz: Vec2 = Vec2(v.x, v.z)
   inline def yz: Vec2 = Vec2(v.y, v.z)
   inline def zyx: Vec3 = Vec3(v.z, v.y, v.x)
   inline def rg: Vec2 = v.xy
@@ -20,6 +21,7 @@ extension (v: Vec3)
 
 extension (v: Vec4)
   inline def xy: Vec2 = Vec2(v.x, v.y)
+  inline def xz: Vec2 = Vec2(v.x, v.z)
   inline def yz: Vec2 = Vec2(v.y, v.z)
   inline def zw: Vec2 = Vec2(v.z, v.w)
   inline def xyz: Vec3 = Vec3(v.x, v.y, v.z)
