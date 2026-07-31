@@ -39,8 +39,17 @@ private trait ImportMeta extends js.Object:
 private inline def importMeta: ImportMeta =
   js.`import`.meta.asInstanceOf[ImportMeta]
 
-// `import.meta.hot` is injected by Vite in dev and absent in prod builds.
-private def devMode: Boolean = importMeta.hot.isDefined
+/** True under the Vite dev server, false in a built sketch.
+  *
+  * `import.meta.hot` is injected by Vite in dev and absent in prod builds, so
+  * this is statically replaced and tree-shaken out of production.
+  *
+  * Beyond this module's own gating, use it for any **development affordance
+  * that must not ship** — a free-flying camera, a debug overlay, a bypass of a
+  * constraint the finished piece depends on. Preferable to a hand-rolled
+  * constant, which a sketch can commit in the wrong state.
+  */
+def devMode: Boolean = importMeta.hot.isDefined
 
 // `import.meta.url` namespaces keys per sketch module, avoiding collisions.
 // Vite appends a cache-busting `?t=<timestamp>` that changes on every reload,
