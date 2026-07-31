@@ -59,7 +59,17 @@ object Quad:
     * bottom-right, top-right. */
   def apply[T](tl: T, bl: T, br: T, tr: T): Quad[T] = Arr(tl, bl, br, tr)
 
-  // Dimensioned construction.  uvAtPivot: (0,0)=top-left, (0.5,0.5)=center, (1,1)=bottom-right.
+  /** Dimensioned construction with the in-plane orientation **inferred** from
+    * world up (swapping the reference to `-Z` when the normal is near-vertical
+    * and `Y` would be degenerate). Good for floor / ceiling / wall quads, where
+    * nothing about the quad picks out a direction of its own.
+    *
+    * When it does — a ceiling beam's soffit, an atlas band that must run along
+    * the beam — use the `tangent` overload instead, which this delegates to.
+    *
+    * `uvAtPivot`: `(0,0)` = top-left, `(0.5,0.5)` = center, `(1,1)` =
+    * bottom-right.
+    */
   def fromDimensions[T](
       width: Double,
       height: Double,
@@ -69,7 +79,33 @@ object Quad:
   )(f: (Vec3, Vec2) => T): Quad[T] =
     val n = normal.normalize
     val up = if math.abs(n.y) > 0.999 then -Vec3.Z else Vec3.Y
-    val uDir = up.cross(n)
+    fromDimensions(width, height, n, up.cross(n), pivot, uvAtPivot)(f)
+
+  /** Dimensioned construction with the in-plane orientation **given**:
+    * `tangent` is the direction `u` runs, projected into the plane of `normal`.
+    *
+    * This is the primitive; the inferring overload is this one with
+    * `tangent = up.cross(normal)`.
+    *
+    * Note the delegation also fixes a scaling bug the inferring form had while
+    * it was written out separately: it used `up.cross(n)` unnormalized as its
+    * `u` direction, and `|up × n|` is 1 only when the two are perpendicular. A
+    * 45°-tilted normal therefore shrank the quad to 0.71 × its requested width
+    * AND height. Every call site passed an axis-aligned normal, so it never
+    * showed.
+    */
+  def fromDimensions[T](
+      width: Double,
+      height: Double,
+      normal: Vec3,
+      tangent: Vec3,
+      pivot: Vec3,
+      uvAtPivot: Vec2,
+  )(f: (Vec3, Vec2) => T): Quad[T] =
+    val n = normal.normalize
+    // Gram-Schmidt: drop any component of `tangent` along `n`, so a caller may
+    // pass a convenient direction without pre-projecting it.
+    val uDir = (tangent - n * n.dot(tangent)).normalize
     val uVec = uDir * width
     val vVec = -(n.cross(uDir)) * height
     val tlPos = pivot - uVec * uvAtPivot.x - vVec * uvAtPivot.y
@@ -82,6 +118,16 @@ object Quad:
       f(brPos, Vec2(1.0, 1.0)),
       f(trPos, Vec2(1.0, 0.0)),
     )
+
+  /** [[fromDimensions]] with an explicit `tangent`, pivoted at the center. */
+  inline def fromDimensionsCenter[T](
+      w: Double,
+      h: Double,
+      n: Vec3,
+      tangent: Vec3,
+      center: Vec3,
+  )(f: (Vec3, Vec2) => T): Quad[T] =
+    fromDimensions(w, h, n, tangent, center, Vec2(0.5, 0.5))(f)
 
   inline def fromDimensionsCenter[T](
       w: Double,

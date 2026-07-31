@@ -148,6 +148,40 @@ class ShapesTest extends FunSuite:
     assertEqualsDouble(quv(2)._2.x, 1.0, eps) // br uv = (1,1)
     assertEqualsDouble(quv(2)._2.y, 1.0, eps)
 
+  test("fromDimensions honours width/height for a tilted normal"):
+    // Regression: the inferring overload used to take `up.cross(n)` as its `u`
+    // direction WITHOUT normalizing. |up × n| is 1 only when the two are
+    // perpendicular, so a 45°-tilted normal shrank the quad to 0.71× in both
+    // axes. Every call site passed an axis-aligned normal, so it never showed.
+    val q = Quad.fromDimensionsCenter[Vec3](
+      4.0,
+      2.0,
+      Vec3(0, 1, 1), // 45° between world up and the normal
+      Vec3.zero,
+    ): (pos, _) =>
+      pos
+    assertEqualsDouble((q.tr - q.tl).length, 4.0, eps) // width across the top
+    assertEqualsDouble((q.br - q.bl).length, 4.0, eps) // and the bottom
+    assertEqualsDouble((q.bl - q.tl).length, 2.0, eps) // height down the left
+    assertEqualsDouble((q.br - q.tr).length, 2.0, eps) // and the right
+
+  test("fromDimensions with an explicit tangent orients u along it"):
+    // A downward-facing soffit: the inferring form would run `u` along world
+    // -Z whichever way the beam points, so the tangent must be given.
+    val beamDir = Vec3(1, 0, 1).normalize
+    val q = Quad.fromDimensionsCenter[Vec3](
+      6.0,
+      0.5,
+      -Vec3.Y, // soffit faces down
+      beamDir,
+      Vec3(0, 3, 0),
+    ): (pos, _) =>
+      pos
+    // `u` runs along the beam, at the requested length.
+    val uAxis = q.tr - q.tl
+    assertEqualsDouble(uAxis.length, 6.0, eps)
+    assert(uAxis.normalize.approxEq(beamDir))
+
   test("fromDimensions with uvAtPivot=(1,1) bottom-right pivot"):
     // normal=(0,3.3,0) ≈ (0,1,0), pivot=(0,0,0), uvAtPivot=(1,1), w=h=1
     val q = Quad.fromDimensions[Vec3](
