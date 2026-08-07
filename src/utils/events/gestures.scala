@@ -31,46 +31,120 @@ private[events] def drivingPointer(pointers: Arr[Pointer]): Opt[Pointer] =
     i += 1
   null
 
+/** Half-life (ms) of the drag-velocity smoothing that feeds the glide. Short
+  * enough to follow a flick, long enough that one jittery final frame can't
+  * fling the glide. Structural — not worth exposing.
+  */
+private inline val VelocitySmoothHalfLife = 40.0
+
+/** Floor (px/ms) on the glide cut-off, so a `glideMinSpeed` of 0 still
+  * terminates instead of trailing off asymptotically.
+  */
+private inline val MinGlideCutoff = 0.001
+
 /** Drag gesture: the movement of the driving pointer during the last [[update]]
   * frame. Hand-off is seamless — when the driver changes (lift or promote),
   * that frame's delta is zero (a reseed) and movement resumes from the new
   * driver, so a hand-off never produces a jump.
   *
+  * With `glideHalfLife > 0` the drag gets a swipe-like tail: releasing above
+  * `glideMinSpeed` keeps [[delta]] flowing from the release velocity and fades
+  * it out exponentially, instead of stopping dead. Pressing again cancels the
+  * glide, and parking the pointer before releasing decays the velocity, so a
+  * park-then-lift does not fling.
+  *
   * Call [[update]] once per render frame, then read [[delta]] / [[dragging]].
-  * Construct with `DragGesture(input)`.
+  * Construct with `DragGesture(input)` for the plain hard-stop drag.
+  *
+  * @param glideMinSpeed
+  *   px per second below which no glide starts, and at which a running glide
+  *   ends.
+  * @param glideHalfLife
+  *   ms for the glide speed to halve. `0` disables the glide entirely.
   */
-final class DragGesture private[events] (pointersOf: () => Arr[Pointer]):
-  def this(input: InputState) = this(() => input.pointers)
+final class DragGesture private[events] (
+    pointersOf: () => Arr[Pointer],
+    glideMinSpeed: Double,
+    glideHalfLife: Double,
+):
+  def this(
+      input: InputState,
+      glideMinSpeed: Double = 60.0,
+      glideHalfLife: Double = 0.0,
+  ) = this(() => input.pointers, glideMinSpeed, glideHalfLife)
 
   private var lastId: Opt[Double] = null
   private var lastX: Double = 0.0
   private var lastY: Double = 0.0
   private var _dx: Double = 0.0
   private var _dy: Double = 0.0
+  // Smoothed drag velocity in px/ms, kept alive after release to drive the
+  // glide. Only tracked when the glide is enabled.
+  private var velX: Double = 0.0
+  private var velY: Double = 0.0
+  private var _gliding: Boolean = false
+
+  private val glides = glideHalfLife > 0.0
+  private val cutoff =
+    val s = glideMinSpeed / 1000.0
+    if s < MinGlideCutoff then MinGlideCutoff else s
 
   /** Whether a drag-eligible pointer is currently down. */
   def dragging: Boolean = drivingPointer(pointersOf()).notNull
 
+  /** Whether [[delta]] is currently coming from the post-release glide rather
+    * than from a pointer. Always false without a `glideHalfLife`.
+    */
+  def gliding: Boolean = _gliding
+
   /** The driving pointer's movement during the last [[update]] frame; `(0, 0)`
-    * when no driver is down or on the frame a driver change reseeded.
+    * when no driver is down or on the frame a driver change reseeded. With a
+    * glide configured, this keeps reporting the fading movement after release.
     */
   def delta: (dx: Double, dy: Double) = (dx = _dx, dy = _dy)
 
-  /** Advance one frame: recompute [[delta]] from the driver's movement and
-    * advance the baseline. Call once per render frame before reading [[delta]].
+  /** Advance one frame by `tpf` (ms): recompute [[delta]] from the driver's
+    * movement, advance the baseline, and step the glide. Call once per render
+    * frame before reading [[delta]].
     */
-  def update(): Unit =
+  def update(tpf: Double): Unit =
     val d = drivingPointer(pointersOf())
     if d.isNull then
       lastId = null
-      _dx = 0.0
-      _dy = 0.0
+      if glides && (velX * velX + velY * velY).sqrt >= cutoff then
+        val f = 0.5.pow(tpf / glideHalfLife)
+        velX *= f
+        velY *= f
+        _gliding = true
+        _dx = velX * tpf
+        _dy = velY * tpf
+      else
+        velX = 0.0
+        velY = 0.0
+        _gliding = false
+        _dx = 0.0
+        _dy = 0.0
     else
+      _gliding = false
       val p = d.get
       val sameDriver =
         lastId.notNull && p.id.notNull && lastId.get == p.id.get
-      _dx = if sameDriver then p.x - lastX else 0.0
-      _dy = if sameDriver then p.y - lastY else 0.0
+      if sameDriver then
+        _dx = p.x - lastX
+        _dy = p.y - lastY
+        if glides && tpf > 0.0 then
+          // Frame-rate independent EMA toward this frame's instant velocity.
+          val k = 1.0 - 0.5.pow(tpf / VelocitySmoothHalfLife)
+          velX += (_dx / tpf - velX) * k
+          velY += (_dy / tpf - velY) * k
+      else
+        // Reseed. A hand-off (lastId still set) keeps the velocity so the
+        // glide survives it; a fresh press drops it, so a tap stops the glide.
+        if lastId.isNull then
+          velX = 0.0
+          velY = 0.0
+        _dx = 0.0
+        _dy = 0.0
       lastId = p.id
       lastX = p.x
       lastY = p.y

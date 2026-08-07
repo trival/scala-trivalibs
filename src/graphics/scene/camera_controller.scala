@@ -7,10 +7,11 @@ import trivalibs.utils.events.PointerButton
 // ---------------------------------------------------------------------------
 // BasicFirstPersonCameraController — maps polled CanvasInput to FPS camera
 // movement. WASD walks (forward/strafe), Space/Shift rise/sink, drag looks
-// around. For touch-only devices: holding the primary pointer walks forward,
-// and walking backward is triggered by a secondary mouse button OR a genuine
-// two-finger touch. Drag-look stays bound to the primary pointer and survives a
-// pointer hand-off without a jump. It only translates input into parameters and
+// around — the drag grabs the scene, so it pans opposite to the pointer. For
+// touch-only devices: holding the primary pointer walks forward, and walking
+// backward is triggered by a secondary mouse button OR a genuine two-finger
+// touch. Drag-look stays bound to the primary pointer and survives a pointer
+// hand-off without a jump. It only translates input into parameters and
 // delegates the transform update to `PerspectiveCamera.move`.
 //
 //   speed       — metres per second for translation
@@ -64,9 +65,9 @@ class BasicFirstPersonCameraController(
       up -= dist
 
     val drag = in.drag.delta
-    // 1000px of drag ≈ one sensitivity-scaled radian; drag right/down looks
-    // right/down (negative yaw / negative pitch in the camera's convention).
-    val deltaH = -drag.dx * sensitivity / 1000.0
-    val deltaV = -drag.dy * sensitivity / 1000.0
+    // 1000px of drag ≈ one sensitivity-scaled radian; the drag grabs the scene,
+    // so dragging right/down turns the camera left/up.
+    val deltaH = drag.dx * sensitivity / 1000.0
+    val deltaV = drag.dy * sensitivity / 1000.0
 
     cam.move(forward, left, up, deltaH, deltaV)

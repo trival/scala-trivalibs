@@ -36,10 +36,11 @@ class CanvasInput(
 
   /** Advance the default gestures by one frame, given the frame's `tpf` (ms
     * since last frame). Call once per render frame before reading `drag.delta`
-    * / `hold.holding`.
+    * / `hold.holding`. With a drag glide configured, `drag.delta` keeps
+    * reporting a fading movement for a while after the pointer lifts.
     */
   def update(tpf: Double): Unit =
-    drag.update()
+    drag.update(tpf)
     hold.update(tpf)
 
   /** Remove all DOM listeners (the gestures hold no resources of their own). */
@@ -60,6 +61,13 @@ class CanvasInput(
   *   prevent the native context menu on secondary-button press.
   * @param onActivity
   *   optional callback fired on any state-changing input event.
+  * @param dragGlideHalfLife
+  *   ms for the post-release drag glide to halve its speed. `0` (the default)
+  *   means the drag stops dead on release; set it to opt into a swipe-like
+  *   tail.
+  * @param dragGlideMinSpeed
+  *   px/s below which no glide starts and a running one ends. Only relevant
+  *   with a `dragGlideHalfLife`.
   * @return
   *   a [[CanvasInput]] bundling the state and the default gestures.
   */
@@ -70,6 +78,8 @@ def interactiveCanvas(
     holdRadius: Double = 5.0,
     suppressContextMenu: Boolean = true,
     onActivity: Maybe[js.Function0[Unit]] = Maybe.Not,
+    dragGlideHalfLife: Double = 0.0,
+    dragGlideMinSpeed: Double = 60.0,
 ): CanvasInput =
   canvas.setAttribute("tabindex", "0")
   canvas.style.setProperty("outline", "none")
@@ -96,6 +106,6 @@ def interactiveCanvas(
 
   CanvasInput(
     input,
-    DragGesture(input),
+    DragGesture(input, dragGlideMinSpeed, dragGlideHalfLife),
     HoldGesture(input, holdDelay, holdRadius),
   )
