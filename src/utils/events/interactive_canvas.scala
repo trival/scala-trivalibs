@@ -62,9 +62,8 @@ class CanvasInput(
   * @param onActivity
   *   optional callback fired on any state-changing input event.
   * @param dragGlideHalfLife
-  *   ms for the post-release drag glide to halve its speed. `0` (the default)
-  *   means the drag stops dead on release; set it to opt into a swipe-like
-  *   tail.
+  *   ms for the post-release drag glide to halve its speed. Defaults to a
+  *   swipe-like tail; pass `0` for a hard stop on release instead.
   * @param dragGlideMinSpeed
   *   px/s below which no glide starts and a running one ends. Only relevant
   *   with a `dragGlideHalfLife`.
@@ -78,8 +77,8 @@ def interactiveCanvas(
     holdRadius: Double = 5.0,
     suppressContextMenu: Boolean = true,
     onActivity: Maybe[js.Function0[Unit]] = Maybe.Not,
-    dragGlideHalfLife: Double = 0.0,
-    dragGlideMinSpeed: Double = 60.0,
+    dragGlideHalfLife: Double = 90.0,
+    dragGlideMinSpeed: Double = 50.0,
 ): CanvasInput =
   canvas.setAttribute("tabindex", "0")
   canvas.style.setProperty("outline", "none")

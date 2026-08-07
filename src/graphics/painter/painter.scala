@@ -130,8 +130,8 @@ class Painter(
       holdRadius: Double = 5.0,
       suppressContextMenu: Boolean = true,
       onActivity: Maybe[js.Function0[Unit]] = Maybe.Not,
-      dragGlideHalfLife: Double = 0.0,
-      dragGlideMinSpeed: Double = 60.0,
+      dragGlideHalfLife: Double = 90.0,
+      dragGlideMinSpeed: Double = 50.0,
   ): CanvasInput =
     interactiveCanvas(
       canvas,
