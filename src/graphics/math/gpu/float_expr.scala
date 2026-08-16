@@ -357,6 +357,7 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def *(scalar: FloatExpr): Vec3Expr =
       Vec3Expr(s"(${v.wgsl} * ${scalar.wgsl})")
     def *(scalar: Double): Vec3Expr = v * (scalar: FloatExpr)
+    def *(other: Vec3): Vec3Expr = v * other.toExpr
     @annotation.targetName("divVecG")
     override def /(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"(${v.wgsl} / ${other.wgsl})")
