@@ -99,6 +99,25 @@ given NumOps[FloatExpr]:
     def /(v: Vec3Expr): Vec3Expr = Vec3Expr(s"(${a.wgsl} / ${v.wgsl})")
     @annotation.targetName("fDivVec4")
     def /(v: Vec4Expr): Vec4Expr = Vec4Expr(s"(${a.wgsl} / ${v.wgsl})")
+
+    // Same broadcast against a CPU `Vec*` constant — `band * HaloColor`. No
+    // `@targetName` needed: the CPU types are plain classes with distinct
+    // erasures, unlike the `*Expr` opaque types above.
+    def +(v: Vec2): Vec2Expr = a + v.toExpr
+    def +(v: Vec3): Vec3Expr = a + v.toExpr
+    def +(v: Vec4): Vec4Expr = a + v.toExpr
+
+    def -(v: Vec2): Vec2Expr = a - v.toExpr
+    def -(v: Vec3): Vec3Expr = a - v.toExpr
+    def -(v: Vec4): Vec4Expr = a - v.toExpr
+
+    def *(v: Vec2): Vec2Expr = a * v.toExpr
+    def *(v: Vec3): Vec3Expr = a * v.toExpr
+    def *(v: Vec4): Vec4Expr = a * v.toExpr
+
+    def /(v: Vec2): Vec2Expr = a / v.toExpr
+    def /(v: Vec3): Vec3Expr = a / v.toExpr
+    def /(v: Vec4): Vec4Expr = a / v.toExpr
   def zero: FloatExpr = FloatExpr("0.0")
   def one: FloatExpr = FloatExpr("1.0")
 
@@ -180,19 +199,20 @@ given NumExt[FloatExpr]:
 // Vec2 — LocalVec2 <: Vec2Expr, so only one Base + one ImmutableOps needed
 // ---------------------------------------------------------------------------
 
-given Vec2BaseG[FloatExpr, Vec2Expr] =
-  new Vec2BaseG[FloatExpr, Vec2Expr]:
-    extension (v: Vec2Expr)
-      def x: FloatExpr = FloatExpr(s"${v.wgsl}.x")
-      def y: FloatExpr = FloatExpr(s"${v.wgsl}.y")
-      def dot(other: Vec2Expr): FloatExpr = FloatExpr(
-        s"dot(${v.wgsl}, ${other.wgsl})",
-      )
-      def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
-      def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
-      def distance(other: Vec2Expr): FloatExpr = FloatExpr(
-        s"distance(${v.wgsl}, ${other.wgsl})",
-      )
+given Vec2BaseG[FloatExpr, Vec2Expr]:
+  extension (v: Vec2Expr)
+    def x: FloatExpr = FloatExpr(s"${v.wgsl}.x")
+    def y: FloatExpr = FloatExpr(s"${v.wgsl}.y")
+    def dot(other: Vec2Expr): FloatExpr = FloatExpr(
+      s"dot(${v.wgsl}, ${other.wgsl})",
+    )
+    def dot(other: Vec2): FloatExpr = v.dot(other.toExpr)
+    def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
+    def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
+    def distance(other: Vec2Expr): FloatExpr = FloatExpr(
+      s"distance(${v.wgsl}, ${other.wgsl})",
+    )
+    def distance(other: Vec2): FloatExpr = v.distance(other.toExpr)
 
 /** Vector ops for `Vec2Expr` / `Vec3Expr` / `Vec4Expr` (this and the analogous
   * `Vec3`/`Vec4` givens below): component-wise `+ - * /` (vector or scalar),
@@ -215,6 +235,7 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def +(scalar: FloatExpr): Vec2Expr =
       Vec2Expr(s"(${v.wgsl} + ${scalar.wgsl})")
     def +(scalar: Double): Vec2Expr = v + (scalar: FloatExpr)
+    def +(other: Vec2): Vec2Expr = v + other.toExpr
     @annotation.targetName("negateVecG")
     override def unary_- : Vec2Expr = Vec2Expr(s"(-${v.wgsl})")
     @annotation.targetName("subVecG")
@@ -224,6 +245,7 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def -(scalar: FloatExpr): Vec2Expr =
       Vec2Expr(s"(${v.wgsl} - ${scalar.wgsl})")
     def -(scalar: Double): Vec2Expr = v - (scalar: FloatExpr)
+    def -(other: Vec2): Vec2Expr = v - other.toExpr
     @annotation.targetName("mulVecG")
     override def *(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"(${v.wgsl} * ${other.wgsl})")
@@ -231,6 +253,7 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def *(scalar: FloatExpr): Vec2Expr =
       Vec2Expr(s"(${v.wgsl} * ${scalar.wgsl})")
     def *(scalar: Double): Vec2Expr = v * (scalar: FloatExpr)
+    def *(other: Vec2): Vec2Expr = v * other.toExpr
     @annotation.targetName("divVecG")
     override def /(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"(${v.wgsl} / ${other.wgsl})")
@@ -238,6 +261,7 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def /(scalar: FloatExpr): Vec2Expr =
       Vec2Expr(s"(${v.wgsl} / ${scalar.wgsl})")
     def /(scalar: Double): Vec2Expr = v / (scalar: FloatExpr)
+    def /(other: Vec2): Vec2Expr = v / other.toExpr
 
     override def normalize: Vec2Expr = Vec2Expr(s"normalize(${v.wgsl})")
     override def abs: Vec2Expr = Vec2Expr(s"abs(${v.wgsl})")
@@ -261,12 +285,25 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def pow(e: FloatExpr): Vec2Expr =
       Vec2Expr(s"pow(${v.wgsl}, vec2<f32>(${e.wgsl}))")
     def pow(scalar: Double): Vec2Expr = v.pow(scalar: FloatExpr)
+    def pow(e: Vec2): Vec2Expr = v.pow(e.toExpr)
     override def min(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"min(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("minScalarG")
+    def min(scalar: FloatExpr): Vec2Expr =
+      Vec2Expr(s"min(${v.wgsl}, vec2<f32>(${scalar.wgsl}))")
+    def min(scalar: Double): Vec2Expr = v.min(scalar: FloatExpr)
+    def min(other: Vec2): Vec2Expr = v.min(other.toExpr)
     override def max(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"max(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("maxScalarG")
+    def max(scalar: FloatExpr): Vec2Expr =
+      Vec2Expr(s"max(${v.wgsl}, vec2<f32>(${scalar.wgsl}))")
+    def max(scalar: Double): Vec2Expr = v.max(scalar: FloatExpr)
+    def max(other: Vec2): Vec2Expr = v.max(other.toExpr)
     override def clamp(lo: FloatExpr, hi: FloatExpr): Vec2Expr =
       Vec2Expr(s"clamp(${v.wgsl}, ${lo.wgsl}, ${hi.wgsl})")
+    def clamp(lo: Double, hi: Double): Vec2Expr =
+      v.clamp(lo: FloatExpr, hi: FloatExpr)
     override def clamp01: Vec2Expr = Vec2Expr(s"saturate(${v.wgsl})")
     override def fit0111: Vec2Expr = Vec2Expr(s"(${v.wgsl} * 2.0 - 1.0)")
     override def fit1101: Vec2Expr = Vec2Expr(s"(${v.wgsl} * 0.5 + 0.5)")
@@ -276,12 +313,15 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     @annotation.targetName("mixScalarG")
     override def mix(b: Vec2Expr, t: FloatExpr): Vec2Expr =
       Vec2Expr(s"mix(${v.wgsl}, ${b.wgsl}, ${t.wgsl})")
+    def mix(b: Vec2Expr, t: Double): Vec2Expr = v.mix(b, t: FloatExpr)
     @annotation.targetName("stepVecG")
     override def step(edge: Vec2Expr): Vec2Expr =
       Vec2Expr(s"step(${edge.wgsl}, ${v.wgsl})")
     @annotation.targetName("stepScalarG")
     override def step(edge: FloatExpr): Vec2Expr =
       Vec2Expr(s"step(${edge.wgsl}, ${v.wgsl})")
+    def step(edge: Double): Vec2Expr = v.step(edge: FloatExpr)
+    def step(edge: Vec2): Vec2Expr = v.step(edge.toExpr)
     @annotation.targetName("smoothstepVecG")
     override def smoothstep(edge0: Vec2Expr, edge1: Vec2Expr): Vec2Expr =
       Vec2Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
@@ -307,27 +347,34 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
 
     override def reflect(n: Vec2Expr): Vec2Expr =
       Vec2Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
+    def reflect(n: Vec2): Vec2Expr = v.reflect(n.toExpr)
     override def refract(n: Vec2Expr, eta: FloatExpr): Vec2Expr =
       Vec2Expr(s"refract(${v.wgsl}, ${n.wgsl}, ${eta.wgsl})")
+    def refract(n: Vec2Expr, eta: Double): Vec2Expr =
+      v.refract(n, eta: FloatExpr)
+    def refract(n: Vec2, eta: FloatExpr): Vec2Expr = v.refract(n.toExpr, eta)
+    def refract(n: Vec2, eta: Double): Vec2Expr =
+      v.refract(n.toExpr, eta: FloatExpr)
 
 // ---------------------------------------------------------------------------
 // Vec3 — LocalVec3 <: Vec3Expr
 // ---------------------------------------------------------------------------
 
-given Vec3BaseG[FloatExpr, Vec3Expr] =
-  new Vec3BaseG[FloatExpr, Vec3Expr]:
-    extension (v: Vec3Expr)
-      def x: FloatExpr = FloatExpr(s"${v.wgsl}.x")
-      def y: FloatExpr = FloatExpr(s"${v.wgsl}.y")
-      def z: FloatExpr = FloatExpr(s"${v.wgsl}.z")
-      def dot(other: Vec3Expr): FloatExpr = FloatExpr(
-        s"dot(${v.wgsl}, ${other.wgsl})",
-      )
-      def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
-      def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
-      def distance(other: Vec3Expr): FloatExpr = FloatExpr(
-        s"distance(${v.wgsl}, ${other.wgsl})",
-      )
+given Vec3BaseG[FloatExpr, Vec3Expr]:
+  extension (v: Vec3Expr)
+    def x: FloatExpr = FloatExpr(s"${v.wgsl}.x")
+    def y: FloatExpr = FloatExpr(s"${v.wgsl}.y")
+    def z: FloatExpr = FloatExpr(s"${v.wgsl}.z")
+    def dot(other: Vec3Expr): FloatExpr = FloatExpr(
+      s"dot(${v.wgsl}, ${other.wgsl})",
+    )
+    def dot(other: Vec3): FloatExpr = v.dot(other.toExpr)
+    def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
+    def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
+    def distance(other: Vec3Expr): FloatExpr = FloatExpr(
+      s"distance(${v.wgsl}, ${other.wgsl})",
+    )
+    def distance(other: Vec3): FloatExpr = v.distance(other.toExpr)
 
 given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
   def create(x: FloatExpr, y: FloatExpr, z: FloatExpr): Vec3Expr =
@@ -341,6 +388,7 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def +(scalar: FloatExpr): Vec3Expr =
       Vec3Expr(s"(${v.wgsl} + ${scalar.wgsl})")
     def +(scalar: Double): Vec3Expr = v + (scalar: FloatExpr)
+    def +(other: Vec3): Vec3Expr = v + other.toExpr
     @annotation.targetName("negateVecG")
     override def unary_- : Vec3Expr = Vec3Expr(s"(-${v.wgsl})")
     @annotation.targetName("subVecG")
@@ -350,6 +398,7 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def -(scalar: FloatExpr): Vec3Expr =
       Vec3Expr(s"(${v.wgsl} - ${scalar.wgsl})")
     def -(scalar: Double): Vec3Expr = v - (scalar: FloatExpr)
+    def -(other: Vec3): Vec3Expr = v - other.toExpr
     @annotation.targetName("mulVecG")
     override def *(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"(${v.wgsl} * ${other.wgsl})")
@@ -365,9 +414,11 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def /(scalar: FloatExpr): Vec3Expr =
       Vec3Expr(s"(${v.wgsl} / ${scalar.wgsl})")
     def /(scalar: Double): Vec3Expr = v / (scalar: FloatExpr)
+    def /(other: Vec3): Vec3Expr = v / other.toExpr
 
     override def cross(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"cross(${v.wgsl}, ${other.wgsl})")
+    def cross(other: Vec3): Vec3Expr = v.cross(other.toExpr)
     override def normalize: Vec3Expr = Vec3Expr(s"normalize(${v.wgsl})")
     override def abs: Vec3Expr = Vec3Expr(s"abs(${v.wgsl})")
     override def sign: Vec3Expr = Vec3Expr(s"sign(${v.wgsl})")
@@ -390,12 +441,25 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def pow(e: FloatExpr): Vec3Expr =
       Vec3Expr(s"pow(${v.wgsl}, vec3<f32>(${e.wgsl}))")
     def pow(scalar: Double): Vec3Expr = v.pow(scalar: FloatExpr)
+    def pow(e: Vec3): Vec3Expr = v.pow(e.toExpr)
     override def min(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"min(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("minScalarG")
+    def min(scalar: FloatExpr): Vec3Expr =
+      Vec3Expr(s"min(${v.wgsl}, vec3<f32>(${scalar.wgsl}))")
+    def min(scalar: Double): Vec3Expr = v.min(scalar: FloatExpr)
+    def min(other: Vec3): Vec3Expr = v.min(other.toExpr)
     override def max(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"max(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("maxScalarG")
+    def max(scalar: FloatExpr): Vec3Expr =
+      Vec3Expr(s"max(${v.wgsl}, vec3<f32>(${scalar.wgsl}))")
+    def max(scalar: Double): Vec3Expr = v.max(scalar: FloatExpr)
+    def max(other: Vec3): Vec3Expr = v.max(other.toExpr)
     override def clamp(lo: FloatExpr, hi: FloatExpr): Vec3Expr =
       Vec3Expr(s"clamp(${v.wgsl}, ${lo.wgsl}, ${hi.wgsl})")
+    def clamp(lo: Double, hi: Double): Vec3Expr =
+      v.clamp(lo: FloatExpr, hi: FloatExpr)
     override def clamp01: Vec3Expr = Vec3Expr(s"saturate(${v.wgsl})")
     override def fit0111: Vec3Expr = Vec3Expr(s"(${v.wgsl} * 2.0 - 1.0)")
     override def fit1101: Vec3Expr = Vec3Expr(s"(${v.wgsl} * 0.5 + 0.5)")
@@ -405,12 +469,15 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     @annotation.targetName("mixScalarG")
     override def mix(b: Vec3Expr, t: FloatExpr): Vec3Expr =
       Vec3Expr(s"mix(${v.wgsl}, ${b.wgsl}, ${t.wgsl})")
+    def mix(b: Vec3Expr, t: Double): Vec3Expr = v.mix(b, t: FloatExpr)
     @annotation.targetName("stepVecG")
     override def step(edge: Vec3Expr): Vec3Expr =
       Vec3Expr(s"step(${edge.wgsl}, ${v.wgsl})")
     @annotation.targetName("stepScalarG")
     override def step(edge: FloatExpr): Vec3Expr =
       Vec3Expr(s"step(${edge.wgsl}, ${v.wgsl})")
+    def step(edge: Double): Vec3Expr = v.step(edge: FloatExpr)
+    def step(edge: Vec3): Vec3Expr = v.step(edge.toExpr)
     @annotation.targetName("smoothstepVecG")
     override def smoothstep(edge0: Vec3Expr, edge1: Vec3Expr): Vec3Expr =
       Vec3Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
@@ -436,28 +503,35 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
 
     override def reflect(n: Vec3Expr): Vec3Expr =
       Vec3Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
+    def reflect(n: Vec3): Vec3Expr = v.reflect(n.toExpr)
     override def refract(n: Vec3Expr, eta: FloatExpr): Vec3Expr =
       Vec3Expr(s"refract(${v.wgsl}, ${n.wgsl}, ${eta.wgsl})")
+    def refract(n: Vec3Expr, eta: Double): Vec3Expr =
+      v.refract(n, eta: FloatExpr)
+    def refract(n: Vec3, eta: FloatExpr): Vec3Expr = v.refract(n.toExpr, eta)
+    def refract(n: Vec3, eta: Double): Vec3Expr =
+      v.refract(n.toExpr, eta: FloatExpr)
 
 // ---------------------------------------------------------------------------
 // Vec4 — LocalVec4 <: Vec4Expr
 // ---------------------------------------------------------------------------
 
-given Vec4BaseG[FloatExpr, Vec4Expr] =
-  new Vec4BaseG[FloatExpr, Vec4Expr]:
-    extension (v: Vec4Expr)
-      def x: FloatExpr = FloatExpr(s"${v.wgsl}.x")
-      def y: FloatExpr = FloatExpr(s"${v.wgsl}.y")
-      def z: FloatExpr = FloatExpr(s"${v.wgsl}.z")
-      def w: FloatExpr = FloatExpr(s"${v.wgsl}.w")
-      def dot(other: Vec4Expr): FloatExpr = FloatExpr(
-        s"dot(${v.wgsl}, ${other.wgsl})",
-      )
-      def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
-      def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
-      def distance(other: Vec4Expr): FloatExpr = FloatExpr(
-        s"distance(${v.wgsl}, ${other.wgsl})",
-      )
+given Vec4BaseG[FloatExpr, Vec4Expr]:
+  extension (v: Vec4Expr)
+    def x: FloatExpr = FloatExpr(s"${v.wgsl}.x")
+    def y: FloatExpr = FloatExpr(s"${v.wgsl}.y")
+    def z: FloatExpr = FloatExpr(s"${v.wgsl}.z")
+    def w: FloatExpr = FloatExpr(s"${v.wgsl}.w")
+    def dot(other: Vec4Expr): FloatExpr = FloatExpr(
+      s"dot(${v.wgsl}, ${other.wgsl})",
+    )
+    def dot(other: Vec4): FloatExpr = v.dot(other.toExpr)
+    def length_squared: FloatExpr = FloatExpr(s"dot(${v.wgsl}, ${v.wgsl})")
+    def length: FloatExpr = FloatExpr(s"length(${v.wgsl})")
+    def distance(other: Vec4Expr): FloatExpr = FloatExpr(
+      s"distance(${v.wgsl}, ${other.wgsl})",
+    )
+    def distance(other: Vec4): FloatExpr = v.distance(other.toExpr)
 
 given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
   def create(x: FloatExpr, y: FloatExpr, z: FloatExpr, w: FloatExpr): Vec4Expr =
@@ -471,6 +545,7 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def +(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} + ${scalar.wgsl})")
     def +(scalar: Double): Vec4Expr = v + (scalar: FloatExpr)
+    def +(other: Vec4): Vec4Expr = v + other.toExpr
     @annotation.targetName("negateVecG")
     override def unary_- : Vec4Expr = Vec4Expr(s"(-${v.wgsl})")
     @annotation.targetName("subVecG")
@@ -480,6 +555,7 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def -(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} - ${scalar.wgsl})")
     def -(scalar: Double): Vec4Expr = v - (scalar: FloatExpr)
+    def -(other: Vec4): Vec4Expr = v - other.toExpr
     @annotation.targetName("mulVecG")
     override def *(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} * ${other.wgsl})")
@@ -487,6 +563,7 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def *(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} * ${scalar.wgsl})")
     def *(scalar: Double): Vec4Expr = v * (scalar: FloatExpr)
+    def *(other: Vec4): Vec4Expr = v * other.toExpr
     @annotation.targetName("divVecG")
     override def /(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} / ${other.wgsl})")
@@ -494,6 +571,7 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def /(scalar: FloatExpr): Vec4Expr =
       Vec4Expr(s"(${v.wgsl} / ${scalar.wgsl})")
     def /(scalar: Double): Vec4Expr = v / (scalar: FloatExpr)
+    def /(other: Vec4): Vec4Expr = v / other.toExpr
 
     override def normalize: Vec4Expr = Vec4Expr(s"normalize(${v.wgsl})")
     override def abs: Vec4Expr = Vec4Expr(s"abs(${v.wgsl})")
@@ -517,12 +595,25 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def pow(e: FloatExpr): Vec4Expr =
       Vec4Expr(s"pow(${v.wgsl}, vec4<f32>(${e.wgsl}))")
     def pow(scalar: Double): Vec4Expr = v.pow(scalar: FloatExpr)
+    def pow(e: Vec4): Vec4Expr = v.pow(e.toExpr)
     override def min(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"min(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("minScalarG")
+    def min(scalar: FloatExpr): Vec4Expr =
+      Vec4Expr(s"min(${v.wgsl}, vec4<f32>(${scalar.wgsl}))")
+    def min(scalar: Double): Vec4Expr = v.min(scalar: FloatExpr)
+    def min(other: Vec4): Vec4Expr = v.min(other.toExpr)
     override def max(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"max(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("maxScalarG")
+    def max(scalar: FloatExpr): Vec4Expr =
+      Vec4Expr(s"max(${v.wgsl}, vec4<f32>(${scalar.wgsl}))")
+    def max(scalar: Double): Vec4Expr = v.max(scalar: FloatExpr)
+    def max(other: Vec4): Vec4Expr = v.max(other.toExpr)
     override def clamp(lo: FloatExpr, hi: FloatExpr): Vec4Expr =
       Vec4Expr(s"clamp(${v.wgsl}, ${lo.wgsl}, ${hi.wgsl})")
+    def clamp(lo: Double, hi: Double): Vec4Expr =
+      v.clamp(lo: FloatExpr, hi: FloatExpr)
     override def clamp01: Vec4Expr = Vec4Expr(s"saturate(${v.wgsl})")
     override def fit0111: Vec4Expr = Vec4Expr(s"(${v.wgsl} * 2.0 - 1.0)")
     override def fit1101: Vec4Expr = Vec4Expr(s"(${v.wgsl} * 0.5 + 0.5)")
@@ -532,12 +623,15 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     @annotation.targetName("mixScalarG")
     override def mix(b: Vec4Expr, t: FloatExpr): Vec4Expr =
       Vec4Expr(s"mix(${v.wgsl}, ${b.wgsl}, ${t.wgsl})")
+    def mix(b: Vec4Expr, t: Double): Vec4Expr = v.mix(b, t: FloatExpr)
     @annotation.targetName("stepVecG")
     override def step(edge: Vec4Expr): Vec4Expr =
       Vec4Expr(s"step(${edge.wgsl}, ${v.wgsl})")
     @annotation.targetName("stepScalarG")
     override def step(edge: FloatExpr): Vec4Expr =
       Vec4Expr(s"step(${edge.wgsl}, ${v.wgsl})")
+    def step(edge: Double): Vec4Expr = v.step(edge: FloatExpr)
+    def step(edge: Vec4): Vec4Expr = v.step(edge.toExpr)
     @annotation.targetName("smoothstepVecG")
     override def smoothstep(edge0: Vec4Expr, edge1: Vec4Expr): Vec4Expr =
       Vec4Expr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${v.wgsl})")
@@ -563,8 +657,14 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
 
     override def reflect(n: Vec4Expr): Vec4Expr =
       Vec4Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
+    def reflect(n: Vec4): Vec4Expr = v.reflect(n.toExpr)
     override def refract(n: Vec4Expr, eta: FloatExpr): Vec4Expr =
       Vec4Expr(s"refract(${v.wgsl}, ${n.wgsl}, ${eta.wgsl})")
+    def refract(n: Vec4Expr, eta: Double): Vec4Expr =
+      v.refract(n, eta: FloatExpr)
+    def refract(n: Vec4, eta: FloatExpr): Vec4Expr = v.refract(n.toExpr, eta)
+    def refract(n: Vec4, eta: Double): Vec4Expr =
+      v.refract(n.toExpr, eta: FloatExpr)
 
 // ---------------------------------------------------------------------------
 // Mat2

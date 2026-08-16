@@ -1,7 +1,7 @@
 # CPU `Vec*` ↔ GPU `Vec*Expr` interop overloads
 
-Status: **in progress** — Stage 0 done, Stage 1 next. Stage 2 cancelled (see
-finding 7).
+Status: **in progress** — Stages 0, 1 and 3 done; Stage 4 next. Stage 2
+cancelled (see finding 7), Stage 6 deferred.
 
 Successor to
 [`done/vec-tuple-expr-interop-plan.md`](done/vec-tuple-expr-interop-plan.md),
@@ -102,6 +102,23 @@ goes from 3 to 5 alternatives (fine). `mix` and `smoothstep` under a full
 CPU/GPU cross-product reach ~14 and ~16 — that is where compile time and
 error-message quality degrade. Stage 4 is the checkpoint.
 
+**Measured after Stages 1+3 (~85 new overloads): no detectable cost.** Clean
+full builds, three runs each, paired against the same tree with the overloads
+stashed:
+
+| build            | baseline (warm)      | after Stages 1+3     |
+| ---------------- | -------------------- | -------------------- |
+| clean `src`      | 7.35 / 6.22 / 5.41 s | 4.28 / 4.24 / 4.81 s |
+| clean `src test` | 4.36 / 5.10 s        | 3.99 / 4.55 / 4.70 s |
+
+The "after" column is _faster_, which is the real finding: run-to-run variance
+(±30%, dominated by JVM/JIT warmup) is far larger than any effect of the
+overloads, so the honest reading is **no measurable impact, not a speedup**. Do
+not quote these as a win. The method for Stage 4 is what matters: measure clean
+builds, ≥3 runs, warm machine, and only treat a delta as real if it clears the
+noise band. Stage 4 roughly doubles the count again and concentrates it on two
+method names, so it is the first place an effect could plausibly appear.
+
 ### 5. Tuples need their own overloads
 
 `given Conversion[Vec3Tuple, Vec3]` (`cpu/vec3.scala:100`) will **not** rescue
@@ -191,17 +208,38 @@ Each ends at a green `bun run check` + `bun run test`.
       See finding (7); the CPU-receiver extension shadows the CPU `*` and
       silently retypes `cpuVec * 2.0` to `Vec3Expr`. Reverted. Baseline:
       `bun run check` ≈ 2.8 s incremental, full test suite green.
-- [ ] **Stage 1 — arithmetic, expr receiver (~24).** `+ - * /` on `VecNExpr`
-      taking CPU `VecN` (12); `+ - * /` on `FloatExpr` taking CPU `Vec2/3/4`
-      (12), beside the existing `fAddVec2`-style broadcasts at
-      `float_expr.scala:75-101`. No cascade.
+- [x] **Stage 1 — arithmetic, expr receiver (24).** Done. `+ - * /` on
+      `VecNExpr` taking CPU `VecN` (12); the same on `FloatExpr` taking CPU
+      `Vec2/3/4` (12), beside the `fAddVec2`-style broadcasts. No `@targetName`
+      anywhere, no cascade — `+ - * /` already had their `Double` siblings.
 - [x] ~~**Stage 2 — arithmetic, CPU receiver.**~~ **Cancelled** by Stage 0 probe
       (d). Receiver position stays `vec3(WallTint) * x`.
-- [ ] **Stage 3 — named binary ops, expr receiver (~37).** `dot`, `distance`,
-      `min`, `max`, `pow`, `step`, `reflect`, `refract`, plus `cross` on Vec3.
-      Also closes the pre-existing `Double` gaps found in Stage 0:
-      `step(Double)`, `mix(b, t: Double)`, `min(Double)`, `max(Double)`, plus
-      `refract(VecNExpr, Double)` defensively.
+- [x] **Stage 3 — named binary ops, expr receiver (~60).** Done. Per vector
+      type: `dot`, `distance`, `min`, `max`, `pow`, `step`, `reflect`,
+      `refract(VecN, FloatExpr)`, `refract(VecN, Double)`, plus `cross` on Vec3.
+      Closed the pre-existing gaps from finding (2): `step(Double)`,
+      `mix(b, t: Double)`, `min(Double)`, `max(Double)`,
+      `clamp(Double, Double)`, `refract(VecNExpr, Double)`.
+
+      Two implementation notes worth keeping:
+
+      - The `VecNBaseG` givens were **alias-form** (`given T = new T: …`), which
+        hides any member not declared in the trait — so `dot`/`distance` CPU
+        overloads could not be added there. Converted to body form
+        (`given T:`), matching how the `VecNImmutableOpsG` givens were already
+        written. Putting them in a top-level extension instead would have
+        re-created the finding-(7) shadowing hazard.
+      - `min`/`max` needed a **`@targetName`** (`minScalarG`/`maxScalarG`) on
+        their new `FloatExpr` scalar form, since it erases to `(Expr)` like the
+        existing `VecNExpr` one. The CPU-`Vec` overloads still need none. These
+        are the only `@targetName`s Stages 1+3 added.
+
+      Call-site check after Stage 3: `halo := band * HaloColor` in
+      `sketches/rooms/canvases/Canvases.scala:267` now compiles and was migrated.
+      `vec3(WallTintLow).lerp(vec3(WallTintHigh), t)` in the same file does
+      **not** yet — `lerp` is an `inline` trait member delegating to `mix`, and
+      its CPU forms belong to Stage 4. Left as-is.
+
 - [ ] **Stage 4 — two-Vec-param ops + comparisons (~99). Checkpoint.**
       `mix`/`lerp` over `b ∈ {VecNExpr, VecN}` ×
       `t ∈ {VecNExpr, VecN, FloatExpr, Double}`; `smoothstep` over both edges in
@@ -213,11 +251,13 @@ Each ends at a green `bun run check` + `bun run test`.
       `Vec4BaseG` evidence and erases to `(Object)`; a CPU `Vec4` overload
       erases to `(Vec4)` — distinct, but this is the one place a `@targetName`
       may still be needed.
-- [ ] **Stage 6 — tuple mirrors (~170, optional).** Mirror Stages 1-5 with
-      `Vec2Tuple`/`Vec3Tuple`/`Vec4Tuple`. Check the `Vec4Tuple` / `Mat2Tuple`
-      erasure overlap (both `Tuple4[Double×4]`) — they never meet in one
-      extension block, but `cpu/package.scala:24` records a live collision of
-      that kind, so confirm.
+- **Stage 6 — tuple mirrors (~170).** **Deferred, not cancelled** — a standing
+  idea to pick up if and when a call site actually wants it. Would mirror Stages
+  1-5 with `Vec2Tuple`/`Vec3Tuple`/`Vec4Tuple`; see finding (5) for why the
+  existing `Conversion[Vec3Tuple, Vec3]` cannot do it for free. Check the
+  `Vec4Tuple` / `Mat2Tuple` erasure overlap (both `Tuple4[Double×4]`) at that
+  point — they never meet in one extension block, but `cpu/package.scala:24`
+  records a live collision of that kind.
 
 ## Files
 
