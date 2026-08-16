@@ -1,7 +1,8 @@
 # CPU `Vec*` ↔ GPU `Vec*Expr` interop overloads
 
-Status: **in progress** — Stages 0, 1 and 3 done; Stage 4 next. Stage 2
-cancelled (see finding 7), Stage 6 deferred.
+Status: **complete** for everything planned — Stages 0, 1, 3, 4, 4b and 5 done.
+Stage 2 cancelled (see finding 7); Stage 6 (tuple mirrors) deferred as a standing
+idea. Move this file to `documents/done/` if Stage 6 is dropped for good.
 
 Successor to
 [`done/vec-tuple-expr-interop-plan.md`](done/vec-tuple-expr-interop-plan.md),
@@ -40,6 +41,26 @@ Goal: maximum interop. This is library code written once and reused across many
 sketches, so overload count and boilerplate are acceptable costs as long as
 compile time and runtime stay sound. The work is staged so every stage is a
 valid stopping point.
+
+## What shipped
+
+Roughly 220 overloads, all one-line delegates through `.toExpr`, across:
+
+| Position | Works now |
+| --- | --- |
+| Arithmetic | `v3e + - * / cpuVec3`, `floatExpr * cpuVec3` |
+| Named binary | `dot distance min max pow step reflect refract cross` with a CPU `Vec` |
+| Blend | `mix` / `lerp` over the full CPU/GPU grid of both params; `smoothstep` over matching edge kinds |
+| Comparison | `< <= > >=` with a CPU `Vec`, a `FloatExpr`, or a `Double` |
+| Assignment | `col := cpuVec`, `ctx.out.color := cpuVec`, `col += cpuVec`, and the `Double`/`Int` forms |
+| Matrix | `matExpr * cpuVec`, `matExpr * cpuMat` |
+
+Plus four pre-existing bugs closed: `v.step(0.5)` and `v.mix(b, 0.5)` did not
+compile (already-overloaded, so the conversion could not fire), and `min`/`max`
+had no scalar form at all.
+
+**Still explicit, by design:** the CPU value as *receiver* — `vec3(WallTint) * x`,
+not `WallTint * x`. See finding (7); this is now a tested invariant.
 
 ## Key findings
 
@@ -102,22 +123,24 @@ goes from 3 to 5 alternatives (fine). `mix` and `smoothstep` under a full
 CPU/GPU cross-product reach ~14 and ~16 — that is where compile time and
 error-message quality degrade. Stage 4 is the checkpoint.
 
-**Measured after Stages 1+3 (~85 new overloads): no detectable cost.** Clean
-full builds, three runs each, paired against the same tree with the overloads
-stashed:
+**Measured: no detectable cost, at any stage.** Clean full builds, 3-4 runs
+each, paired against the same tree with the overloads stashed:
 
-| build            | baseline (warm)      | after Stages 1+3     |
-| ---------------- | -------------------- | -------------------- |
-| clean `src`      | 7.35 / 6.22 / 5.41 s | 4.28 / 4.24 / 4.81 s |
-| clean `src test` | 4.36 / 5.10 s        | 3.99 / 4.55 / 4.70 s |
+| build            | baseline (warm)      | after Stages 1+3     | after Stage 4               |
+| ---------------- | -------------------- | -------------------- | --------------------------- |
+| clean `src`      | 7.35 / 6.22 / 5.41 s | 4.28 / 4.24 / 4.81 s | 4.25 / 4.38 / 4.71 / 4.73 s |
+| clean `src test` | 4.36 / 5.10 s        | 3.99 / 4.55 / 4.70 s | 3.99 / 4.39 / 4.65 / 4.94 s |
 
-The "after" column is _faster_, which is the real finding: run-to-run variance
-(±30%, dominated by JVM/JIT warmup) is far larger than any effect of the
-overloads, so the honest reading is **no measurable impact, not a speedup**. Do
-not quote these as a win. The method for Stage 4 is what matters: measure clean
-builds, ≥3 runs, warm machine, and only treat a delta as real if it clears the
-noise band. Stage 4 roughly doubles the count again and concentrates it on two
-method names, so it is the first place an effect could plausibly appear.
+The "after" columns are _faster_ than baseline, which is the real finding:
+run-to-run variance (±30%, dominated by JVM/JIT warmup) is far larger than any
+effect of the overloads. The honest reading is **no measurable impact — not a
+speedup**; do not quote these as a win.
+
+Conclusion after ~170 added overloads, including ~14 alternatives on `mix` and
+`lerp`: **the superlinear-resolution concern did not materialise at this
+scale.** It remains theoretically real, so keep the method if the surface grows
+again (Stage 6 would roughly double it): clean builds, ≥3 runs, warm machine,
+and only treat a delta as real if it clears the noise band.
 
 ### 5. Tuples need their own overloads
 
@@ -240,17 +263,78 @@ Each ends at a green `bun run check` + `bun run test`.
       **not** yet — `lerp` is an `inline` trait member delegating to `mix`, and
       its CPU forms belong to Stage 4. Left as-is.
 
-- [ ] **Stage 4 — two-Vec-param ops + comparisons (~99). Checkpoint.**
-      `mix`/`lerp` over `b ∈ {VecNExpr, VecN}` ×
-      `t ∈ {VecNExpr, VecN, FloatExpr, Double}`; `smoothstep` over both edges in
-      `{VecNExpr, VecN, FloatExpr, Double}`; `< <= > >=` with CPU `VecN` plus
-      missing `Double` forms. **Measure `bun run check` against the Stage 0
-      baseline.** If it degrades, trim `smoothstep` to the uniform cases.
-- [ ] **Stage 5 — matrices (~8).** `MatNExpr * VecN` and `MatNExpr * MatN`. The
-      existing `Mat4Expr.*[Vec]` (`float_expr.scala:690-694`) is generic via
-      `Vec4BaseG` evidence and erases to `(Object)`; a CPU `Vec4` overload
-      erases to `(Vec4)` — distinct, but this is the one place a `@targetName`
-      may still be needed.
+- [x] **Stage 4 — two-Vec-param ops + comparisons (~84).** Done. Per vector
+      type: `mix` and `lerp` over the full `b ∈ {VecNExpr, VecN}` ×
+      `t ∈ {VecNExpr, VecN, FloatExpr, Double}` grid; `smoothstep` over matching
+      edge kinds; `< <= > >=` with a CPU `VecN`, a `FloatExpr` and a `Double`.
+
+      **`smoothstep` was deliberately not given the full 16-way cross-product.**
+      The plan called for it, but mixing a *scalar* edge with a *vector* edge is
+      a type error in WGSL — `smoothstep(f32, vec3<f32>, vec3<f32>)` does not
+      exist — so those seven combinations could only ever produce invalid shader
+      code. Only matching-kind pairs are provided: `(VecN, VecN)`,
+      `(VecN, VecNExpr)`, `(VecNExpr, VecN)`, `(Double, FloatExpr)`,
+      `(FloatExpr, Double)`, plus the three that already existed. This is fewer
+      overloads *and* strictly better typing — the omitted forms are ones a
+      caller should not be able to write.
+
+      `@targetName` was needed in exactly two places, both from
+      `FloatExpr`/`VecNExpr` sharing the `Expr` erasure: `mix`/`lerp` with a CPU
+      `b` (`mixCpuVecG` / `mixCpuScalarG` and the `lerp` twins), and the scalar
+      form of each comparison (`ltScalarG` … `gteScalarG`).
+
+      **Compile time: still no measurable effect.** Four clean runs each,
+      same method as finding (4): `src` 4.25–4.73 s, `src test` 3.99–4.94 s —
+      indistinguishable from the Stage 1+3 numbers and from baseline noise. The
+      superlinear-overload-resolution worry did not materialise at ~170 total
+      added overloads, so no trimming was needed on those grounds.
+
+      Call sites migrated after this stage:
+      `sketches/rooms/canvases/Canvases.scala` (`lerp(WallTintHigh, …)`) and
+      `sketches/templates/rooms/grid-canvases/GridCanvases.scala` (three `lerp`
+      sites). Both sketches rebuild. Bundle diffs are minified and prove nothing,
+      so the guarantee is a permanent equivalence test asserting that dropping a
+      `vecN(...)` wrapper emits byte-identical WGSL.
+
+- [x] **Stage 4b — assignment operators (~46).** Not in the original plan; added
+      because `:=` is the most common write position in a shader body and
+      `ctx.out.color := WallColor` was still forcing a wrapper.
+
+      Three sites, all previously taking a bare `Expr` and **not** overloaded:
+      `LetExpr.:=` (`gpu/expr.scala`, inherited by `VarExpr`/`ConstExpr`, whose
+      overrides still dispatch correctly because the new forms delegate to the
+      `Expr` one), `VarExpr.+= -= *= /=`, and `AssignTarget.:=`
+      (`shader/dsl/context.scala`, the `ctx.out.*` path). Each gained `Vec2/3/4`
+      — plus `Mat2/3/4` on the `:=` forms — and `Double`/`Int`.
+
+      **The `Double`/`Int` forms were mandatory here, not optional.** `n := 0.5`
+      worked because `Conversion[Double, FloatExpr]` conforms to
+      `Conversion[Double, Expr]` — `Conversion` is covariant in its result — so
+      the conversion reached a parameter typed `Expr`. Overloading `:=` blocks
+      that path. This was verified by probe before the change, and is now pinned
+      by tests; without it every `x := 0.5` in every shader body would break.
+
+      `context.scala` also needed `import trivalibs.graphics.math.gpu.given`
+      added — the existing wildcard `gpu.*` import does not bring givens into
+      scope, so the `Double` ascription could not find its conversion.
+
+      Verified by building **all 13 sketches** and `bun run examples:build`,
+      since `:=` appears in essentially every shader body.
+
+- [x] **Stage 5 — matrices (6).** Done. `MatNExpr * VecN` and `MatNExpr * MatN`
+      for N = 2, 3, 4, in the three `MatNImmutableOpsG` given blocks.
+
+      The anticipated `@targetName` was **not** needed. The existing
+      `MatNExpr.*[Vec]` is generic over the vector representation via
+      `VecNBaseG[FloatExpr, Vec]` evidence and erases to `(Object)`, the
+      `MatNExpr` overload erases to `(Expr)`, and the new CPU forms erase to
+      `(VecN)` / `(MatN)` — all four distinct.
+
+      Note the generic `*[Vec]` cannot serve CPU operands even though it looks
+      like it should: it demands `VecNBaseG[FloatExpr, Vec]`, and a CPU `Vec4`
+      only has `Vec4Base[Vec4]` — i.e. `Vec4BaseG[Double, Vec4]`. Different
+      `Num` parameter, so no evidence. Hence the explicit overloads. Tests pin
+      that the generic and `MatNExpr` forms still resolve alongside them.
 - **Stage 6 — tuple mirrors (~170).** **Deferred, not cancelled** — a standing
   idea to pick up if and when a call site actually wants it. Would mirror Stages
   1-5 with `Vec2Tuple`/`Vec3Tuple`/`Vec4Tuple`; see finding (5) for why the
@@ -264,6 +348,8 @@ Each ends at a green `bun run check` + `bun run test`.
 | File                                      | Role                                                                                                                                                                                     |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/graphics/math/gpu/float_expr.scala`  | Everything. The `VecNImmutableOpsG` given blocks (`:206-311`, `:332-439`, `:461-566`), `VecNBaseG` blocks, `NumOps[FloatExpr]` (`:50-103`), `Mat4Expr` extension (`:685-694`).           |
+| `src/graphics/math/gpu/expr.scala`        | `LetExpr.:=` and `VarExpr.+= -= *= /=` CPU/literal overloads (Stage 4b).                                                                                                                 |
+| `src/graphics/shader/dsl/context.scala`   | `AssignTarget.:=` CPU/literal overloads (Stage 4b), plus the `gpu.given` import they need.                                                                                               |
 | `src/graphics/math/gpu/cpu_interop.scala` | Comments only. Fix the contradictory pair at `:11-17` (claims the conversions are "also available implicitly" — they are not, per `:66-75`) and record the finding-(7) result beside it. |
 | `test/math/CpuVecInterop.test.scala`      | New. Modelled on `test/math/Swizzle.test.scala`; asserts emitted WGSL per family plus the finding-(2) regression block.                                                                  |
 

@@ -37,6 +37,23 @@ class Expr(val wgsl: String):
 class LetExpr(val name: String) extends Expr(name):
   def :=(value: Expr): Stmt = Stmt.let(name, value)
 
+  // CPU-value assignment — `col := WallTint`. Each delegates to the `Expr`
+  // form above, so the `VarExpr` / `ConstExpr` overrides still apply.
+  //
+  // The `Double`/`Int` forms are not a convenience: `n := 0.5` used to reach
+  // `:=(Expr)` through `Conversion[Double, FloatExpr]` (which conforms to
+  // `Conversion[Double, Expr]` since `Conversion` is covariant in its result).
+  // Turning `:=` into an overload set kills that path, so they are required to
+  // keep existing shader code compiling.
+  def :=(value: Double): Stmt = this := FloatExpr(floatToWgsl(value))
+  def :=(value: Int): Stmt = this := FloatExpr(s"f32($value)")
+  def :=(value: Vec2): Stmt = this := value.toExpr
+  def :=(value: Vec3): Stmt = this := value.toExpr
+  def :=(value: Vec4): Stmt = this := value.toExpr
+  def :=(value: Mat2): Stmt = this := value.toExpr
+  def :=(value: Mat3): Stmt = this := value.toExpr
+  def :=(value: Mat4): Stmt = this := value.toExpr
+
 /** A mutable WGSL `var` local: the first `:=` declares it, later `:=` reassign.
   * Use for accumulation (e.g. `VarVec3("col")`). The compound forms `+= -= *=
   * /=` emit WGSL compound assignment (`col += …;`) and require the `var` to be
@@ -50,10 +67,36 @@ class VarExpr(name: String) extends LetExpr(name):
       Stmt.varDecl(name, value)
     else Stmt.varAssign(name, value)
 
+  // Compound assignment. Each operator carries the same overload set as `:=`
+  // above: the `Expr` form, CPU `Vec*` operands, and the `Double`/`Int` forms
+  // needed to keep `col *= 0.5` working once these become overload sets.
   def +=(value: Expr): Stmt = Stmt.compound(name, "+", value)
+  def +=(value: Double): Stmt = this += FloatExpr(floatToWgsl(value))
+  def +=(value: Int): Stmt = this += FloatExpr(s"f32($value)")
+  def +=(value: Vec2): Stmt = this += value.toExpr
+  def +=(value: Vec3): Stmt = this += value.toExpr
+  def +=(value: Vec4): Stmt = this += value.toExpr
+
   def -=(value: Expr): Stmt = Stmt.compound(name, "-", value)
+  def -=(value: Double): Stmt = this -= FloatExpr(floatToWgsl(value))
+  def -=(value: Int): Stmt = this -= FloatExpr(s"f32($value)")
+  def -=(value: Vec2): Stmt = this -= value.toExpr
+  def -=(value: Vec3): Stmt = this -= value.toExpr
+  def -=(value: Vec4): Stmt = this -= value.toExpr
+
   def *=(value: Expr): Stmt = Stmt.compound(name, "*", value)
+  def *=(value: Double): Stmt = this *= FloatExpr(floatToWgsl(value))
+  def *=(value: Int): Stmt = this *= FloatExpr(s"f32($value)")
+  def *=(value: Vec2): Stmt = this *= value.toExpr
+  def *=(value: Vec3): Stmt = this *= value.toExpr
+  def *=(value: Vec4): Stmt = this *= value.toExpr
+
   def /=(value: Expr): Stmt = Stmt.compound(name, "/", value)
+  def /=(value: Double): Stmt = this /= FloatExpr(floatToWgsl(value))
+  def /=(value: Int): Stmt = this /= FloatExpr(s"f32($value)")
+  def /=(value: Vec2): Stmt = this /= value.toExpr
+  def /=(value: Vec3): Stmt = this /= value.toExpr
+  def /=(value: Vec4): Stmt = this /= value.toExpr
 
 /** A WGSL `const` local (compile-time constant). */
 class ConstExpr(name: String) extends LetExpr(name):

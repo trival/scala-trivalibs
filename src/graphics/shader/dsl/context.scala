@@ -1,6 +1,7 @@
 package trivalibs.graphics.shader.dsl
 
 import trivalibs.graphics.math.gpu.*
+import trivalibs.graphics.math.gpu.given
 import trivalibs.utils.js.*
 
 import scala.NamedTuple
@@ -59,6 +60,19 @@ class TypedAssignAccessor[F <: AnyNamedTuple](prefix: String)
 
 class AssignTarget(val target: String):
   inline def :=(value: Expr): Stmt = Stmt.assign(target, value)
+
+  // CPU-value assignment — `ctx.out.color := WallColor`. The `Double`/`Int`
+  // forms are required, not convenience: `ctx.out.depth := 1.0` reached the
+  // `Expr` form through `Conversion[Double, FloatExpr]`, and an overload set
+  // blocks implicit conversion. See documents/cpu-gpu-vec-interop-plan.md (2).
+  inline def :=(value: Double): Stmt = this := (value: FloatExpr)
+  inline def :=(value: Int): Stmt = this := (value: FloatExpr)
+  inline def :=(value: Vec2): Stmt = this := value.toExpr
+  inline def :=(value: Vec3): Stmt = this := value.toExpr
+  inline def :=(value: Vec4): Stmt = this := value.toExpr
+  inline def :=(value: Mat2): Stmt = this := value.toExpr
+  inline def :=(value: Mat3): Stmt = this := value.toExpr
+  inline def :=(value: Mat4): Stmt = this := value.toExpr
 
 /** Typed read+write accessor for local variables.
   *

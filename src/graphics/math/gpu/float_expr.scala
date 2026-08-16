@@ -314,6 +314,24 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
     override def mix(b: Vec2Expr, t: FloatExpr): Vec2Expr =
       Vec2Expr(s"mix(${v.wgsl}, ${b.wgsl}, ${t.wgsl})")
     def mix(b: Vec2Expr, t: Double): Vec2Expr = v.mix(b, t: FloatExpr)
+    def mix(b: Vec2Expr, t: Vec2): Vec2Expr = v.mix(b, t.toExpr)
+    @annotation.targetName("mixCpuVecG")
+    def mix(b: Vec2, t: Vec2Expr): Vec2Expr = v.mix(b.toExpr, t)
+    @annotation.targetName("mixCpuScalarG")
+    def mix(b: Vec2, t: FloatExpr): Vec2Expr = v.mix(b.toExpr, t)
+    def mix(b: Vec2, t: Vec2): Vec2Expr = v.mix(b.toExpr, t.toExpr)
+    def mix(b: Vec2, t: Double): Vec2Expr = v.mix(b.toExpr, t: FloatExpr)
+
+    // `lerp` is an inline trait member delegating to `mix`; the trait supplies
+    // only the two all-expr forms, so the remaining combinations are added here.
+    def lerp(b: Vec2Expr, t: Double): Vec2Expr = v.mix(b, t: FloatExpr)
+    def lerp(b: Vec2Expr, t: Vec2): Vec2Expr = v.mix(b, t.toExpr)
+    @annotation.targetName("lerpCpuVecG")
+    def lerp(b: Vec2, t: Vec2Expr): Vec2Expr = v.mix(b.toExpr, t)
+    @annotation.targetName("lerpCpuScalarG")
+    def lerp(b: Vec2, t: FloatExpr): Vec2Expr = v.mix(b.toExpr, t)
+    def lerp(b: Vec2, t: Vec2): Vec2Expr = v.mix(b.toExpr, t.toExpr)
+    def lerp(b: Vec2, t: Double): Vec2Expr = v.mix(b.toExpr, t: FloatExpr)
     @annotation.targetName("stepVecG")
     override def step(edge: Vec2Expr): Vec2Expr =
       Vec2Expr(s"step(${edge.wgsl}, ${v.wgsl})")
@@ -332,18 +350,46 @@ given Vec2ImmutableOpsG[FloatExpr, Vec2Expr]:
       )
     def smoothstep(edge0: Double, edge1: Double): Vec2Expr =
       v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
+    // Both edges must be the same kind — a scalar edge paired with a vector one
+    // is a type error in WGSL, so those combinations are deliberately absent.
+    def smoothstep(edge0: Vec2, edge1: Vec2): Vec2Expr =
+      v.smoothstep(edge0.toExpr, edge1.toExpr)
+    def smoothstep(edge0: Vec2, edge1: Vec2Expr): Vec2Expr =
+      v.smoothstep(edge0.toExpr, edge1)
+    def smoothstep(edge0: Vec2Expr, edge1: Vec2): Vec2Expr =
+      v.smoothstep(edge0, edge1.toExpr)
+    def smoothstep(edge0: Double, edge1: FloatExpr): Vec2Expr =
+      v.smoothstep(edge0: FloatExpr, edge1)
+    def smoothstep(edge0: FloatExpr, edge1: Double): Vec2Expr =
+      v.smoothstep(edge0, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
     override def <(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"(1.0 - step(${other.wgsl}, ${v.wgsl}))")
+    @annotation.targetName("ltScalarG")
+    def <(scalar: FloatExpr): Vec2Expr = v < vec2(scalar)
+    def <(scalar: Double): Vec2Expr = v < (scalar: FloatExpr)
+    def <(other: Vec2): Vec2Expr = v < other.toExpr
     @annotation.targetName("lteVecG")
     override def <=(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"step(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("lteScalarG")
+    def <=(scalar: FloatExpr): Vec2Expr = v <= vec2(scalar)
+    def <=(scalar: Double): Vec2Expr = v <= (scalar: FloatExpr)
+    def <=(other: Vec2): Vec2Expr = v <= other.toExpr
     @annotation.targetName("gtVecG")
     override def >(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"(1.0 - step(${v.wgsl}, ${other.wgsl}))")
+    @annotation.targetName("gtScalarG")
+    def >(scalar: FloatExpr): Vec2Expr = v > vec2(scalar)
+    def >(scalar: Double): Vec2Expr = v > (scalar: FloatExpr)
+    def >(other: Vec2): Vec2Expr = v > other.toExpr
     @annotation.targetName("gteVecG")
     override def >=(other: Vec2Expr): Vec2Expr =
       Vec2Expr(s"step(${other.wgsl}, ${v.wgsl})")
+    @annotation.targetName("gteScalarG")
+    def >=(scalar: FloatExpr): Vec2Expr = v >= vec2(scalar)
+    def >=(scalar: Double): Vec2Expr = v >= (scalar: FloatExpr)
+    def >=(other: Vec2): Vec2Expr = v >= other.toExpr
 
     override def reflect(n: Vec2Expr): Vec2Expr =
       Vec2Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
@@ -470,6 +516,24 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
     override def mix(b: Vec3Expr, t: FloatExpr): Vec3Expr =
       Vec3Expr(s"mix(${v.wgsl}, ${b.wgsl}, ${t.wgsl})")
     def mix(b: Vec3Expr, t: Double): Vec3Expr = v.mix(b, t: FloatExpr)
+    def mix(b: Vec3Expr, t: Vec3): Vec3Expr = v.mix(b, t.toExpr)
+    @annotation.targetName("mixCpuVecG")
+    def mix(b: Vec3, t: Vec3Expr): Vec3Expr = v.mix(b.toExpr, t)
+    @annotation.targetName("mixCpuScalarG")
+    def mix(b: Vec3, t: FloatExpr): Vec3Expr = v.mix(b.toExpr, t)
+    def mix(b: Vec3, t: Vec3): Vec3Expr = v.mix(b.toExpr, t.toExpr)
+    def mix(b: Vec3, t: Double): Vec3Expr = v.mix(b.toExpr, t: FloatExpr)
+
+    // `lerp` is an inline trait member delegating to `mix`; the trait supplies
+    // only the two all-expr forms, so the remaining combinations are added here.
+    def lerp(b: Vec3Expr, t: Double): Vec3Expr = v.mix(b, t: FloatExpr)
+    def lerp(b: Vec3Expr, t: Vec3): Vec3Expr = v.mix(b, t.toExpr)
+    @annotation.targetName("lerpCpuVecG")
+    def lerp(b: Vec3, t: Vec3Expr): Vec3Expr = v.mix(b.toExpr, t)
+    @annotation.targetName("lerpCpuScalarG")
+    def lerp(b: Vec3, t: FloatExpr): Vec3Expr = v.mix(b.toExpr, t)
+    def lerp(b: Vec3, t: Vec3): Vec3Expr = v.mix(b.toExpr, t.toExpr)
+    def lerp(b: Vec3, t: Double): Vec3Expr = v.mix(b.toExpr, t: FloatExpr)
     @annotation.targetName("stepVecG")
     override def step(edge: Vec3Expr): Vec3Expr =
       Vec3Expr(s"step(${edge.wgsl}, ${v.wgsl})")
@@ -488,18 +552,46 @@ given Vec3ImmutableOpsG[FloatExpr, Vec3Expr]:
       )
     def smoothstep(edge0: Double, edge1: Double): Vec3Expr =
       v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
+    // Both edges must be the same kind — a scalar edge paired with a vector one
+    // is a type error in WGSL, so those combinations are deliberately absent.
+    def smoothstep(edge0: Vec3, edge1: Vec3): Vec3Expr =
+      v.smoothstep(edge0.toExpr, edge1.toExpr)
+    def smoothstep(edge0: Vec3, edge1: Vec3Expr): Vec3Expr =
+      v.smoothstep(edge0.toExpr, edge1)
+    def smoothstep(edge0: Vec3Expr, edge1: Vec3): Vec3Expr =
+      v.smoothstep(edge0, edge1.toExpr)
+    def smoothstep(edge0: Double, edge1: FloatExpr): Vec3Expr =
+      v.smoothstep(edge0: FloatExpr, edge1)
+    def smoothstep(edge0: FloatExpr, edge1: Double): Vec3Expr =
+      v.smoothstep(edge0, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
     override def <(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"(1.0 - step(${other.wgsl}, ${v.wgsl}))")
+    @annotation.targetName("ltScalarG")
+    def <(scalar: FloatExpr): Vec3Expr = v < vec3(scalar)
+    def <(scalar: Double): Vec3Expr = v < (scalar: FloatExpr)
+    def <(other: Vec3): Vec3Expr = v < other.toExpr
     @annotation.targetName("lteVecG")
     override def <=(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"step(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("lteScalarG")
+    def <=(scalar: FloatExpr): Vec3Expr = v <= vec3(scalar)
+    def <=(scalar: Double): Vec3Expr = v <= (scalar: FloatExpr)
+    def <=(other: Vec3): Vec3Expr = v <= other.toExpr
     @annotation.targetName("gtVecG")
     override def >(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"(1.0 - step(${v.wgsl}, ${other.wgsl}))")
+    @annotation.targetName("gtScalarG")
+    def >(scalar: FloatExpr): Vec3Expr = v > vec3(scalar)
+    def >(scalar: Double): Vec3Expr = v > (scalar: FloatExpr)
+    def >(other: Vec3): Vec3Expr = v > other.toExpr
     @annotation.targetName("gteVecG")
     override def >=(other: Vec3Expr): Vec3Expr =
       Vec3Expr(s"step(${other.wgsl}, ${v.wgsl})")
+    @annotation.targetName("gteScalarG")
+    def >=(scalar: FloatExpr): Vec3Expr = v >= vec3(scalar)
+    def >=(scalar: Double): Vec3Expr = v >= (scalar: FloatExpr)
+    def >=(other: Vec3): Vec3Expr = v >= other.toExpr
 
     override def reflect(n: Vec3Expr): Vec3Expr =
       Vec3Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
@@ -624,6 +716,24 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
     override def mix(b: Vec4Expr, t: FloatExpr): Vec4Expr =
       Vec4Expr(s"mix(${v.wgsl}, ${b.wgsl}, ${t.wgsl})")
     def mix(b: Vec4Expr, t: Double): Vec4Expr = v.mix(b, t: FloatExpr)
+    def mix(b: Vec4Expr, t: Vec4): Vec4Expr = v.mix(b, t.toExpr)
+    @annotation.targetName("mixCpuVecG")
+    def mix(b: Vec4, t: Vec4Expr): Vec4Expr = v.mix(b.toExpr, t)
+    @annotation.targetName("mixCpuScalarG")
+    def mix(b: Vec4, t: FloatExpr): Vec4Expr = v.mix(b.toExpr, t)
+    def mix(b: Vec4, t: Vec4): Vec4Expr = v.mix(b.toExpr, t.toExpr)
+    def mix(b: Vec4, t: Double): Vec4Expr = v.mix(b.toExpr, t: FloatExpr)
+
+    // `lerp` is an inline trait member delegating to `mix`; the trait supplies
+    // only the two all-expr forms, so the remaining combinations are added here.
+    def lerp(b: Vec4Expr, t: Double): Vec4Expr = v.mix(b, t: FloatExpr)
+    def lerp(b: Vec4Expr, t: Vec4): Vec4Expr = v.mix(b, t.toExpr)
+    @annotation.targetName("lerpCpuVecG")
+    def lerp(b: Vec4, t: Vec4Expr): Vec4Expr = v.mix(b.toExpr, t)
+    @annotation.targetName("lerpCpuScalarG")
+    def lerp(b: Vec4, t: FloatExpr): Vec4Expr = v.mix(b.toExpr, t)
+    def lerp(b: Vec4, t: Vec4): Vec4Expr = v.mix(b.toExpr, t.toExpr)
+    def lerp(b: Vec4, t: Double): Vec4Expr = v.mix(b.toExpr, t: FloatExpr)
     @annotation.targetName("stepVecG")
     override def step(edge: Vec4Expr): Vec4Expr =
       Vec4Expr(s"step(${edge.wgsl}, ${v.wgsl})")
@@ -642,18 +752,46 @@ given Vec4ImmutableOpsG[FloatExpr, Vec4Expr]:
       )
     def smoothstep(edge0: Double, edge1: Double): Vec4Expr =
       v.smoothstep(edge0: FloatExpr, edge1: FloatExpr)
+    // Both edges must be the same kind — a scalar edge paired with a vector one
+    // is a type error in WGSL, so those combinations are deliberately absent.
+    def smoothstep(edge0: Vec4, edge1: Vec4): Vec4Expr =
+      v.smoothstep(edge0.toExpr, edge1.toExpr)
+    def smoothstep(edge0: Vec4, edge1: Vec4Expr): Vec4Expr =
+      v.smoothstep(edge0.toExpr, edge1)
+    def smoothstep(edge0: Vec4Expr, edge1: Vec4): Vec4Expr =
+      v.smoothstep(edge0, edge1.toExpr)
+    def smoothstep(edge0: Double, edge1: FloatExpr): Vec4Expr =
+      v.smoothstep(edge0: FloatExpr, edge1)
+    def smoothstep(edge0: FloatExpr, edge1: Double): Vec4Expr =
+      v.smoothstep(edge0, edge1: FloatExpr)
     @annotation.targetName("ltVecG")
     override def <(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"(1.0 - step(${other.wgsl}, ${v.wgsl}))")
+    @annotation.targetName("ltScalarG")
+    def <(scalar: FloatExpr): Vec4Expr = v < vec4(scalar)
+    def <(scalar: Double): Vec4Expr = v < (scalar: FloatExpr)
+    def <(other: Vec4): Vec4Expr = v < other.toExpr
     @annotation.targetName("lteVecG")
     override def <=(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"step(${v.wgsl}, ${other.wgsl})")
+    @annotation.targetName("lteScalarG")
+    def <=(scalar: FloatExpr): Vec4Expr = v <= vec4(scalar)
+    def <=(scalar: Double): Vec4Expr = v <= (scalar: FloatExpr)
+    def <=(other: Vec4): Vec4Expr = v <= other.toExpr
     @annotation.targetName("gtVecG")
     override def >(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"(1.0 - step(${v.wgsl}, ${other.wgsl}))")
+    @annotation.targetName("gtScalarG")
+    def >(scalar: FloatExpr): Vec4Expr = v > vec4(scalar)
+    def >(scalar: Double): Vec4Expr = v > (scalar: FloatExpr)
+    def >(other: Vec4): Vec4Expr = v > other.toExpr
     @annotation.targetName("gteVecG")
     override def >=(other: Vec4Expr): Vec4Expr =
       Vec4Expr(s"step(${other.wgsl}, ${v.wgsl})")
+    @annotation.targetName("gteScalarG")
+    def >=(scalar: FloatExpr): Vec4Expr = v >= vec4(scalar)
+    def >=(scalar: Double): Vec4Expr = v >= (scalar: FloatExpr)
+    def >=(other: Vec4): Vec4Expr = v >= other.toExpr
 
     override def reflect(n: Vec4Expr): Vec4Expr =
       Vec4Expr(s"reflect(${v.wgsl}, ${n.wgsl})")
@@ -699,6 +837,13 @@ given Mat2ImmutableOpsG[FloatExpr, Mat2Expr]:
         Vec2ImmutableOpsG[FloatExpr, Vec],
     ): Vec =
       Vec2Expr(s"(${m.wgsl} * ${v.asInstanceOf[Expr].wgsl})").asInstanceOf[Vec]
+    // CPU operands. The generic `*[Vec]` above cannot serve these: it demands
+    // `Vec2BaseG[FloatExpr, Vec]` evidence, and a CPU `Vec2` only has
+    // `Vec2Base[Vec2]` (i.e. `Vec2BaseG[Double, Vec2]`).
+    def *(v: Vec2): Vec2Expr =
+      Vec2Expr(s"(${m.wgsl} * ${v.toExpr.wgsl})")
+    def *(other: Mat2): Mat2Expr =
+      Mat2Expr(s"(${m.wgsl} * ${other.toExpr.wgsl})")
 
 // ---------------------------------------------------------------------------
 // Mat3
@@ -745,6 +890,11 @@ given Mat3ImmutableOpsG[FloatExpr, Mat3Expr]:
         Vec3ImmutableOpsG[FloatExpr, Vec],
     ): Vec =
       Vec3Expr(s"(${m.wgsl} * ${v.asInstanceOf[Expr].wgsl})").asInstanceOf[Vec]
+    // CPU operands — see the note on the Mat2 block above.
+    def *(v: Vec3): Vec3Expr =
+      Vec3Expr(s"(${m.wgsl} * ${v.toExpr.wgsl})")
+    def *(other: Mat3): Mat3Expr =
+      Mat3Expr(s"(${m.wgsl} * ${other.toExpr.wgsl})")
 
 // ---------------------------------------------------------------------------
 // Mat4
@@ -793,6 +943,11 @@ given Mat4ImmutableOpsG[FloatExpr, Mat4Expr]:
         Vec4ImmutableOpsG[FloatExpr, Vec],
     ): Vec =
       Vec4Expr(s"(${m.wgsl} * ${v.asInstanceOf[Expr].wgsl})").asInstanceOf[Vec]
+    // CPU operands — see the note on the Mat2 block above.
+    def *(v: Vec4): Vec4Expr =
+      Vec4Expr(s"(${m.wgsl} * ${v.toExpr.wgsl})")
+    def *(other: Mat4): Mat4Expr =
+      Mat4Expr(s"(${m.wgsl} * ${other.toExpr.wgsl})")
 
 // ---------------------------------------------------------------------------
 // Swizzles — consecutive sub-vector splits + full-arity reverse.
