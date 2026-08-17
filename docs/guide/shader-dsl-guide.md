@@ -219,6 +219,47 @@ returns a `Vec` mask (1.0 / 0.0 per lane, lowered to WGSL `step`) rather than a
 either side. Use a scalar `FloatExpr` comparison when you want a `BoolExpr` for
 control flow.
 
+### CPU `Vec*` / `Mat*` in shader code
+
+A CPU-side `Vec2–4` / `Mat2–4` can be used directly in a shader body — it lowers
+to a WGSL **literal** baked in at shader-build time (no uniform, no binding).
+This is how a constant gets authored once and used on both sides:
+
+```scala
+val CeilTint = Vec3(0.86, 0.86, 0.85)      // CPU value, also usable CPU-side
+
+program.frag: ctx =>
+  col := ctx.in.light * CeilTint            // CPU value on the right: just works
+```
+
+**Right-hand side: no conversion needed.** GPU ops carry CPU overloads, so a
+`Vec*`/`Mat*` is accepted wherever an expression operand is expected:
+
+- assignment — `:=`, and the compound `+= -= *= /=`
+- arithmetic — `+ - * /` (both `expr op cpuVec` and `floatExpr op cpuVec`)
+- vector ops — `.dot .cross .distance .min .max .pow .reflect`
+- interpolation / steps — `.mix .lerp .step .smoothstep`
+- component-wise comparisons — `< <= > >=`
+
+**Receiver position: convert explicitly.** There is deliberately **no**
+`given Conversion[Vec3, Vec3Expr]` (it would make every GPU extension apply to
+CPU values, so `v.xy` becomes an ambiguous extension between the CPU and GPU
+swizzles in any file importing both — i.e. the standard sketch preamble). So a
+CPU value as the *left* operand does not compile — the compiler tries the CPU
+extensions, fails, and does not fall back:
+
+```scala
+CeilTint * noise            // ✗ does not compile
+CeilTint.toExpr * noise     // ✓ explicit lift
+vec3(CeilTint) * noise      // ✓ same thing via the constructor
+```
+
+`.toExpr` exists on `Vec2–4` and `Mat2–4`; `vec2`/`vec3`/`vec4` also take a CPU
+vector directly. Both run once at build time and produce a WGSL string, so the
+choice is purely about readability. Keeping the crossing explicit is the point —
+it matches the `Vec3(…)` (CPU) vs `vec3(…)` (GPU) case convention, so the domain
+barrier stays visible where it is crossed.
+
 ### Textures: sample vs load, and depth
 
 `sample` / `sampleLevel` take normalized UV (`[0,1]`) plus a `Sampler`, with

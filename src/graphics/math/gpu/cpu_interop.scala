@@ -8,13 +8,15 @@ package trivalibs.graphics.math.gpu
 //   val CeilTint = Vec3(0.86, 0.86, 0.85)   // authored once, CPU side
 //   col := CeilTint.toExpr * roomNoise(wp, normal)
 //
-// Each conversion is also available implicitly, so a CPU value is accepted
-// directly wherever an expression is expected (function arguments, the right
-// side of `:=`). Note that implicit conversion does *not* fire in operator
-// *receiver* position — `CeilTint * someFloatExpr` will not compile, because
-// the compiler tries the CPU `Vec3ImmutableOps` extensions, fails, and does not
-// fall back to converting the receiver. Write `CeilTint.toExpr * x` or
-// `vec3(CeilTint) * x` there.
+// The GPU ops also carry CPU overloads (`:=`, `+= -= *= /=`, `+ - * /`, `dot`,
+// `cross`, `distance`, `min`, `max`, `pow`, `mix`/`lerp`, `step`, `smoothstep`,
+// `reflect`, the component-wise comparisons), so a CPU value is accepted
+// directly as an operand without `.toExpr`. That covers the right-hand side
+// only — in operator *receiver* position `CeilTint * someFloatExpr` will not
+// compile, because the compiler tries the CPU `Vec3ImmutableOps` extensions,
+// fails, and does not fall back to converting the receiver (there is no
+// implicit conversion — see the note at the bottom of this file). Write
+// `CeilTint.toExpr * x` or `vec3(CeilTint) * x` there.
 //
 // These run at shader *build* time (once, at startup) and produce a WGSL
 // string, so they are deliberately not `inline` and are not on any hot path.
