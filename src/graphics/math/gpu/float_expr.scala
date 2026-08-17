@@ -122,9 +122,12 @@ given NumOps[FloatExpr]:
   def one: FloatExpr = FloatExpr("1.0")
 
 /** Scalar math on `FloatExpr` mapping to WGSL builtins: `.sqrt .pow .sin .cos
-  * .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix .step
-  * .smoothstep .fit0111 .fit1101` and comparisons (`<`, `>`, … → `BoolExpr`).
-  * Mirrors the CPU `NumExt`, so shader math reads like CPU math.
+  * .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix
+  * .lerp .lerpIn .step .smoothstep .fit0111 .fit1101` and comparisons (`<`,
+  * `>`, … → `BoolExpr`). Mirrors the CPU `NumExt`, so shader math reads like
+  * CPU math. `.lerp` / `.lerpIn` are inherited from the trait — `.lerpIn` takes
+  * the bounds as arguments (`hash.lerpIn(0.6, 1.0)`), which is the readable
+  * spelling when `t` varies per fragment and the bounds are constants.
   */
 
 given NumExt[FloatExpr]:

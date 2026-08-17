@@ -39,7 +39,8 @@ object NumOps:
 
 /** Scalar math extensions on `Double`/`Float` (given instances in [[NumExt]]'s
   * companion): `.sqrt .pow .sin .cos .tan .abs .floor .ceil .fract .exp .log
-  * .min .max .clamp .clamp01 .mix .lerp .step .smoothstep .fit0111 .fit1101`,
+  * .min .max .clamp .clamp01 .mix .lerp .lerpIn .step .smoothstep .fit0111
+  * .fit1101`,
   * etc. Prefer these over `math.*` (`x.sin`, not `math.sin(x)`) — the same
   * names exist on the GPU `Expr` types, so CPU and shader math read alike.
   * `import trivalibs.utils.numbers.NumExt.given` to use them.
@@ -88,6 +89,14 @@ trait NumExt[P]:
     def fit1101: P
     def mix(b: P, t: P): P
     inline def lerp(b: P, t: P): P = mix(b, t)
+
+    /** Reverse-argument [[lerp]] — the receiver is the interpolation parameter
+      * `t`, the bounds are the arguments: `t.lerpIn(lo, hi) == lo.lerp(hi, t)`.
+      * Reads better when `t` is the varying value and the bounds are constants,
+      * e.g. `hash.lerpIn(0.6, 1.0)` in a shader. Not an overload of `lerp` —
+      * both would erase to the same signature.
+      */
+    inline def lerpIn(lo: P, hi: P): P = lo.mix(hi, p)
 
     def gte(edge: P): P // 1 if self >= edge, else 0
     def gt(edge: P): P // 1 if self >  edge, else 0
