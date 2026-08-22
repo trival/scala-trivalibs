@@ -1,5 +1,16 @@
 package trivalibs.utils.numbers
 
+/** π as a compile-time constant, so sketch and library code can write `Pi`
+  * unqualified instead of reaching into the `math` namespace.
+  * `import trivalibs.utils.numbers.*`.
+  */
+inline val Pi = 3.141592653589793
+
+/** τ = 2π — a full turn. The natural unit for angles: `t * Tau` is one
+  * revolution, `Tau / 6` is a sixth of a circle.
+  */
+inline val Tau = 6.283185307179586
+
 inline given Conversion[Float, Float] = identity
 inline given Conversion[Double, Double] = identity
 inline given Conversion[Float, Double] = identity
