@@ -1,10 +1,11 @@
 package trivalibs.dev
 
 import munit.FunSuite
-import scala.scalajs.js
 import trivalibs.graphics.math.cpu.Quat
 import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.utils.js.*
+
+import scala.scalajs.js
 
 // Pure round-trip tests for the JSON codecs. The storage / import.meta paths
 // need a real browser and aren't exercised here; the codec logic is pure.

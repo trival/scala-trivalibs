@@ -1,7 +1,7 @@
 package trivalibs.graphics.buffers
 
-import trivalibs.graphics.shader.WGSLType
 import trivalibs.bufferdata.StructArray
+import trivalibs.graphics.shader.WGSLType
 
 import scala.NamedTuple.AnyNamedTuple
 

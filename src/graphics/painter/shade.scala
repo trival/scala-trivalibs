@@ -1,7 +1,7 @@
 package trivalibs.graphics.painter
 
-import trivalibs.utils.js.*
 import trivalibs.graphics.painter.*
+import trivalibs.utils.js.*
 
 import scala.annotation.publicInBinary
 import scala.scalajs.js

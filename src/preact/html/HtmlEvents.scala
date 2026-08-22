@@ -1,7 +1,8 @@
 package trivalibs.preact.html
 
-import trivalibs.preact.component.AttributeModifier
 import org.scalajs.dom
+import trivalibs.preact.component.AttributeModifier
+
 import scala.scalajs.js
 
 // DO NOT EDIT - Generated from scala-dom-types

@@ -1,5 +1,8 @@
 package examples.noise_tests
 
+import org.scalajs.dom
+import org.scalajs.dom.HTMLCanvasElement
+import org.scalajs.dom.document
 import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.math.gpu.{*, given}
 import trivalibs.graphics.painter.*
@@ -9,9 +12,6 @@ import trivalibs.graphics.shader.lib.random.Psrdnoise
 import trivalibs.graphics.shader.lib.random.Simplex
 import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
-import org.scalajs.dom
-import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
 import trivalibs.utils.js.*
 import trivalibs.utils.numbers.NumExt.given
 

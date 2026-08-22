@@ -1,5 +1,7 @@
 package examples.bevel_lines_2d
 
+import org.scalajs.dom.HTMLCanvasElement
+import org.scalajs.dom.document
 import trivalibs.graphics.geometry.*
 import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.math.gpu.{*, given}
@@ -9,8 +11,6 @@ import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
 import trivalibs.utils.js.*
 import trivalibs.utils.random.*
-import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
 
 import scala.scalajs.js.annotation.*
 

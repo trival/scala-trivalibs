@@ -2,11 +2,18 @@ package trivalibs.graphics.shader.dsl
 
 import trivalibs.graphics.math.cpu.*
 import trivalibs.graphics.math.gpu.*
-import trivalibs.graphics.math.gpu.{IVec2, IVec3, IVec4, UInt, UVec2, UVec3, UVec4}
+import trivalibs.graphics.math.gpu.IVec2
+import trivalibs.graphics.math.gpu.IVec3
+import trivalibs.graphics.math.gpu.IVec4
+import trivalibs.graphics.math.gpu.UInt
+import trivalibs.graphics.math.gpu.UVec2
+import trivalibs.graphics.math.gpu.UVec3
+import trivalibs.graphics.math.gpu.UVec4
 import trivalibs.graphics.shader.FragmentUniform
 import trivalibs.graphics.shader.SharedUniform
 import trivalibs.graphics.shader.VertexUniform
 import trivalibs.utils.js.Dict
+
 import scala.NamedTuple
 import scala.NamedTuple.AnyNamedTuple
 import scala.compiletime.*

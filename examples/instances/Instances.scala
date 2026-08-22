@@ -1,15 +1,14 @@
 package examples.instances
 
+import org.scalajs.dom.HTMLCanvasElement
+import org.scalajs.dom.document
 import trivalibs.graphics.buffers.*
 import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.None as GPUNone
 import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
-import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
 import trivalibs.utils.js.*
-
 import trivalibs.utils.random.*
 
 import scala.scalajs.js.annotation.*

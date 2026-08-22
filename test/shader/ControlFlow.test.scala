@@ -1,8 +1,8 @@
 package trivalibs.graphics.shader.dsl
 
-import trivalibs.graphics.math.gpu.{*, given}
-import trivalibs.graphics.shader.{given}
 import munit.FunSuite
+import trivalibs.graphics.math.gpu.{*, given}
+import trivalibs.graphics.shader.given
 
 class ControlFlowTest extends FunSuite:
 

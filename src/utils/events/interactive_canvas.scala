@@ -1,9 +1,9 @@
 package trivalibs.utils.events
 
 import org.scalajs.dom
+import trivalibs.utils.js.*
 
 import scala.scalajs.js
-import trivalibs.utils.js.*
 
 // ---------------------------------------------------------------------------
 // interactiveCanvas — the opinionated preset for the default use case: a canvas

@@ -1,8 +1,11 @@
 package trivalibs.graphics.shader.dsl
 
-import trivalibs.graphics.math.gpu.{*, given}
-import trivalibs.graphics.shader.{FragOut, FragmentUniform, VertexUniform, given}
 import munit.FunSuite
+import trivalibs.graphics.math.gpu.{*, given}
+import trivalibs.graphics.shader.FragOut
+import trivalibs.graphics.shader.FragmentUniform
+import trivalibs.graphics.shader.VertexUniform
+import trivalibs.graphics.shader.given
 
 class WgslFnTest extends FunSuite:
 

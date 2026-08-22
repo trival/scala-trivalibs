@@ -1,7 +1,7 @@
 package trivalibs.graphics.shader.lib.random
 
-import trivalibs.graphics.shader.dsl.WgslFnData
 import munit.FunSuite
+import trivalibs.graphics.shader.dsl.WgslFnData
 
 class SimplexFnsTest extends FunSuite:
 

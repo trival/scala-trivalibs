@@ -1,5 +1,8 @@
 package examples.panel_tex
 
+import org.scalajs.dom.HTMLCanvasElement
+import org.scalajs.dom.document
+import trivalibs.bufferdata.*
 import trivalibs.graphics.buffers.*
 import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.math.gpu.{*, given}
@@ -8,9 +11,6 @@ import trivalibs.graphics.scene.*
 import trivalibs.graphics.shader.dsl.{*, given}
 import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
-import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
-import trivalibs.bufferdata.*
 import trivalibs.utils.js.*
 import trivalibs.utils.numbers.NumExt.given
 

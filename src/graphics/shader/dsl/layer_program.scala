@@ -5,6 +5,7 @@ import trivalibs.graphics.math.gpu.*
 import trivalibs.graphics.shader.FragOut
 import trivalibs.utils.js.Arr
 import trivalibs.utils.js.Dict
+
 import scala.NamedTuple
 import scala.NamedTuple.AnyNamedTuple
 import scala.scalajs.js

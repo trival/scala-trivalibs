@@ -1,14 +1,14 @@
 package examples.buffer_triangle
 
-import trivalibs.graphics.buffers.*
-import trivalibs.graphics.math.cpu.{*, given}
 import org.scalajs.dom
 import org.scalajs.dom.HTMLCanvasElement
 import org.scalajs.dom.HTMLElement
 import org.scalajs.dom.document
+import trivalibs.graphics.buffers.*
+import trivalibs.graphics.math.cpu.{*, given}
+import trivalibs.graphics.painter.*
 import trivalibs.utils.js.*
 import trivalibs.utils.numbers.NumExt.given
-import trivalibs.graphics.painter.*
 
 import scala.scalajs.js
 import scala.scalajs.js.JSNumberOps.*

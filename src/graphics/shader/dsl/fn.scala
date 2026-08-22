@@ -3,7 +3,10 @@ package trivalibs.graphics.shader.dsl
 import trivalibs.graphics.math.cpu.*
 import trivalibs.graphics.math.gpu.*
 import trivalibs.graphics.shader.WGSLType
-import trivalibs.utils.js.{Arr, Dict, has, set}
+import trivalibs.utils.js.Arr
+import trivalibs.utils.js.Dict
+import trivalibs.utils.js.has
+import trivalibs.utils.js.set
 
 import scala.NamedTuple.AnyNamedTuple
 import scala.compiletime.*

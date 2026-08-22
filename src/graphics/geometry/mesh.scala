@@ -2,8 +2,9 @@ package trivalibs.graphics.geometry
 
 import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.given
-import scala.scalajs.js
 import trivalibs.utils.js.*
+
+import scala.scalajs.js
 
 /** A mesh face: either a [[Triangle]] or a [[Quad]] of vertices `T`. */
 type Face[T] = Triangle[T] | Quad[T]

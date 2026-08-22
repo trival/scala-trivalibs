@@ -1,8 +1,8 @@
 package trivalibs.graphics.shader.dsl
 
-import trivalibs.graphics.math.gpu.{*, given}
-import trivalibs.graphics.math.gpu.Expr.*
 import munit.FunSuite
+import trivalibs.graphics.math.gpu.Expr.*
+import trivalibs.graphics.math.gpu.{*, given}
 
 class LeftScalarTest extends FunSuite:
 

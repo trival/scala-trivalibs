@@ -1,9 +1,9 @@
 package trivalibs.graphics.shader.dsl
 
-import trivalibs.graphics.math.gpu.{*, given}
-import trivalibs.graphics.math.gpu.Expr.*
-import trivalibs.graphics.shader.{given}
 import munit.FunSuite
+import trivalibs.graphics.math.gpu.Expr.*
+import trivalibs.graphics.math.gpu.{*, given}
+import trivalibs.graphics.shader.given
 
 class IntDslTest extends FunSuite:
 

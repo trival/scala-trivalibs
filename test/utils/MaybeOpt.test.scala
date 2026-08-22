@@ -1,6 +1,7 @@
 package trivalibs.utils.js
 
 import munit.FunSuite
+
 import scala.scalajs.js
 
 class MaybeOptTest extends FunSuite:

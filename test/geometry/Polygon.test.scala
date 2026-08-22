@@ -1,7 +1,8 @@
 package trivalibs.graphics.geometry
 
 import munit.FunSuite
-import trivalibs.graphics.math.cpu.{Vec3, Vec3Tuple}
+import trivalibs.graphics.math.cpu.Vec3
+import trivalibs.graphics.math.cpu.Vec3Tuple
 import trivalibs.graphics.math.cpu.given
 import trivalibs.utils.js.*
 

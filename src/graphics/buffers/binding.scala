@@ -1,14 +1,14 @@
 package trivalibs.graphics.buffers
 
-import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.bufferdata.F32
 import trivalibs.bufferdata.StructArray
 import trivalibs.bufferdata.StructRef
-import trivalibs.utils.js.Obj
-import trivalibs.utils.numbers.given
+import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.painter.GPUBuffer
 import trivalibs.graphics.painter.GPUBufferUsage
 import trivalibs.graphics.painter.GPUDevice
+import trivalibs.utils.js.Obj
+import trivalibs.utils.numbers.given
 
 // =============================================================================
 // UniformValue[T, F] typeclass

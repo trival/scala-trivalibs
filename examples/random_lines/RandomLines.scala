@@ -1,5 +1,7 @@
 package examples.random_lines
 
+import org.scalajs.dom.HTMLCanvasElement
+import org.scalajs.dom.document
 import trivalibs.bufferdata.StructArray
 import trivalibs.graphics.buffers.*
 import trivalibs.graphics.math.cpu.{*, given}
@@ -10,8 +12,6 @@ import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
 import trivalibs.utils.js.*
 import trivalibs.utils.random.*
-import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
 
 import scala.scalajs.js.annotation.*
 

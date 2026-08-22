@@ -1,8 +1,8 @@
 package trivalibs.graphics.math.cpu
 
-import trivalibs.graphics.math.*
 import trivalibs.bufferdata.F32
 import trivalibs.bufferdata.StructRef
+import trivalibs.graphics.math.*
 
 // === implementations for common matrix types ===
 // Note: Mat2Buffer uses F32 by default (for GPU upload)

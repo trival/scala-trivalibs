@@ -3,9 +3,11 @@ package trivalibs.graphics.shader.lib.random
 // Ported from https://github.com/stegu/psrdnoise (Stefan Gustavson, Ian McEwan)
 // MIT License. © 2021-2022 Stefan Gustavson and Ian McEwan.
 
-import trivalibs.graphics.math.cpu.{Vec2, Vec3, Vec4}
-import trivalibs.graphics.shader.{given}
+import trivalibs.graphics.math.cpu.Vec2
+import trivalibs.graphics.math.cpu.Vec3
+import trivalibs.graphics.math.cpu.Vec4
 import trivalibs.graphics.shader.dsl.WgslFn
+import trivalibs.graphics.shader.given
 
 object Psrdnoise:
 

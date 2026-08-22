@@ -1,5 +1,7 @@
 package examples.geometry3d_scene
 
+import org.scalajs.dom.HTMLCanvasElement
+import org.scalajs.dom.document
 import trivalibs.graphics.buffers.*
 import trivalibs.graphics.geometry.{*, given}
 import trivalibs.graphics.math.cpu.*
@@ -10,8 +12,6 @@ import trivalibs.graphics.math.gpu.{*, given}
 import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.dsl.{*, given}
 import trivalibs.graphics.shader.{*, given}
-import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
 import trivalibs.utils.js.*
 import trivalibs.utils.numbers.NumExt.given
 

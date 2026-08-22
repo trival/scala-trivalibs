@@ -1,8 +1,9 @@
 package trivalibs.graphics.shader
 
-import trivalibs.graphics.math.gpu.*
-import trivalibs.graphics.math.gpu.Expr.{Texture2D, DepthTexture2D}
 import munit.FunSuite
+import trivalibs.graphics.math.gpu.*
+import trivalibs.graphics.math.gpu.Expr.DepthTexture2D
+import trivalibs.graphics.math.gpu.Expr.Texture2D
 
 class DepthTextureTest extends FunSuite:
 

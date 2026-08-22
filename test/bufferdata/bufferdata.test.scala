@@ -1,7 +1,9 @@
 package trivalibs.bufferdata
 
 import munit.FunSuite
-import scala.scalajs.js.typedarray.{ArrayBuffer, DataView}
+
+import scala.scalajs.js.typedarray.ArrayBuffer
+import scala.scalajs.js.typedarray.DataView
 
 class BufferDataTest extends FunSuite:
 

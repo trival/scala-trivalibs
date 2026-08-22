@@ -1,13 +1,14 @@
 package trivalibs.dev
 
 import org.scalajs.dom
-import scala.scalajs.js
 import trivalibs.graphics.math.cpu.Quat
 import trivalibs.graphics.math.cpu.Vec2
 import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.Vec4
 import trivalibs.graphics.scene.PerspectiveCamera
 import trivalibs.utils.js.*
+
+import scala.scalajs.js
 
 // ===========================================================================
 // devPreserve — persist a piece of state across full page reloads while live

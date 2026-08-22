@@ -1,7 +1,7 @@
 package trivalibs.graphics.shader.lib.blur
 
-import trivalibs.graphics.shader.dsl.WgslFnData
 import munit.FunSuite
+import trivalibs.graphics.shader.dsl.WgslFnData
 
 class BlurFnsTest extends FunSuite:
 

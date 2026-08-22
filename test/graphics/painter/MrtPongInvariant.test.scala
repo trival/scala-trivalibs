@@ -1,9 +1,9 @@
 package trivalibs.graphics.painter
 
+import munit.FunSuite
 import trivalibs.utils.js.*
 
 import scala.scalajs.js
-import munit.FunSuite
 
 /** The MRT + auto-pong config-time invariant (`Panel.set`) is pure predicate
   * logic — it reads `.notNull` on the shade's panel bind-group layout and the

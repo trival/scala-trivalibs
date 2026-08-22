@@ -1,15 +1,15 @@
 package trivalibs.graphics.geometry
 
+import trivalibs.bufferdata.F32
+import trivalibs.bufferdata.StructArray
+import trivalibs.bufferdata.StructRef
+import trivalibs.bufferdata.ValueTuple
 import trivalibs.graphics.math.cpu.Vec2
 import trivalibs.graphics.math.cpu.Vec2Buffer
 import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.Vec3Buffer
 import trivalibs.graphics.math.cpu.Vec4
 import trivalibs.graphics.math.cpu.Vec4Buffer
-import trivalibs.bufferdata.F32
-import trivalibs.bufferdata.StructArray
-import trivalibs.bufferdata.StructRef
-import trivalibs.bufferdata.ValueTuple
 import trivalibs.utils.js.*
 
 import scala.NamedTuple.AnyNamedTuple

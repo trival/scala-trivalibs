@@ -1,5 +1,8 @@
 package examples.painter_typed_bindings
 
+import org.scalajs.dom
+import org.scalajs.dom.HTMLCanvasElement
+import org.scalajs.dom.document
 import trivalibs.graphics.buffers.*
 import trivalibs.graphics.math.cpu.Mat2.given
 import trivalibs.graphics.math.cpu.Mat2Buffer.given
@@ -8,9 +11,6 @@ import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.None as GPUNone
 import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
-import org.scalajs.dom
-import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
 import trivalibs.utils.js.*
 import trivalibs.utils.numbers.NumExt.given
 
