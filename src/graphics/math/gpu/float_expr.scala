@@ -123,7 +123,8 @@ given NumOps[FloatExpr]:
 
 /** Scalar math on `FloatExpr` mapping to WGSL builtins: `.sqrt .pow .sin .cos
   * .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix
-  * .lerp .lerpIn .step .smoothstep .fit0111 .fit1101` and comparisons (`<`,
+  * .lerp .lerpIn .step .smoothstep .smoothstep01 .fit0111 .fit1101` and
+  * comparisons (`<`,
   * `>`, … → `BoolExpr`). Mirrors the CPU `NumExt`, so shader math reads like
   * CPU math. `.lerp` / `.lerpIn` are inherited from the trait — `.lerpIn` takes
   * the bounds as arguments (`hash.lerpIn(0.6, 1.0)`), which is the readable
@@ -197,6 +198,11 @@ given NumExt[FloatExpr]:
     )
     def smoothstep(edge0: FloatExpr, edge1: FloatExpr): FloatExpr =
       FloatExpr(s"smoothstep(${edge0.wgsl}, ${edge1.wgsl}, ${a.wgsl})")
+    // The edges go in as literals rather than expanding to `saturate(a)` and
+    // the cubic: that would repeat `a` three times in the generated WGSL, and
+    // constant edges are exactly what a shader compiler folds anyway.
+    def smoothstep01: FloatExpr =
+      FloatExpr(s"smoothstep(0.0, 1.0, ${a.wgsl})")
 
 // ---------------------------------------------------------------------------
 // Vec2 — LocalVec2 <: Vec2Expr, so only one Base + one ImmutableOps needed

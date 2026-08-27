@@ -50,8 +50,8 @@ object NumOps:
 
 /** Scalar math extensions on `Double`/`Float` (given instances in [[NumExt]]'s
   * companion): `.sqrt .pow .sin .cos .tan .abs .floor .ceil .fract .exp .log
-  * .min .max .clamp .clamp01 .mix .lerp .lerpIn .step .smoothstep .fit0111
-  * .fit1101`,
+  * .min .max .clamp .clamp01 .mix .lerp .lerpIn .step .smoothstep
+  * .smoothstep01 .fit0111 .fit1101`,
   * etc. Prefer these over `math.*` (`x.sin`, not `math.sin(x)`) — the same
   * names exist on the GPU `Expr` types, so CPU and shader math read alike.
   * `import trivalibs.utils.numbers.NumExt.given` to use them.
@@ -116,6 +116,12 @@ trait NumExt[P]:
 
     inline def step(edge: P): P = gte(edge) // alias for gte
     def smoothstep(edge0: P, edge1: P): P
+
+    /** [[smoothstep]] over the unit interval, with the edges folded into the
+      * equation: `t·t·(3 − 2·t)` on the clamped receiver. Same shape as
+      * `smoothstep(0, 1)`, without the `(p − 0) / (1 − 0)` remapping.
+      */
+    def smoothstep01: P
 
 // ---------------------------------------------------------------------------
 // IntExt — integer-domain ops (min, max, clamp, step predicates)
@@ -201,6 +207,9 @@ object NumExt:
       inline def smoothstep(edge0: Double, edge1: Double) =
         val t = ((p - edge0) / (edge1 - edge0)).clamp01
         t * t * (3.0 - 2.0 * t)
+      inline def smoothstep01 =
+        val t = p.clamp01
+        t * t * (3.0 - 2.0 * t)
 
   given NumExt[Float]:
     extension (p: Float)
@@ -250,4 +259,7 @@ object NumExt:
       inline def lt(edge: Float) = if p < edge then 1f else 0f
       inline def smoothstep(edge0: Float, edge1: Float) =
         val t = ((p - edge0) / (edge1 - edge0)).clamp01
+        t * t * (3.0f - 2.0f * t)
+      inline def smoothstep01 =
+        val t = p.clamp01
         t * t * (3.0f - 2.0f * t)
