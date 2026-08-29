@@ -5,6 +5,8 @@ import trivalibs.graphics.math.cpu.Vec2
 import trivalibs.graphics.math.cpu.Vec3
 import trivalibs.graphics.math.cpu.given
 import trivalibs.utils.js.*
+import trivalibs.utils.numbers.Pi
+import trivalibs.utils.numbers.Tau
 
 // ---------------------------------------------------------------------------
 // Box
@@ -183,13 +185,10 @@ def sphereMesh[T: Position](
     verticalSegments: Int,
     horizontalSegments: Int,
 )(f: (Vec3, Vec2) => T): Mesh[T] =
-  val PI = Math.PI
-  val TAU = 2 * PI
-
   def mkVert(u: Double, v: Double): T =
     val cv = Math.cos(v)
     val pos = Vec3(cv * Math.cos(u), Math.sin(v), cv * Math.sin(u))
-    val uv = Vec2(u / TAU, (v + PI / 2) / PI)
+    val uv = Vec2(u / Tau, (v + Pi / 2) / Pi)
     f(pos, uv)
 
   val allFaces = Arr[Face[T]]()
@@ -197,14 +196,14 @@ def sphereMesh[T: Position](
 
   var j = 0
   while j <= horizontalSegments do
-    val u = TAU * (j.toDouble / horizontalSegments)
-    val southPole = mkVert(u, -PI / 2)
-    val northPole = mkVert(u, PI / 2)
+    val u = Tau * (j.toDouble / horizontalSegments)
+    val southPole = mkVert(u, -Pi / 2)
+    val northPole = mkVert(u, Pi / 2)
 
     val col = Arr[T]()
     var i = 1
     while i < verticalSegments - 1 do
-      val v = PI * (i.toDouble / verticalSegments) - PI / 2
+      val v = Pi * (i.toDouble / verticalSegments) - Pi / 2
       col.push(mkVert(u, v))
       i += 1
 
