@@ -62,7 +62,9 @@ val shade = p.shade[Attribs, Varyings, Uniforms, Panels]: program =>
 
 `layerShade[U]` (or `[U, P]`, `[U, P, FO]`) is fragment-only; the vertex stage
 is a built-in full-screen triangle and `ctx.in.uv: Vec2` is the screen UV in
-`[0,1]`.
+`[0,1]`, **origin top-left** (`uv.y == 0` is the top row). A layer with no
+uniforms at all takes no type argument — write `p.layerShade: program => …`,
+not `p.layerShade[EmptyTuple]`.
 
 ## Locals
 
@@ -162,12 +164,21 @@ tunables.)
 GPU expressions mirror the CPU math surface, so shader code reads like CPU code:
 
 - **scalars** (`FloatExpr`): `+ - * /`,
-  `.sqrt .pow .sin .cos .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix .step .smoothstep .fit0111 .fit1101`.
+  `.sqrt .pow .sin .cos .tan .abs .floor .ceil .fract .exp .log .min .max .clamp .clamp01 .mix .step .smoothstep .smoothstep01 .fit0111 .fit1101`.
+  `.smoothstep01` is `.smoothstep(0, 1)` with the edges folded into the
+  equation — the common case, since a `t` already in `[0,1]` only wants the
+  ease.
 - **vectors** (`Vec2/3/4Expr`): component-wise `+ - * /` (vector or scalar),
   `.dot .cross(Vec3) .length .distance .normalize .mix .clamp .min .max .abs .fract`,
   swizzles `.xy .xyz .rgb .wzyx …`.
 - **constructors**: `vec2(x,y)`, `vec3(xy, z)`, `vec4(rgb, 1.0)`,
   `vec3(scalar)`.
+- **free-standing `lerp(a, b, t)`** — WGSL's `mix` argument order, as a
+  function rather than a method. Reach for it when the **bounds are constants
+  and only `t` varies**, which is the case the method form cannot express:
+  `0.8.mix(1.0, expr)` does not compile (a CPU `Double` receiver takes `Double`
+  arguments), whereas `lerp(0.8, 1.0, expr)` does. With an expression receiver
+  the method form reads better — `noise.lerpIn(0.8, 1.0)`.
 - **comparisons** → `BoolExpr`: `<  <=  >  >=  ===  !==`, combine with
   `&& || !`.
 - **matrices**: `Mat*Expr` `*` (matrix or vector), `.determinant`.

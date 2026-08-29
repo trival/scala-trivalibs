@@ -12,32 +12,71 @@ catalog see [shader-dsl-guide.md](shader-dsl-guide.md); for traps see
 
 ## 1. Entry point
 
-A sketch is a `@main` def that grabs the canvas and runs everything inside
-`Painter.init(canvas) { p => … }`. Resource creation, resize handling, and the
-animation loop all live in that closure.
+Everything a sketch does happens inside `Painter.init(canvas) { p => … }` —
+resource creation, resize handling and the animation loop all live in that
+closure. The `Painter` is the entry point to the library; how the enclosing
+function is named, packaged and reached is up to the project using it.
 
 ```scala
-package sketches.<category>.<name>
-
 import org.scalajs.dom.HTMLCanvasElement
-import org.scalajs.dom.document
-import trivalibs.graphics.buffers.*
-import trivalibs.graphics.math.cpu.{*, given}
-import trivalibs.graphics.math.gpu.{*, given}
-import trivalibs.graphics.painter.*
-import trivalibs.graphics.shader.dsl.{*, given}
-import trivalibs.graphics.shader.{*, given}
-import trivalibs.utils.animation.animate
+import trivalibs.prelude.core.{*, given}
+import trivalibs.prelude.painter.{*, given}
 
-@main def myShape(): Unit =
-  val canvas = document.getElementById("canvas").asInstanceOf[HTMLCanvasElement]
+import scala.scalajs.js.annotation.JSExportTopLevel
+
+@JSExportTopLevel("sketch")
+def myShape(canvas: HTMLCanvasElement): Unit =
   Painter.init(canvas): p =>
     // 1. shade  2. form  3. shape/layer  4. panel  5. animate
     ...
 ```
 
-Copy `sketches/base-triangle/` as a starter (it has `index.html` + the import
-block). Build with `bun run sketch <category>/<name>` from the repo root.
+Two pieces of advice, both easy to follow and awkward to retrofit:
+
+- **Let the host call in, rather than running on import.** A
+  `@JSExportTopLevel` function the page invokes gives the host control over
+  *when* the sketch starts; a `@main` def runs as a side effect of loading the
+  module, which is harder to sequence and to reuse.
+- **Take the canvas as a parameter.** Looking it up with
+  `document.getElementById` ties the bundle to a browser DOM. Passing it in lets
+  the same code run under a host that has none — e.g. NativeScript Canvas, where
+  the canvas comes from the native view tree.
+
+The export name, the module layout and the build command are **conventions of
+the consuming project**, not of this library; a project that runs many sketches
+will want to fix them so its host glue is identical everywhere. This repo's own
+`examples/` use `@JSExportTopLevel("main", moduleID = "<example>")` and look the
+canvas up from `document`, because they are bundled many-to-one and each owns
+its page — a reasonable choice for that setup, and not a general
+recommendation.
+
+### The preludes
+
+Two imports cover essentially everything:
+
+```scala
+import trivalibs.prelude.core.{*, given}     // Arr / Dict / Maybe / Opt / Obj,
+                                             // Pi, Tau, the NumExt + IntExt givens
+import trivalibs.prelude.painter.{*, given}  // cpu + gpu math, Painter, shader
+                                             // types + DSL, buffers, animate
+```
+
+`prelude.painter` replaces the seven-line block sketches used to open with
+(`graphics.math.cpu`, `graphics.math.gpu`, `graphics.painter`,
+`graphics.shader`, `graphics.shader.dsl`, `graphics.buffers`,
+`utils.animation.animate`). Both are bundles, not replacements — the individual
+packages keep working, and a file that wants only `Arr` still writes
+`import trivalibs.utils.js.Arr`.
+
+Two names differ from the raw imports, deliberately:
+
+- `None` (the empty shader contract) is exported as **`GPUNone`**, so sketches
+  keep Scala's `None`.
+- `Vec2`…`Mat4` come from `graphics.math.cpu`; the `gpu` package re-exports the
+  same six names for shader contracts, and exporting both would clash.
+
+Angle constants are **`Pi`** and **`Tau`** (`Tau` = 2π, a full turn) — capitalised,
+from `utils.numbers` via `prelude.core`.
 
 ## 2. The core pipeline
 
@@ -154,6 +193,36 @@ val res  = p.binding[Vec2]
 val panel = p.panel(layer = p.layer(shade).bind("time" := time, "res" := res))
 ```
 
+**`ctx.in.uv`'s origin is the TOP-LEFT.** The built-in vertex stage emits
+`out.uv = vec2f(x * 0.5 + 0.5, 0.5 - y * 0.5)`, so `uv.y == 0` is the top row
+and `uv.y == 1` the bottom — matching texture-coordinate convention, not clip
+space. Worth knowing before writing any vertical ramp: a gradient that should
+start dark at the top is `f(uv.y)` with `f(0) == 0`, not `1 - uv.y`.
+
+A layer needs no uniforms at all if it has none — the zero-schema overload
+resolves without a type argument:
+
+```scala
+val shade = p.layerShade: program =>
+  program.frag: ctx =>
+    ctx.out.color := vec4(vec3(ctx.in.uv.y), 1.0)   // black at top → white
+```
+
+### 2c. A panel as a static texture
+
+A panel is a render target, so one can be rendered **once** and then bound
+wherever a texture is wanted, instead of being repainted every frame:
+
+```scala
+val panel = p.panel(width = w, height = h, layer = p.layer(shade))
+p.paint(panel)            // ← without this the panel is empty
+shape.bind("tex" := panel)
+```
+
+**Don't forget the `paint`.** A panel only holds pixels once it has been
+painted; one that never appears in the per-frame `paint` list and isn't painted
+at construction stays blank, with no error anywhere.
+
 ## 3. Bindings
 
 `p.binding[T]` (or `p.binding(initialValue)`) makes a uniform buffer; update it
@@ -165,7 +234,20 @@ shape.bind("mvp" := mvp, "tint" := Vec3(1, 0.5, 0.2))   // raw value auto-boxes
 ```
 
 Values may be a `BufferBinding`, a raw uniform value (auto-boxed), a
-`GPUSampler` (`p.samplerLinear`), a `Panel`, or a `panel.binding(...)`. `bind`
+`GPUSampler` (`p.samplerLinear`), a `Panel`, or a `panel.binding(...)`.
+
+`p.samplerLinear` clamps at the edges. For a texture deliberately sampled with
+UV running past `[0,1]` — a tile repeated across a large surface — build one
+explicitly:
+
+```scala
+val tileSampler = p.sampler(
+  FilterMode.Linear, FilterMode.Linear, FilterMode.Linear, AddressMode.Repeat,
+)
+```
+
+Without `AddressMode.Repeat` the out-of-range UV clamps into a smear at the
+edge rather than tiling. `bind`
 matches only on the **field name** and a compatible **value type** — it is
 stage-agnostic and never mentions visibility (which is convenient: the same
 `bind` call works regardless of stage).
@@ -246,6 +328,43 @@ gives `.modelMat` / `.modelViewProjMat(cam)`. For first-person controls use
 Only `onResize` is wired. For pointer/keyboard, either use `p.input()`
 ([InputState]) or attach DOM listeners to `p.canvas`. Keep event handling out of
 the `animate` body.
+
+## 7. The tuning loop — `trivalibs.dev`
+
+Authoring a sketch means editing a constant, rebuilding, and looking. Vite
+hot-reloads the new module, which by default drops you back at the camera's
+start position — so every rebuild costs a walk back to whatever you were
+looking at. `import trivalibs.dev.*` fixes that:
+
+```scala
+val cam = PerspectiveCamera(fov = 0.85, near = 0.1, far = 150.0, pos = …)
+devPreserve(cam)          // pos + rotH/rotV survive the reload, restored in place
+```
+
+- **`devPreserve(cam, label = "camera")`** — round-trips a `PerspectiveCamera`'s
+  `pos` / `rotH` / `rotV` through `sessionStorage`, keyed by module URL so
+  sketches don't collide. `fov` / `near` / `far` stay from the sketch config and
+  `aspect` is left to `onResize`. Returns a handle whose `.reset` wipes it.
+- **`devPreserve(key, init)`** — the same for any value with a `DevCodec`,
+  returning a `DevVar[T]`; read and write `.value` and the latest is saved on
+  the next reload.
+- **`devMode`** — `true` under the Vite dev server, `false` in a built sketch
+  (it tests `import.meta.hot`, which Vite strips in production, so the branch is
+  tree-shaken out). Gate any **development affordance that must not ship** on
+  it — a free-flying camera, a debug overlay, a bypass of a constraint the
+  finished piece depends on:
+
+  ```scala
+  cam.pos = bounds.clearOf(
+    cam.pos,
+    eyeY = if devMode then cam.pos.y else EyeHeight,   // fly in dev, walk in prod
+  )
+  ```
+
+  Better than a hand-rolled `val Debug = true`, which can be committed in the
+  wrong state.
+
+Outside dev mode every one of these is inert, so they cost nothing to leave in.
 
 ## Where to look next
 

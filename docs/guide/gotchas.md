@@ -10,6 +10,21 @@ message, so they're worth knowing up front.
 In `WgslFn.raw` / raw-string shade bodies, never put two statements on one line
 (project convention) — each gets its own line.
 
+### Angle constants are `Pi` and `Tau`, capitalised
+
+`trivalibs.utils.numbers` (re-exported by `trivalibs.prelude.core`) defines
+`inline val Pi` and `inline val Tau` — not `PI` / `TAU`. `Tau` is 2π, one full
+turn, and is the constant to reach for: `t * Tau` is one revolution.
+
+### `Let`-local names can shadow a WGSL builtin
+
+A `LetFloat("mix")` / `VarVec3("step")` emits a WGSL `let mix = …`, which then
+shadows the builtin of that name for the rest of the function — and a later
+`.mix` / `lerp` in the same body fails to parse. It only bites when something
+*after* the local uses the builtin, so it can survive a long time before an
+unrelated edit trips it. Avoid builtin names (`mix`, `step`, `clamp`, `fract`,
+`length`, …) for locals.
+
 ## Panels, layers & mips
 
 ### A layer's first texture slot is auto-injected
@@ -109,6 +124,22 @@ Only `onResize` is wired. Use `p.input()` (`InputState`) or DOM listeners on
 `p.canvas` for pointer/keyboard; keep them out of the `animate` body.
 
 ## Tooling
+
+### One `@JSExportTopLevel` name per build input
+
+The sketch build passes a whole sketch **directory** to scala-cli, so every
+`.scala` under it is linked together. Two files exporting the same top-level
+name — e.g. a sketch directory that ends up nested inside another one — fail at
+link time with:
+
+```
+Conflicting top level exports for module ModuleID(main), name sketch involving
+sketches.a.A$package$, sketches.b.B$package$
+```
+
+The message names the two packages but says nothing about directory nesting,
+which is usually the actual cause. Check that no sketch directory sits inside
+another.
 
 ### A fresh Metals MCP / session is needed after `.mcp.json` changes
 
