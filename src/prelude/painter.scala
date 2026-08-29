@@ -250,11 +250,21 @@ object painter:
     TypedExprAccessor,
     TypedAssignAccessor,
     TypedLocalAccessor,
-    WgslFn,
     WgslFnCtx,
     FnRegistry,
     ReturnEmitter,
   }
+
+  // `WgslFn` is aliased rather than exported. An export forwarder for a
+  // parameterized *opaque* type does not carry its companion's `apply`
+  // extensions: `myFn(args)` then fails with "Found: WgslFn[…], Required:
+  // WgslFnData" at every call site, because those extensions see the opaque
+  // type transparently and the receiver is never adapted. A plain alias
+  // dealiases to the original and resolves them, so a sketch on this bundle
+  // alone can define and call its own `WgslFn`.
+  type WgslFn[P, R] = trivalibs.graphics.shader.dsl.WgslFn[P, R]
+  inline def WgslFn: trivalibs.graphics.shader.dsl.WgslFn.type =
+    trivalibs.graphics.shader.dsl.WgslFn
 
   // `js.Object` class — see the BlendFn note above.
   type WgslFnData = trivalibs.graphics.shader.dsl.WgslFnData
