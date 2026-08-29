@@ -103,6 +103,25 @@ class Line2dTest extends FunSuite:
     assertEquals(zigzag.cleanup(0.2, 0.001, 0.001).vertCount, 5)
     assertEquals(zigzag.cleanup(0.1, 0.001, 0.001).vertCount, 6)
 
+  test("cleanup min-length floor"):
+    // Widths and spacings well below the default floor of 1.0, as a line laid
+    // out in normalized units has: at the default every inner vertex falls
+    // under it, and only lowering the floor lets the width ratio decide.
+    val small = Line.fromPoints(
+      0.02,
+      Arr(
+        Vec2(0.0, 0.0),
+        Vec2(0.05, 0.0),
+        Vec2(0.10, 0.05),
+        Vec2(0.15, 0.0),
+        Vec2(0.20, 0.05),
+        Vec2(0.25, 0.0),
+      ),
+    )
+
+    assertEquals(small.cleanup(0.5, 0.001, 0.001).vertCount, 2)
+    assertEquals(small.cleanup(0.5, 0.001, 0.001, 0.0).vertCount, 6)
+
   test("cleanup leaves the source line untouched"):
     val line = Line.fromPoints(
       2.0,

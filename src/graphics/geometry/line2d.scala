@@ -206,15 +206,21 @@ class Line[T](
         else curr.smoothEdge(p, next.get, ratio, angleThreshold)
 
   /** Drop vertices that carry no shape information: those closer together than
-    * `avgWidth * minLenWidRatio` (but at least 1.0), and those whose width and
-    * direction barely differ from both neighbours (`widthThreshold` as a
-    * relative width difference, `angleThreshold` as `1 - dot` of the
+    * `avgWidth * minLenWidRatio` (but at least `minLenFloor`), and those whose
+    * width and direction barely differ from both neighbours (`widthThreshold`
+    * as a relative width difference, `angleThreshold` as `1 - dot` of the
     * directions). The first and last vertex are always kept.
+    *
+    * `minLenFloor` defaults to `1.0`, i.e. "never bother below one pixel" for a
+    * line measured in pixels. A line in any other unit has to say so — left at
+    * the default, a line laid out in normalized units is thinned down to its
+    * first and last vertex.
     */
   def cleanup(
       minLenWidRatio: Double,
       widthThreshold: Double,
       angleThreshold: Double,
+      minLenFloor: Double = 1.0,
   )(using Lerp[T]): Line[T] =
     var travelled = 0.0
     flatMapWithNeighbours: (prev, curr, next) =>
@@ -224,7 +230,7 @@ class Line[T](
         val nx = next.get
         val len = p.len + curr.len + travelled
         val avgWidth = (p.width + curr.width * 2.0 + nx.width) / 4.0
-        val minLen = (avgWidth * minLenWidRatio).max(1.0)
+        val minLen = (avgWidth * minLenWidRatio).max(minLenFloor)
 
         if len < minLen then
           // too close to the last kept vertex — skip, but remember the
