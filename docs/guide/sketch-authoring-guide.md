@@ -135,10 +135,10 @@ val panel = p.panel(shape = shape, clearColor = (0.05, 0.06, 0.1, 1.0), depthTes
   `(position: Vec3, uv: Vec2)`, use `WithNormal[V]` for the attribs schema).
 - **Builders**: `Box` — `.faces` (each as `(quad, normal)`), or per-face
   `.frontFace`/`.topFace`/… with a `(corner, uvw) => vertex` fn for custom
-  per-vertex attributes (UVs etc., as in `rooms/base`); `sphereMesh(vSeg, hSeg)(f)`;
+  per-vertex attributes (UVs etc.); `sphereMesh(vSeg, hSeg)(f)`;
   `Grid` → `Mesh(grid.ccwQuads)`.
-- Transform meshes with `mesh.map` / `flatMap`. See the `geometry3d_scene`
-  example (box + sphere + terrain grid) and the `rooms/base` sketch.
+- Transform meshes with `mesh.map` / `flatMap`. All three builders are in the
+  `geometry3d_scene` example (box + sphere + terrain grid).
 
 ### 2a′. Simple primitives — `allocateAttribs` (raw vertices)
 
@@ -309,7 +309,7 @@ the painter auto-generates the chain from mip 0 after rendering. If you build
 the chain by hand with mip-targeted layers
 (`p.layer(shade, mipSource = i, mipTarget = i+1)`), the painter detects that and
 **skips** auto-generation so your pyramid survives — this is how bloom
-downsample/upsample works (see the `post/bloom` sketch and `examples/mipmaps`).
+downsample/upsample works (see the `mipmaps` example).
 
 ## 5. Camera, transforms, resize
 
@@ -320,8 +320,10 @@ p.onResize: (w, h) => cam(aspect = w.toDouble / h)   // runs now + on every resi
 ```
 
 `Transform` is a mutable TRS (`translation`/`rotation`/`scale`); `SceneObject`
-gives `.modelMat` / `.modelViewProjMat(cam)`. For first-person controls use
-`p.input()` + `BasicFirstPersonCameraController` (see `rooms/base`).
+gives `.modelMat` / `.modelViewProjMat(cam)`. For first-person controls, pair
+`p.input()` with `BasicFirstPersonCameraController` from
+`trivalibs.graphics.scene` — construct it with the camera and the input state,
+then call `controller.update(tpf)` each frame before reading `cam.viewProjMat`.
 
 ## 6. Events
 
@@ -372,4 +374,4 @@ Outside dev mode every one of these is inert, so they cost nothing to leave in.
 - Pitfalls (Double-on-left, mip clobber, F32 vs Double) →
   [gotchas.md](gotchas.md)
 - Per-symbol API → Metals `get-docs`/`inspect`, or the Scaladoc site
-- Canonical code → `trivalibs/examples/*`, `sketches/*`
+- Canonical code → `examples/*`, one per feature
