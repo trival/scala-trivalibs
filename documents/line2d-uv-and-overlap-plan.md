@@ -255,7 +255,7 @@ Both from one `offset` that the turn cannot carry.
 Run the arithmetic for this study:
 
 - `v.width` is the **half**-extent (`top = normal·offset`, `bottom =
-  normal·−offset`), so `WidthMax = 1/4` means a stroke half a canvas wide.
+normal·−offset`), so `WidthMax = 1/4` means a stroke half a canvas wide.
 - `splitAtAngle(3π/4)` leaves turns of up to 135° inside a fragment, so the
   mitre factor reaches `1/cos(67.5°) ≈ 2.6`.
 - `2.6 × 0.25 ≈ 0.65` canvas units. One outline vertex is thrown two thirds of
@@ -490,16 +490,16 @@ justified for A alone, and A has better options.
 The last two columns are the ones we want **kept**, not fixed — a fix that lands
 in them is doing damage.
 
-| Fix                 | A zig-zag | A mitres | A caps | B fold-back | B self-crossing | B split caps |
-| ------------------- | --------- | -------- | ------ | ----------- | --------------- | ------------ |
-| A1 subdivision      | partial   | –        | –      | –           | –               | –            |
-| A2 projective `v`   | **yes**   | partial  | better | –           | –               | –            |
-| A3 offset attribute | **yes**   | **yes**  | better | –           | –               | –            |
-| B6 miter limit      | –         | **fixes** | –     | –           | untouched ✓     | untouched ✓  |
-| B1 inner clamp      | –         | –        | –      | **yes**     | untouched ✓     | untouched ✓  |
-| B2 width limit      | –         | helps    | –      | avoids it   | untouched ✓     | untouched ✓  |
-| B0 `BlendOp.Max`    | –         | –        | –      | dims it     | **flattens ✗**  | **flattens ✗** |
-| B3–B5 union         | varies    | varies   | varies | yes         | **flattens ✗**  | **flattens ✗** |
+| Fix                 | A zig-zag | A mitres  | A caps | B fold-back | B self-crossing | B split caps   |
+| ------------------- | --------- | --------- | ------ | ----------- | --------------- | -------------- |
+| A1 subdivision      | partial   | –         | –      | –           | –               | –              |
+| A2 projective `v`   | **yes**   | partial   | better | –           | –               | –              |
+| A3 offset attribute | **yes**   | **yes**   | better | –           | –               | –              |
+| B6 miter limit      | –         | **fixes** | –      | –           | untouched ✓     | untouched ✓    |
+| B1 inner clamp      | –         | –         | –      | **yes**     | untouched ✓     | untouched ✓    |
+| B2 width limit      | –         | helps     | –      | avoids it   | untouched ✓     | untouched ✓    |
+| B0 `BlendOp.Max`    | –         | –         | –      | dims it     | **flattens ✗**  | **flattens ✗** |
+| B3–B5 union         | varies    | varies    | varies | yes         | **flattens ✗**  | **flattens ✗** |
 
 ("B fold-back" is the inner symptom. B6 is the only row that removes the outward
 excursion the fan is built from — which is why the fan went unnoticed until the
