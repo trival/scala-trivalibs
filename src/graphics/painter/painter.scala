@@ -113,11 +113,15 @@ class Painter(
       resizeCallbacks(k)(w, h)
       k += 1
 
-  /** Current canvas width in physical pixels. */
-  def width: Int = canvas.width
+  /** Current canvas width in physical pixels. `Double`, to match
+    * [[onResize]] — sizes are almost always used in ratios and float math.
+    */
+  def width: Double = canvas.width
 
-  /** Current canvas height in physical pixels. */
-  def height: Int = canvas.height
+  /** Current canvas height in physical pixels. `Double`, to match
+    * [[onResize]] — sizes are almost always used in ratios and float math.
+    */
+  def height: Double = canvas.height
 
   /** Convenience: set up a `CanvasInput` for this painter's canvas with the
     * interactive-canvas defaults (focusable, cleared outline, focus on
@@ -822,8 +826,8 @@ class Painter(
   // =========================================================================
 
   private def paintPanel(panel: Panel): Unit =
-    val w = width
-    val h = height
+    val w = canvas.width
+    val h = canvas.height
     panel.ensureSize(w, h)
     val msaa = panel.multisample
 
