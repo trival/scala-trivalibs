@@ -1,6 +1,17 @@
 # Line2D — UV distortion on width changes, and fold-back overlap on tight turns
 
-Status: **analysis / options**. Nothing decided, nothing implemented.
+Status: **A approved, B under review. Nothing implemented.**
+
+- **A — approved**, conditional on A2 proving correct against a render: the
+  projective `v`, the full-width semantics change, the honest `width` attribute,
+  and rib-preserving paired smoothing. If A2 does not behave as the analysis
+  predicts, the rest is re-opened.
+- **B — under review.** Settled so far: **B6 is rejected** — a sharp miter then
+  smoothed is how a brush turn is modelled, so bounding the miter factor forbids
+  the corners we want. **B1 and B2 are both wanted**, both programmatic and
+  opt-in, as a selectable pair: B1 keeps the width and clamps the inner texture,
+  B2 narrows the stroke and keeps the texture complete. Much of the fan falls out
+  of A's paired smoothing anyway.
 
 Two artifacts became visible in `sketches/experiments/strokes/study1` that the
 opaque uv-debug shade in `examples/bevel_lines_2d` cannot show:
@@ -117,6 +128,10 @@ functions**, and that is the lever (A2 below).
   into a degenerate first quad, so any uv-keyed pattern is strongly distorted
   right at the caps — and `splitAtAngle` puts a cap at every sharp corner.
 
+The first two of these are not separate problems: both are consequences of the
+two contours being smoothed independently, and rib-preserving smoothing (under
+A3, below) removes them together.
+
 ### Strategies
 
 #### A1 — Lengthwise subdivision (the obvious one)
@@ -166,31 +181,239 @@ Notes:
   fades, dash patterns) would stretch toward the wide end. The correction is
   right for the cross direction and wrong for the along direction; that
   asymmetry is not an oversight.
-- **Approximate at mitres**, where the true half-extent is
-  `width / dot(normal, prevNormal)` capped at `5 × width`, not `width`. Exact
-  there needs the real offset as an attribute — see A3.
+- **Approximate at mitres**, where the vertex was placed at
+  `width / dot(normal, prevNormal)` (capped at `5 × width`) but the attribute
+  says `width`. That is a wrong value in an existing field, not a missing
+  field — see A3.
 - If it proves out, the natural library form is a small shader-lib helper
-  (`shader/lib/` — a `lineUv` block that takes the varyings and returns the
-  corrected uv) plus a note in the `LineAttribs` scaladoc, rather than a
-  changed attribute schema.
+  (`shader/lib/` — a `lineUv` block that takes the varyings and returns `v` and
+  `d`) plus the `LineAttribs` scaladoc explaining the pair. The only schema
+  change A3 then needs is the field's **name**, not its shape.
 
-#### A3 — World-unit stroke coordinates instead of a normalized `v`
+#### A3 — Consistent `width` semantics, and an attribute that tells the truth
 
-Write the **signed perpendicular offset in the line's own units** as an
-attribute (top rib `+offset`, bottom `−offset`, cap `0`, using the actual mitred
-offset the geometry already computes at `line2d.scala:415`). It interpolates
-affinely and exactly — it _is_ an affine function of position on a trapezoid —
-so the fragment gets:
+A2 is approximate at joins for one reason: the `width` attribute carries the
+width the **caller asked for**, while the vertex was actually placed at
+`width / cos(θ/2)` along the mitre bisector (`line2d.scala:415`). The attribute
+describes a construction input, not the geometry the library produced. Fix that
+and A2 gets much closer to exact — no new attribute, no schema change.
 
-- exact `v = 0.5 + d / (2 · width)` including at mitres (A2 done properly), and
-- `d` itself: a cross-stroke coordinate in canvas units, which does **not**
-  stretch when the stroke widens. For a bristle/weave look that is arguably the
-  coordinate you actually want — bristles stay a constant physical size instead
-  of fanning out with the width, the same reasoning that already puts the weave
-  in `canvasPos` rather than uv in this study.
+The mitre is the largest such gap but not the only one: outline smoothing moves
+the produced outline too, and in the other direction. Both are covered below.
 
-Cost: one more float per vertex, and an additive change to `LineAttribs`
-(existing shaders keep compiling; they simply don't read the new field).
+**The rule for the pair:** the width field is the **full stroke width the
+geometry actually produced at this vertex**; `uv.y` says where across it the
+vertex sits (`0` top, `1` bottom, `0.5` centerline). Together they reconstruct
+both cross coordinates from the same two varyings:
+
+```
+v = V / Q            normalized 0..1, stretches with width
+d = V − 0.5·Q        world units, signed distance from the centerline
+```
+
+with `V = uv.y · width`, `Q = width`, both full width. Note `d` needs **no
+divide** — it is a linear combination of two affine varyings, so it is affine
+and exact.
+
+**Which of the two carries a deviation:** `width` carries **intent** — the width
+the stroke means to have here. `uv.y` carries **what the geometry actually did**.
+Wherever the produced outline falls short of the intended width — a clamped
+inner join (B1), a corner pinched by smoothing — the deviation goes into `uv.y`
+and `width` is left alone.
+
+`d = V − 0.5·Q` stays exact either way, since it only needs the two to be
+consistent with each other. What the convention buys is that `v` reports the
+pinch. For an outline vertex retaining a fraction `f` of the half extent
+(`f = 1` untouched, `f = 0` on the centerline):
+
+```
+uv.y = 0.5 − 0.5·f     top side          uv.y = 0.5 + 0.5·f     bottom side
+```
+
+so a top vertex pulled 20% of the half extent toward the centerline carries
+`uv.y = 0.1` instead of `0`. The shade can see that the stroke is pinched and
+respond — and `width` stays continuous along the stroke, which the world-metric
+frame wants. The reverse convention (clamp `width`, keep `uv.y` at 1) throws that
+information away and cannot be undone in the shader.
+
+The cost: **`v` no longer always spans `0..1`.** An edge falloff keyed on `v`
+will not fully close at pinched places, and the shade cannot recover the local
+maximum to renormalize. Deliberate — the compression is the signal.
+
+Consequences worth stating explicitly:
+
+- **Caps stay positive.** A cap vertex sits on the centerline, so its "true
+  distance" is 0 — but writing 0 puts `Q = 0` into the `v` divide. It is not
+  needed: `uv.y = 0.5` there already gives `d = 0.5·q − 0.5·q = 0` for any
+  positive `q`. "On the centerline" is encoded by `uv.y`, not by the width.
+  Keep the local width there deliberately.
+- **Make `width` mean full width, everywhere.** Today `LineVertex(pos, width)`
+  takes a **half**-extent — `top = normal·width`, `bottom = normal·-width`, so
+  the stroke is `2 × width` wide. That is a trap: it misreads as full width, and
+  it has already caught the library's own author. Fix the semantics rather than
+  the attribute name.
+  - `LineVertex.width` / `Line.add(pos, width)` mean the **full** stroke width
+    in world units.
+  - The rib loop halves it once, where it offsets.
+  - The attribute keeps the name `width` and carries the **produced full
+    width** — `|top_i − bottom_i|` once ribs are paired.
+
+  Nothing gets harder in the shader. `v = V/Q` is unchanged (`Q` cancels), and
+  `d` is one multiply-add either way — `V − 0.5·Q` on full width against
+  `2·V − Q` on a half-extent. The factor of 2 just moves. What full width buys
+  is the quantity a shader author actually reasons about ("how wide is the
+  stroke here"), matching `lineWidth` in SVG and Canvas.
+
+  Do it now: the line builder is early and about to be leaned on heavily, and
+  **no shader in the repo reads this attribute yet** (`base1`, `tile-strokes`,
+  `study1`, `bevel_lines_2d` all use `position` / `uv` / `localUv` only). The
+  cost only grows.
+
+  What the change touches:
+  - Every sketch's width constants halve — the four above plus `Line`'s
+    `defaultWidth` arguments. Mechanical.
+  - `cleanup(minLenWidRatio, …)` compares lengths against `avgWidth`, so its
+    meaning shifts by 2×. Re-pick the defaults rather than rescaling them
+    blindly.
+  - The `5 × width` miter cap (`line2d.scala:415`) likewise — and it is being
+    a limit worth re-picking against full-width semantics — and generously, since
+    sharp miters are wanted (see B6).
+  - `smoothMinLength` is a length, unaffected.
+
+- **Outline smoothing shrinks the stroke, so "exact" has a ceiling.** The
+  mitre is not the only place the produced geometry departs from the requested
+  width. `smoothEdges` at `ratio = 0.25` is corner cutting — Chaikin — and
+  `smoothDepth` passes of it converge on a curve lying strictly **inside** the
+  outline polygon. Every bevelled corner is therefore pulled toward the
+  centerline, and the stroke is genuinely narrower there than `width` says.
+  Four things follow:
+  - It is **corner-local**: straight runs have no corner to cut, and along a
+    straight taper a lerped position and a lerped scale stay consistent, so the
+    value remains exact there.
+  - It is **asymmetric**. The two outlines are smoothed independently, and at a
+    turn the outer outline has the sharper corner, so it is cut harder than the
+    inner one. The ribbon's effective centerline drifts and its local thickness
+    changes — not just one side's offset.
+  - It is **inconsistent between corners**: `smoothMinLength` leaves short
+    segments unsmoothed, so some corners shrink and their neighbours do not.
+  - So fixing the mitre value raises accuracy from "wrong by up to 2.6×" to
+    "wrong by the corner sagitta", which is a large improvement and **not**
+    exactness. The doc should not claim exactness for the smoothed case.
+
+  One workaround exists today and costs nothing library-side: **smooth the
+  centerline instead of the outlines** — `line.smoothEdges(...)` before
+  building, with `smoothDepth = 0` on `toBufferedGeometry`. The outlines are
+  then true offsets of a smooth centerline, the produced width is the requested
+  `width` by construction, and it reduces B as a side effect (larger radius → less mitre,
+  less fold). **But it loses the rounded caps**, which contour smoothing gives
+  for free and which are wanted. So it is a comparison worth rendering, not a
+  replacement. The real answer is below.
+
+- **Sharp miters are staying** (B6 rejected), so the gap between requested width
+  and placed vertex is large by design at corners. That makes this correction
+  load-bearing rather than a refinement.
+
+What this unlocks, beyond removing the kink: `d` is a cross-stroke coordinate in
+world units that does **not** stretch when the stroke widens. Paired with the
+existing `length` attribute (world-unit arc length along the centerline), a
+shade gets a full world-metric ribbon frame — see below.
+
+#### Making A3 exact, and the strip simpler: rib-preserving contour smoothing
+
+Contour smoothing is worth keeping — it rounds the **caps** as a side effect,
+which centerline smoothing cannot do and which is wanted. What breaks is not
+contour smoothing itself but that the two contours are smoothed **independently**
+(`line2d.scala:462–473`), so they end up with different vertex counts and the
+ribs stop existing as pairs.
+
+Smooth them in **one pass over rib indices instead**: decide per rib, and
+whenever one side bevels, emit the matching two vertices on the other side at
+the same lerp ratios. On a side with no turn those two points land on its
+existing edge, so the shape is unchanged — only the vertex density rises. Both
+contours then always have equal counts and matching indices.
+
+What that buys, in order of importance:
+
+- **The produced extent stops being predicted and becomes measured.** With ribs
+  paired, `|top_i − bottom_i|` is knowable after all smoothing has run, and the
+  rib midpoint is the local center. The mitre gap, the Chaikin shrink and the
+  asymmetry all stop being sources of error, because nothing is predicted any
+  more. Per the intent/deviation rule, that measurement lands in **`uv.y`** —
+  `uv.y_top = 0.5 − |top_i − mid_i| / width_i`, and the mirror for bottom —
+  while `width_i` keeps the intended width. `d` then comes out exact, and `v`
+  reports how far short of intent the geometry fell. It is also the
+  self-consistent frame: `v` is interpolated along the rib, so measuring along
+  that same rib is the right axis.
+- **Both secondary contributors to A go away.** The `balance` interleave exists
+  only to reconcile mismatched contours; with pairs it reduces to
+  `emit top_i, bottom_i`, so no skewed quads, no repeated indices, no degenerate
+  triangles. And paired vertices carry identical `length`, so `uv.x` no longer
+  disagrees across a rib.
+- **The strip walk gets shorter**, and the `balance` / `topLen` / `bottomLen`
+  bookkeeping can go.
+- **Caps still round**, symmetrically on both sides, since the corner that
+  rounds them is present on both contours.
+
+Details to settle when building it:
+
+- What triggers a bevel for the pair — either side exceeding the angle
+  threshold, or the max of the two? Likewise `smoothMinLength`: the shorter of
+  the two sides, or both?
+- The paired outlines are no longer symmetric about the centerline after
+  smoothing, which is fine and expected — it is exactly why measuring beats
+  predicting.
+- `Line.smoothEdges` stays as it is for centerline use; this is a new paired
+  routine inside `toBufferedGeometry`, not a change to the public
+  transformation.
+- The stroke is still genuinely narrower at smoothed corners. That is now a
+  **look** question rather than a correctness one — the attribute reports it
+  truthfully.
+
+#### What A2 + A3 unlock: four coordinate systems, chosen per pattern
+
+A2 + A3 do not impose a cross-stroke convention; they hand the shade both and
+let each pattern pick. Crossed with the two along-stroke coordinates that
+already exist, that is four frames, all meaningful:
+
+|                       | `v` normalized                          | `d` world units                    |
+| --------------------- | --------------------------------------- | ---------------------------------- |
+| **`uv.x` normalized** | today's behavior — everything stretches | spans the stroke, fixed cross-size |
+| **`length` world**    | fixed spacing along, stretched across   | fully world-metric ribbon frame    |
+
+The cross axis is the interesting choice, and it is a physical one: **`v` is one
+brush pressed harder** — hair count fixed, texture stretches across a wider
+mark; **`d` is a bigger brush** — hair size fixed, more features appear at the
+edges as it widens. Both are wanted, for different marks. Since both are in hand
+in the same fragment, `mix(d, v · referenceWidth, k)` dials continuously between
+splaying and growing, which is probably closer to a real brush than either
+endpoint, and the edge falloff can use `v` while the bristle noise uses `d`.
+
+Two limits on the world-metric frame, neither fixable by attributes:
+
+- **It is not isometric on curves.** `(s, d) → center(s) + d · normal(s)` has
+  Jacobian determinant `1 − d·κ(s)`, so a `(length, d)` pattern stretches along
+  the outside of a turn and compresses on the inside, and degenerates exactly
+  where `d·κ = 1` — the same condition as B's fold. Inherent to any ribbon
+  frame, and arguably right for brush texture, which does smear longer around
+  the outside of a turn.
+- **`swapTextureOrientation` is required, not a hazard.** `toBufferedGeometries`
+  passes `i % 2 != 0` (`line2d.scala:585`), so every other fragment runs `uv.y`
+  `1→0` instead of `0→1`. That is the brush model: at a reversal the hand stops
+  and comes back, **the brush itself does not rotate**, so the physical top edge
+  of the mark stays the top edge. Travel direction reverses, so travel-relative
+  "left" swaps physical sides — flipping `uv.y` is what keeps `v` and `d`
+  referring to the **same physical side** across the split. Without it a
+  `d`-keyed pattern would be the discontinuous one.
+
+#### Where the principle stops: `length`
+
+Stated so the principle does not get over-applied. `length` records the
+**centerline** accumulated length even at an outer-curve vertex that genuinely
+travelled farther, and that is correct: `u` has to be shared stroke progress, or
+the two outlines would disagree about where along the stroke they are. So the
+rule is not "always record what the geometry produced" — it is **record what the
+shader needs to reconstruct the field it wants**. Cross axis: the actual
+placement. Along axis: the shared centerline value.
 
 #### A4 — Analytic uv per fragment from flat per-segment varyings
 
@@ -213,13 +436,14 @@ falloff, the end fade, any along-stroke texture.
 
 ### A — trade-off summary
 
-| Strategy               | Exact?        | Cost                    | Where            | Fixes mitres | Fixes caps |
-| ---------------------- | ------------- | ----------------------- | ---------------- | ------------ | ---------- |
-| A1 subdivision         | no (∝ 1/N)    | vertices, a new pass    | library          | no           | no         |
-| **A2 projective `v`**  | yes on tapers | 2 varyings + 1 divide   | **sketch first** | approx       | improves   |
-| A3 offset attribute    | yes           | +1 float/vertex, schema | library          | yes          | improves   |
-| A4 flat per-segment    | yes           | high, fragile           | library + DSL    | yes          | yes        |
-| A5 world-space pattern | n/a           | none                    | sketch           | n/a          | n/a        |
+| Strategy                  | Exact?                            | Cost                             | Where            | Fixes mitres | Fixes caps |
+| ------------------------- | --------------------------------- | -------------------------------- | ---------------- | ------------ | ---------- |
+| A1 subdivision            | no (∝ 1/N)                        | vertices, a new pass             | library          | no           | no         |
+| **A2 projective `v`**     | yes on tapers                     | 2 varyings + 1 divide            | **sketch first** | approx       | improves   |
+| **A3 honest `width`**     | yes, unless outlines are smoothed | semantics fix + one changed line | library          | yes          | improves   |
+| **A3 + paired smoothing** | yes, measured not predicted       | rewrite the smoothing pass       | library          | yes          | yes        |
+| A4 flat per-segment       | yes                               | high, fragile                    | library + DSL    | yes          | yes        |
+| A5 world-space pattern    | n/a                               | none                             | sketch           | n/a          | n/a        |
 
 ---
 
@@ -344,108 +568,130 @@ line actually achieves over the distance it takes to turn. A single-vertex
 `halfWidth ≤ len · tan(θ/2)` test is the degenerate one-segment case of the same
 inequality and misses the spread-out corners.
 
-Then the strategies diverge on what to do when it fails. **B6 replaces the
-offending offset itself** and is the front-runner; B1 and B2 leave the offset
-formula alone and work around it from the inside or from upstream. (The
-numbering follows discovery order, not preference — B6 arrived once the render
-showed how far the excursion travels.)
+Then the strategies diverge on what to do when it fails. **B1** clamps the inner
+vertex and is the fix; **B2** avoids the situation upstream and is the stopgap.
+**B6** — bounding the miter factor itself — is rejected, since the sharp miter is
+wanted. (Numbering follows discovery order, not preference.)
 
-### B6 — A real miter limit with bevel fallback (front-runner)
+### B6 — Bounding the miter factor — rejected
 
-The standard join treatment, and the one the current code stops just short of:
-when the miter factor exceeds a limit, **do not place a vertex on the bisector
-at all**. Emit a **bevel join** instead — two vertices at exactly `width`,
-perpendicular to the incoming and the outgoing segment respectively, with the
-corner cut straight across between them. SVG and Canvas both do exactly this,
-`miterLimit` with a bevel fallback.
+Both forms of this (a bevel fallback, or lowering `splitAtAngle` so the surviving
+miter factor `1/cos(θ/2)` stays small) were considered and are **out**. They
+remove the artifact by removing the capability: a **sharp miter, then smoothed,
+is how an explicit brush turn is modelled**, and that has to work on sharp curves
+without artifacts. Capping the miter factor forbids exactly the corners we want
+to be able to draw.
 
-Why this fits better than anything else in the section:
+Recorded because the arithmetic is still worth knowing when choosing a split
+threshold deliberately: 3π/4 → 2.61 → a 0.65 canvas-unit excursion at
+`WidthMax = 1/4`; π/2 → 1.41; π/3 → 1.15.
 
-- **It removes the fan at its source.** No long excursion exists, so
-  `smoothEdges` has nothing to bevel into 16 vertices, and the `balance` walk has
-  no far-flung vertices to fan against the opposite outline.
-- **It fixes both symptoms at once**, because the excursion it replaces was the
-  same number on both sides. The inner vertex stops overshooting to 2.6 × width
-  and lands at `width` perpendicular to its own segment, so the backwards run
-  goes away with the spike. Whatever residual overlap remains at a tight corner
-  is local and pigment-like — the wanted kind.
-- **Bounded by construction, in absolute terms.** Every outline vertex sits at
-  `width` from the centerline. There is no multiple-of-width cap that grows with
-  the width, and no configuration of turn and width that can produce an
-  excursion again.
-- **Precise and opt-in**, which is what was asked of a B fix: a `miterLimit`
-  parameter on the geometry build. Below the limit nothing changes at all, so
-  existing strokes keep their exact look, and the treatment is chosen.
-- **No interaction with A.** Bevel vertices are at exactly `width`, so `width`
-  stays the true half-extent and the A2/A3 uv correction keeps working — better
-  than today, where a mitred vertex at 2.6 × width already breaks that
-  assumption.
-- **It is a small, local change** to the rib placement loop, unlike B1's
-  intersection tests or B3–B5's rewrites.
+A bevel join remains a reasonable **separate library feature** for non-brush
+lines — it keeps `v` continuous around a corner where a split flips it — but it
+is a uv-semantics feature, not a fix, and not in scope here.
 
-Open question it raises: a bevel join emits two outline vertices where the
-mitre emitted one, so the two outlines get different vertex counts more often
-and the `balance` interleave carries more of the load. Worth watching, not
-obviously a problem.
+**What this leaves.** The fan cannot be blamed on the miter excursion alone,
+because the excursion is staying. Re-reading the mechanism: a fan needs many
+outer vertices paired against **few** inner ones, and that count mismatch comes
+from the inner outline being folded and degenerate at the corner, plus the two
+contours being smoothed independently. Both of those are addressed elsewhere:
 
-For any fold that survives B6, the two remaining options are not peers: B2 is
-what we can do **today, without any library work**; B1 is the geometric version.
+- **A's rib-preserving paired smoothing** gives every outer vertex its own
+  inner partner, so the corner tessellates into ordinary quads instead of
+  slivers converging on a point.
+- **B1's inner clamp** stops the inner outline folding in the first place.
 
-### B2 — Keep the situation from arising (available now, a workaround)
+Together they remove the fan while the sharp outer miter stays exactly as
+drawn — a long thin wedge, which is what a brush turn looks like before it is
+smoothed. So B is B1 (with B2 as the by-eye stopgap), and the fan is largely a
+consequence of work already approved under A.
 
-Fix the **centerline data** before any offsetting happens: keep the width below
-what the turn can carry. Both offsets then follow symmetrically, there is no
-special case in the outline builder, and the ribbon stays a valid ribbon.
+### B1 and B2 are two different marks, both wanted
 
-This is available at every level of rigour, which is its real virtue:
+Neither is a stopgap for the other. They differ in **where the deviation is
+recorded**, which is exactly A3's intent/what-happened rule, and that difference
+is visible:
 
-- **By eye.** Pick a `WidthMax` and a point distribution that do not produce
-  turns tight enough to fold. This is what the study can do this afternoon, with
-  no code at all.
-- **Approximately.** A cheap per-vertex `halfWidth ≤ len · tan(θ/2)` test in the
-  sketch's own point generator, clamping width where it fails. Misses corners
-  spread over several small turns, but catches the obvious ones.
-- **Properly**, as a `Line` transformation using the windowed predicate,
-  alongside `cleanup` / `smoothEdges`.
+|                   | B1 — clamp the inner vertex        | B2 — narrow the stroke              |
+| ----------------- | ---------------------------------- | ----------------------------------- |
+| what moves        | inner outline only                 | both outlines, symmetrically        |
+| `width` attribute | unchanged (intent stands)          | **reduced** (intent changes)        |
+| `uv.y` at outline | **clamped**, never reaches `0`/`1` | stays `0` / `1`                     |
+| texture across    | clipped on the inner side          | complete, compressed into less room |
+| the mark          | brush stays wide, inner edge bites | brush narrows through the turn      |
 
-But it is a workaround, not a solution, and the cost is the part that matters:
-**it forbids a region of the design space** — a wide stroke may no longer make a
-sharp turn. That region is exactly what this study exists to explore. Narrowing
-through a tight turn can be defended as brush behaviour, but it is a constraint
-accepted under duress, not an effect anyone asked for.
+`d` stays exact in both. Both are **opt-in**, and which one a stroke wants is a
+look decision, so the library offers the choice rather than picking. Per the
+project's no-`enum` rule, an opaque type in the geometry API:
+
+```scala
+opaque type FoldTreatment = Int
+object FoldTreatment:
+  val Leave: FoldTreatment = 0
+  val ClampInner: FoldTreatment = 1
+  val NarrowWidth: FoldTreatment = 2
+```
+
+They also compose: a gentle `NarrowWidth` with `ClampInner` catching the
+remainder is a third mark worth trying.
+
+### B2 — Narrow the stroke where the turn cannot carry it
+
+Change the **centerline data** before any offsetting: reduce `width` until the
+windowed predicate holds. Both offsets then follow symmetrically, there is no
+special case in the outline builder, and the ribbon stays a valid ribbon with a
+complete texture across it.
+
+Three levels of rigour, and we want the third:
+
+- **By eye.** Pick a `WidthMax` and a point distribution that never fold. Free,
+  available now, and what unblocks the study today.
+- **Approximately.** A per-vertex `halfWidth ≤ len · tan(θ/2)` clamp in the
+  sketch's own generator. Misses corners spread over several small turns.
+- **Programmatically**, as a `Line` transformation using the windowed predicate,
+  alongside `cleanup` / `smoothEdges`. Its natural home: it rewrites vertex
+  data, so the reduced width flows into the attribute by itself and `uv.y`
+  needs no special case at all.
+
+The cost is real and is why it is a choice rather than the default: **the stroke
+cannot stay wide through a sharp turn**. Whether that reads as a brush easing off
+through the turn or as a stroke that lost its weight is the thing to compare
+against B1 on a render.
 
 One genuine advantage over B1: the reduced width is a real property of the
 vertex, so it flows into the `width` attribute and the A2/A3 uv correction
 derives from it with no extra work.
 
-### B1 — Remove the fold in the geometry (preferred, if it can be exact and opt-in)
+### B1 — Clamp the inner vertex, keep the width
 
 Keep the width the caller asked for; fix the **outline**. When the inner offset
-would run past the neighbouring segments, collapse the inner vertex onto the
-true intersection of the two inner edges (or onto the centerline) instead of
-letting it overshoot. Only the inner side needs it — the outer is already
-bounded by the existing `5 × width` mitre cap (`line2d.scala:415`).
+would run past the neighbouring segments, pull the inner vertex back toward the
+centerline instead of letting it overshoot. Only the inner side needs it — the
+outer miter is wanted and stays.
 
-This is the one worth building, on two conditions:
+Two conditions:
 
 - **Precise, in any situation.** It has to remove the fold wherever it occurs,
   not below some threshold, and leave everything else bit-identical. Then no
-  width and no turn is off-limits any more, and the whole width range stays
-  usable at any curvature — which is the point.
-- **Opt-in.** A parameter on the geometry build, off by default, so existing
-  strokes keep their exact look and a sketch chooses the treatment. Not a silent
-  change of what every line does.
+  width and no turn is off-limits, and the whole width range stays usable at any
+  curvature — which is the point.
+- **Opt-in.** A `FoldTreatment` parameter on the geometry build, `Leave` by
+  default, so existing strokes keep their exact look.
 
-Open problems to solve before it qualifies as either:
+Details:
 
 - Leaves a pinch/notch on the inside of tight corners — the stroke keeps its full
   width but the corner's inner boundary is a compromise, visible as a thinning
-  under a hard edge falloff. Whether that reads better than B2's narrowing is an
-  open visual question, and it is the thing to prototype first.
-- **Desynchronises the `width` attribute from the real half-extent** at clamped
-  joins. Under A3 the offset attribute has to carry the _clamped_ offset, not
-  `width`, or the corrected `v` is wrong at exactly the corners the clamp
-  touched.
+  under a hard edge falloff. Whether that reads better than B2's narrowing is
+  the comparison to render.
+- **Clamp the inner vertex's distance to the centerline** — the centerline is
+  the one place that never overlaps, so it is the right thing to measure
+  against. Express the clamp in `uv.y`, not in `width`, per A3's "intent vs.
+  what happened" rule: a top-side inner vertex pulled 20% of the half extent
+  toward the centerline carries `uv.y = 0.1` against an unchanged `width`, so
+  `d` stays exact while `v` never reaches its extreme. That compression at the
+  notch is a **usable visual signal**, not a defect — the shade sees the corner
+  is pinched and can respond, and nothing has been thrown away.
 - The bevel passes run after the ribs are placed and can reintroduce crossings,
   so the clamp cannot simply be a step in the rib loop and be done.
 - Where: the rib placement loop, `line2d.scala:400–459`.
@@ -490,26 +736,24 @@ justified for A alone, and A has better options.
 The last two columns are the ones we want **kept**, not fixed — a fix that lands
 in them is doing damage.
 
-| Fix                 | A zig-zag | A mitres  | A caps | B fold-back | B self-crossing | B split caps   |
-| ------------------- | --------- | --------- | ------ | ----------- | --------------- | -------------- |
-| A1 subdivision      | partial   | –         | –      | –           | –               | –              |
-| A2 projective `v`   | **yes**   | partial   | better | –           | –               | –              |
-| A3 offset attribute | **yes**   | **yes**   | better | –           | –               | –              |
-| B6 miter limit      | –         | **fixes** | –      | –           | untouched ✓     | untouched ✓    |
-| B1 inner clamp      | –         | –         | –      | **yes**     | untouched ✓     | untouched ✓    |
-| B2 width limit      | –         | helps     | –      | avoids it   | untouched ✓     | untouched ✓    |
-| B0 `BlendOp.Max`    | –         | –         | –      | dims it     | **flattens ✗**  | **flattens ✗** |
-| B3–B5 union         | varies    | varies    | varies | yes         | **flattens ✗**  | **flattens ✗** |
+| Fix                | A zig-zag | A mitres | A caps | B fold-back | B self-crossing | B split caps              |
+| ------------------ | --------- | -------- | ------ | ----------- | --------------- | ------------------------- |
+| A1 subdivision     | partial   | –        | –      | –           | –               | –                         |
+| A2 projective `v`  | **yes**   | partial  | better | –           | –               | –                         |
+| A3 honest `width`  | **yes**   | **yes**  | better | –           | –               | –                         |
+| B6 bound the miter | –         | fixes    | –      | –           | untouched ✓     | **forbids sharp turns ✗** |
+| B1 clamp inner     | –         | –        | –      | **yes**     | untouched ✓     | untouched ✓               |
+| B2 narrow width    | –         | helps    | –      | **yes**     | untouched ✓     | untouched ✓               |
+| B0 `BlendOp.Max`   | –         | –        | –      | dims it     | **flattens ✗**  | **flattens ✗**            |
+| B3–B5 union        | varies    | varies   | varies | yes         | **flattens ✗**  | **flattens ✗**            |
 
-("B fold-back" is the inner symptom. B6 is the only row that removes the outward
-excursion the fan is built from — which is why the fan went unnoticed until the
-render.)
+("B fold-back" is the inner symptom; the needle fan is the tessellation
+amplifying it, and A's paired smoothing removes the amplification.)
 
-**A2 + A3** for the zig-zag, **B6** for the needle fan. B6 is cheap enough and
-targeted enough that it should not wait behind A — it is a bounded change to one
-loop, and the fan is the artifact that actually ruins renders. B1/B2 stay
-available for the fold-back underneath, which is milder and may not need
-anything once the fan is gone.
+**A2 + A3 + paired smoothing** for the zig-zag and most of the fan; **B1** for
+the fold underneath, with **B2** as the by-eye stopgap until it exists. B6 is
+rejected and the union family below the line buys the corner at the price of the
+brush.
 
 ---
 
@@ -529,38 +773,39 @@ Both get solved. A first, because nothing else unblocks it.
 2. **A2 in the sketch** — two varyings and a divide, no library change. Confirms
    the analysis against the real stroke and settles how much of the remainder is
    mitres, caps and interleave skew rather than the taper.
-3. **A3 in the library** — the offset attribute, once A2 has shown what is left.
-   This is the version worth keeping: exact at mitres too, and it hands the
-   shade a world-unit cross-stroke coordinate, which for bristle-type patterns
-   is very likely the better basis than a normalized `v` that stretches with the
-   width. Decide at that point whether `v` is derived in a shader-lib helper or
-   left to each shade.
-4. Re-check the cap ribs (`uv.y = 0.5` on the centerline) separately — with
+3. **A3 in the library** — full-width semantics plus the honest attribute, once
+   A2 has shown what is left. Do the semantics change first and in one commit,
+   halving every sketch's width constants with it; it is a breaking change and
+   the cost only grows. Exact at mitres, and it hands the shade a world-unit
+   cross-stroke
+   coordinate, which for bristle-type patterns is very likely the better basis
+   than a normalized `v` that stretches with the width. Decide at that point
+   whether `v` is derived in a shader-lib helper or left to each shade.
+4. **Rib-preserving contour smoothing**, which turns A3 from "much closer" into
+   "measured". Bigger than step 3 and worth doing on its own merits: it deletes
+   the `balance` reconciliation, restores proper quads, keeps the rounded caps,
+   and removes both secondary contributors to A at once. Sequence it after A2
+   has confirmed the diagnosis, so its effect is visible against a known
+   baseline.
+5. Re-check the cap ribs (`uv.y = 0.5` on the centerline) separately — with
    `splitAtAngle` in play there is a cap at every sharp corner, so if that
-   distortion is still visible after A3 it deserves its own treatment.
+   distortion is still visible afterwards it deserves its own treatment.
 
-**B — the needle fan first, then whatever is left.**
+**B — the fold only; sharp miters stay.**
 
-5. **B6 — the miter limit with bevel fallback.** This is now the first B step and
-   arguably belongs ahead of A3: it is a bounded change to the rib placement
-   loop, it is the artifact that actually ruins renders, and it makes `width` the
-   true half-extent again, which A3 wants anyway. Verify it by re-rendering this
-   study with the same seed and checking that the fans are gone.
-6. **Re-look before doing more.** B6 lands both outlines back at `width`, so the
-   fold may be gone with the spike. Whatever remains is local overlap, possibly
-   the wanted kind. Decide from a render, not from this document.
-7. **B2 by eye** in the meantime — choose widths and a point distribution that
-   don't fold. Costs nothing, and constrains what the study may look like, which
-   is why it is a stopgap.
-8. **B1, if the fold still shows.** Prototype the inner-join clamp on the
-   worst corners the study can produce and look at the notch it leaves; that
-   image decides whether it is better than B2's narrowing. If it is, build it as
-   an opt-in parameter on the geometry build, exact at every corner, with the A3
-   offset attribute carrying the clamped value. That is the version that gives
-   the full width range back at any curvature.
-9. A4 and B0 / B3–B5 are scoped here so we can say no to them on purpose. The B
-   ones share one failure: they buy the corner by flattening the stroke's
-   overlap with itself, which is the effect the brush look depends on.
+6. **Re-render after A step 4.** Paired smoothing removes the count mismatch the
+   fan is built from, so measure what is actually left before building anything
+   for B. Same seed, worst corners.
+7. **B2 by eye** in the meantime — widths and a point distribution that don't
+   fold. Free, unblocks the study, constrains how it may look.
+8. **Build both, opt-in, selectable.** They share the windowed predicate and
+   differ only in where the deviation lands — B1 in `uv.y` at the geometry
+   build, B2 in `width` as a `Line` transformation. Prototype on the worst
+   corners the study can produce and compare the two renders side by side:
+   inner texture clipped against stroke narrowed. Default stays `Leave`.
+9. A4, B0, B3–B5 and B6 are scoped here so we can say no to them on purpose.
+   B0/B3–B5 buy the corner by flattening the stroke's overlap with itself; B6
+   buys it by forbidding sharp turns. Both prices are the brush.
 
 The study itself stays valid either way — surfacing these two is what it was
 for. But A is the difference between "the line pipeline has a known limit" and
@@ -574,7 +819,7 @@ for. But A is the difference between "the line pipeline has a known limit" and
   the stroke" means half way in _distance_, at every point. At a mitre the ribs
   are oblique, and there is a second plausible definition (perpendicular from
   the centerline) that differs. Which one the shade wants is a look decision.
-- **Should the cross-stroke coordinate be normalized at all?** A3's `d` in
+- **Should the cross-stroke coordinate be normalized at all?** The world-unit `d` in
   canvas units may be more useful than `v` for everything except the edge
   falloff. If so, the library should offer both and say which is which.
 - **Is `uv.x` allowed to stay affine?** Stated above as a requirement (arc
