@@ -1,11 +1,15 @@
 # Line2D — UV distortion on width changes, and fold-back overlap on tight turns
 
-Status: **A approved, B under review. Nothing implemented.**
+Status: **A2 done and verified; A3–A4 approved and next. B approved in shape.**
+See section 4 for the step-by-step status.
 
-- **A — approved**, conditional on A2 proving correct against a render: the
-  projective `v`, the full-width semantics change, the honest `width` attribute,
-  and rib-preserving paired smoothing. If A2 does not behave as the analysis
-  predicts, the rest is re-opened.
+- **A — approved and started.** A2 (projective `v`) is implemented in study1 and
+  **confirmed against many regenerated random geometries: no zig-zag anywhere**.
+  That was the condition on the rest, so the full-width semantics change, the
+  honest `width` attribute and rib-preserving paired smoothing are unblocked.
+- **API naming — `width` means full width, approved** (it is load-bearing for
+  A3). The `splitAtAngle` naming question is **deferred** to a later API-surface
+  review, noted below.
 - **B — under review.** Settled so far: **B6 is rejected** — a sharp miter then
   smoothed is how a brush turn is modelled, so bounding the miter factor forbids
   the corners we want. **B1 and B2 are both wanted**, both programmatic and
@@ -124,9 +128,11 @@ functions**, and that is the lever (A2 below).
   become general skewed quadrilaterals, not trapezoids, and repeated indices
   emit degenerate triangles. Skew amplifies A.
 - **Cap ribs.** The first and last outline vertex sit on the centerline with
-  `uv.y = 0.5` (`line2d.scala:500`). The full `0..1` cross-range is compressed
-  into a degenerate first quad, so any uv-keyed pattern is strongly distorted
-  right at the caps — and `splitAtAngle` puts a cap at every sharp corner.
+  `uv.y = 0.5` (`line2d.scala:500`), compressing the full `0..1` cross range into
+  a degenerate first quad. **Deliberate** — it is what gives the contour a corner
+  for `smoothEdges` to cut, and therefore what rounds the cap; see A5. The
+  distortion it implies has not shown a glitch. The cap problem that _is_ real
+  lies in the vertices that rounding inserts.
 
 The first two of these are not separate problems: both are consequences of the
 two contours being smoothed independently, and rib-preserving smoothing (under
@@ -189,6 +195,36 @@ Notes:
   (`shader/lib/` — a `lineUv` block that takes the varyings and returns `v` and
   `d`) plus the `LineAttribs` scaladoc explaining the pair. The only schema
   change A3 then needs is the field's **name**, not its shape.
+
+#### Carried to a later API-surface review: `splitAtAngle`'s threshold
+
+**Not part of this plan.** After these fixes land, the line generator's whole API
+gets reviewed for consistency and readability as its own milestone. This belongs
+there, together with anything else that review turns up.
+
+The observation, so it is not lost: `splitAtAngle`'s threshold is compared
+against `dot(prevDir, dir)` — the angle **between travel directions**, `0`
+straight, `π` a full reversal. That is `180° − interior`, so
+`splitAtAngle(3π/4)` reads as 135° but splits at a 45° corner.
+
+```
+deviation δ = 180° − interior θ
+miter factor = 1 / cos(δ/2) = 1 / sin(θ/2)
+```
+
+Candidates when it comes up: rename to what it measures (`splitAtTurn`,
+`splitAtDeviation`) with the relation documented; or switch to the interior
+angle, which reads best but leaves every existing call site numerically valid
+and silently different, so it needs a rename regardless; or a
+`splitAtMiterLimit(limit)` helper keyed on the quantity that actually predicts
+the artifact. Undecided.
+
+Timing note: **cheap now, expensive later** — the API has very few consumers yet.
+That argues for scheduling the review soon, not for smuggling the change into
+this plan.
+
+The one naming change that _is_ in scope is `width` meaning full width, because
+A3 depends on it.
 
 #### A3 — Consistent `width` semantics, and an attribute that tells the truth
 
@@ -480,8 +516,8 @@ Run the arithmetic for this study:
 
 - `v.width` is the **half**-extent (`top = normal·offset`, `bottom =
 normal·−offset`), so `WidthMax = 1/4` means a stroke half a canvas wide.
-- `splitAtAngle(3π/4)` leaves turns of up to 135° inside a fragment, so the
-  mitre factor reaches `1/cos(67.5°) ≈ 2.6`.
+- `splitAtAngle(3π/4)` leaves deviations of up to 135° inside a fragment — a 45°
+  interior angle — so the mitre factor reaches `1/cos(67.5°) ≈ 2.6`.
 - `2.6 × 0.25 ≈ 0.65` canvas units. One outline vertex is thrown two thirds of
   the canvas off the centerline — which is the length of the needles.
 
@@ -553,25 +589,42 @@ flat coverage; it is not the tool for this one.
 B1 and B2 are **the same measurement with two different responses**, and neither
 is a matter of tuning a constant by eye — both need the fold predicate computed.
 
-The predicate is not a per-vertex curvature test. On a polyline that has been
-through `smoothEdges` and `splitAtAngle`, a tight corner is a _run_ of small
-turns, so a fold can be spread over several vertices none of which turns much on
-its own. The honest form walks a window: accumulate turn angle `Δθ` and arc
-length `s` outward from each vertex, and require
+It is not a per-vertex curvature test. On a polyline that has been through
+`smoothEdges`, a tight corner is a _run_ of small turns, so a fold can be spread
+over several vertices none of which turns much on its own. It needs a window —
+and the window has a natural size.
 
-```
-halfWidth ≤ s / Δθ
-```
+**The test.** From each vertex, walk **half the stroke width of arc length in
+each direction** and accumulate the turn `Δθ` over that span. The fold condition
+is `Δθ > 2` radians (≈ 114.6°).
 
-over every window — i.e. the half-width must fit inside the discrete radius the
-line actually achieves over the distance it takes to turn. A single-vertex
-`halfWidth ≤ len · tan(θ/2)` test is the degenerate one-segment case of the same
-inequality and misses the spread-out corners.
+Where the 2 comes from: over an arc of radius `R`, turn and arc length relate as
+`Δθ = s/R`, and the inner offset folds when `R < h` (half-extent). The window
+fixes `s = 2h`, so `R < h` becomes `Δθ > 2h/h = 2`. **Nothing to tune** — the
+constant falls out of the geometry, and width-dependence survives because the
+_window_ scales with the width, not the threshold. A wide stroke inspects a long
+span of line and fails on a corner a narrow stroke passes.
 
-Then the strategies diverge on what to do when it fails. **B1** clamps the inner
-vertex and is the fix; **B2** avoids the situation upstream and is the stopgap.
-**B6** — bounding the miter factor itself — is rejected, since the sharp miter is
-wanted. (Numbering follows discovery order, not preference.)
+Checks at the edges: 2 rad over `3h` → `R = 1.5h`, no fold, and the window sees
+only 1.33 rad — no fire. 2 rad over `h` → `R = 0.5h`, folds, and the window sees
+the full 2 rad — fires.
+
+Three details:
+
+- Use **the vertex's own width** for its window; it is that vertex's offset that
+  folds.
+- Under full-width semantics the window is `±width/2` — **one stroke width of
+  line, centred on the vertex**.
+- **Clamp the window at fragment boundaries.** It must never reach across a
+  split: a reversal's overlap is wanted, and the split corner is an endpoint
+  with no join to fix.
+
+O(n) with a running turn sum over a sliding window.
+
+Then the strategies diverge on what to do when it fires — B1 clamps the inner
+vertex, B2 narrows the stroke. **B6** — bounding the miter factor itself — is
+rejected, since the sharp miter is wanted. (Numbering follows discovery order,
+not preference.)
 
 ### B6 — Bounding the miter factor — rejected
 
@@ -582,9 +635,26 @@ is how an explicit brush turn is modelled**, and that has to work on sharp curve
 without artifacts. Capping the miter factor forbids exactly the corners we want
 to be able to draw.
 
-Recorded because the arithmetic is still worth knowing when choosing a split
-threshold deliberately: 3π/4 → 2.61 → a 0.65 canvas-unit excursion at
-`WidthMax = 1/4`; π/2 → 1.41; π/3 → 1.15.
+Recorded because the arithmetic is worth knowing when choosing a split threshold
+deliberately. **`splitAtAngle`'s threshold is a deviation angle** — between the
+two travel directions, `0` straight, `π` a full reversal — not the interior angle
+at the corner, which is easy to misread:
+
+```
+offset = halfWidth / cos(δ/2)      δ = deviation
+       = halfWidth / sin(θ/2)      θ = 180° − δ, the interior angle
+```
+
+| threshold δ | interior θ | miter factor | excursion at half-extent `1/4` |
+| ----------- | ---------- | ------------ | ------------------------------ |
+| 3π/4 = 135° | 45°        | 2.61         | 0.65 canvas units — the fans   |
+| π/2 = 90°   | 90°        | 1.41         | 0.35                           |
+| π/3 = 60°   | 120°       | 1.15         | 0.29                           |
+
+So today's threshold admits a 45° V — sharp, not gentle. Same quantity as SVG's
+`miterLimit` (default 4, ≈ 29° interior). Excursions are in today's semantics
+where `WidthMax = 1/4` is the half-extent; under the approved full-width change
+the same constant halves them.
 
 A bevel join remains a reasonable **separate library feature** for non-brush
 lines — it keeps `v` continuous around a corner where a split flips it — but it
@@ -757,86 +827,196 @@ brush.
 
 ---
 
-## 4. Suggested order
+## 4. Implementation plan
 
-Both get solved. A first, because nothing else unblocks it.
+| #   | Step                                         | Where   | Status      |
+| --- | -------------------------------------------- | ------- | ----------- |
+| —   | `tests/line2d-debug` verification sketch     | sketch  | **done**    |
+| A2  | Projective `v` proof of concept              | sketch  | **done** \* |
+| A3a | `width` means full width                     | library | next        |
+| A3b | Attribute carries the produced width         | library | after A3a   |
+| A3c | `v` / `d` helper for shades                  | library | after A3b   |
+| A4  | Rib-preserving paired contour smoothing      | library | after A3    |
+| A5  | Re-check cap ribs                            | —       | after A4    |
+| B0  | Re-render, measure what is left of the fan   | sketch  | after A4    |
+| B1  | `ClampInner` treatment                       | library | after B0    |
+| B2  | `NarrowWidth` treatment                      | library | after B0    |
+| B3  | Compare the two marks, pick defaults per use | sketch  | after B1/B2 |
 
-**A — patterned textures on a width-varying stroke.**
+(Step ids are local to this plan and unrelated to the strategy labels in
+sections 1–2.)
 
-1. **Reproduce the diagnosis, don't trust it.** A debug shade on this study's
-   geometry — `fract(v · 20)` as stripes, plus `fract(u · 20)` — makes the kink
-   and its location unmistakable, and tells us whether the `balance` interleave
-   and the cap ribs contribute enough to matter. The
-   `examples/bevel_lines_2d` uv shade is too smooth to show any of it; if we
-   want a permanent regression check, that example wants a striped variant
-   rather than a gradient.
-2. **A2 in the sketch** — two varyings and a divide, no library change. Confirms
-   the analysis against the real stroke and settles how much of the remainder is
-   mitres, caps and interleave skew rather than the taper.
-3. **A3 in the library** — full-width semantics plus the honest attribute, once
-   A2 has shown what is left. Do the semantics change first and in one commit,
-   halving every sketch's width constants with it; it is a breaking change and
-   the cost only grows. Exact at mitres, and it hands the shade a world-unit
-   cross-stroke
-   coordinate, which for bristle-type patterns is very likely the better basis
-   than a normalized `v` that stretches with the width. Decide at that point
-   whether `v` is derived in a shader-lib helper or left to each shade.
-4. **Rib-preserving contour smoothing**, which turns A3 from "much closer" into
-   "measured". Bigger than step 3 and worth doing on its own merits: it deletes
-   the `balance` reconciliation, restores proper quads, keeps the rounded caps,
-   and removes both secondary contributors to A at once. Sequence it after A2
-   has confirmed the diagnosis, so its effect is visible against a known
-   baseline.
-5. Re-check the cap ribs (`uv.y = 0.5` on the centerline) separately — with
-   `splitAtAngle` in play there is a cap at every sharp corner, so if that
-   distortion is still visible afterwards it deserves its own treatment.
+\* Tapers are fixed and verified. Zig-zag remains at smoothing-rounded caps from
+a separate cause — see below; A3b/A4 carry the fix.
 
-**B — the fold only; sharp miters stay.**
+### The verification sketch — done
 
-6. **Re-render after A step 4.** Paired smoothing removes the count mismatch the
-   fan is built from, so measure what is actually left before building anything
-   for B. Same seed, worst corners.
-7. **B2 by eye** in the meantime — widths and a point distribution that don't
-   fold. Free, unblocks the study, constrains how it may look.
-8. **Build both, opt-in, selectable.** They share the windowed predicate and
-   differ only in where the deviation lands — B1 in `uv.y` at the geometry
-   build, B2 in `width` as a `Line` transformation. Prototype on the worst
-   corners the study can produce and compare the two renders side by side:
-   inner texture clipped against stroke narrowed. Default stays `Leave`.
-9. A4, B0, B3–B5 and B6 are scoped here so we can say no to them on purpose.
-   B0/B3–B5 buy the corner by flattening the stroke's overlap with itself; B6
-   buys it by forbidding sharp turns. Both prices are the brush.
+`sketches/tests/line2d-debug/` runs the same geometry pipeline and constants as
+study1 under a shade with nothing in it but the uv: one flat color whose alpha is
+sine-striped, composited src-over, so overlaps compound and the geometry issues
+show themselves. `Mode` at the top selects `Across` (corrected `v`),
+`AcrossRawV` (the before/after control), `Along`, `Grid`, `Coverage`.
 
-The study itself stays valid either way — surfacing these two is what it was
-for. But A is the difference between "the line pipeline has a known limit" and
-"a patterned brush stroke can change width", so it does not stay a known limit.
+This is the instrument for every gate below — the real shade's blurred noise was
+too soft to judge against.
+
+### A2 — done
+
+Implemented in `sketches/experiments/strokes/study1/StrokeStudy1.scala`:
+`LineVaryings` gained `vNum` / `vDen`, the vertex stage writes
+`uv.y * width` and `width`, and the fragment stage divides. Both consumers moved
+off `uv.y` — the bristle fbm samples `vec2(uv.x, v)` and `edgeFade` uses `v`.
+`uv.x` untouched.
+
+**Verified** on `sketches/tests/line2d-debug` (below) as well as study1: across
+many regenerated random geometries the cross-stroke bands run smooth and
+unbroken through every taper. The analysis in section 1 holds and everything
+conditional on it is unblocked.
+
+**Residual, and it is a different mechanism: zig-zag is still visible at
+smoothing-rounded caps.** Not an interpolation error — a wrong attribute value.
+`writeLineVert` assigns `uv.y` by **index** (`line2d.scala:499`): only the first
+and last outline vertex get `0.5`, everything else gets `0` or `1`. Smoothing
+rounds a cap by _inserting_ vertices around that corner, and each inserted
+vertex inherits the full-edge `0` / `1` while physically curving inward toward
+the centerline. A vertex at 20% of the half extent claims to be on the edge.
+
+That is exactly what A3b's rule fixes — `uv.y` carries what the geometry actually
+did — once A4 makes the placement measurable
+(`0.5 ± |vertex − mid| / width`). So the cap residual is already covered by the
+approved plan; it is now a concrete failing case for A3b/A4 rather than a
+suspicion.
+
+Note also what A2 does not yet prove: it runs against the current half-extent
+`width` attribute, so mitre joins remain approximated. That the taper kink is
+invisible even so is evidence the taper term dominated.
+
+### A3a — `width` means full width
+
+The breaking change, in one commit.
+
+- `LineVertex.width`, `Line.add`, `Line.defaultWidth` mean full stroke width.
+- The rib loop halves once, where it offsets.
+- Halve the width constants in every consumer: `sketches/strokes/base1`,
+  `sketches/strokes/tile-strokes`, `sketches/experiments/strokes/study1`,
+  `trivalibs/examples/bevel_lines_2d`.
+- Re-pick, do not rescale, `cleanup(minLenWidRatio, …)` and the `5 × width`
+  miter cap — both shift meaning by 2×.
+- `smoothMinLength` is a length; unaffected.
+
+**Gate**: every consumer renders as before at halved constants.
+
+### A3b — the attribute carries the produced width
+
+Write the width the geometry actually produced, not the requested one. Deviations
+go into `uv.y` per the intent rule; cap vertices keep a positive width and stay
+at `uv.y = 0.5`.
+
+**Gate**: study1 unchanged except that mitre joins stop being approximate — visible
+by tightening `edgeFade` until the falloff would show a seam at a corner.
+
+### A3c — a `v` / `d` helper
+
+Once two sketches want it, lift the divide out of the shade into
+`shader/lib/`: takes the varying pair, returns `v = V/Q` and
+`d = V − 0.5·Q`. Scaladoc on `LineAttribs` explaining the pair. Not before —
+see "don't extract unasked".
+
+### A4 — rib-preserving paired contour smoothing
+
+One pass over rib indices; when either side bevels, both emit at the same lerp
+ratios. Settle the two open details first: what triggers a bevel for the pair
+(either side over the angle threshold, or the max), and which side
+`smoothMinLength` tests against.
+
+Then the payoff, all of which is checkable:
+
+- `balance` / `topLen` / `bottomLen` reconciliation deleted, strip walk becomes
+  `emit top_i, bottom_i`.
+- Paired vertices carry identical `length`, so `uv.x` agrees across a rib.
+- `|top_i − bottom_i|` measurable, so A3b's value stops being predicted.
+- Caps still round.
+
+**Gate**: no degenerate triangles in the output; study1 renders with the corners
+visibly cleaner and the caps still rounded.
+
+### A5 — cap ribs
+
+**The degenerate first quad is deliberate and stays.** The centerline vertex at
+`uv.y = 0.5` is what gives the contour a *corner* at the first rib; without it
+that rib would be the contour's endpoint, and `smoothEdges` skips endpoints
+(`if prev.isNull || next.isNull then Arr(curr.copy)`), so there would be nothing
+to cut and no rounded cap. The compressed cross range is the price of the
+rounding, it was paid knowingly, and it has produced no visible glitch so far.
+Do not "fix" it.
+
+What is a real defect is the index-assigned `uv.y` on the vertices smoothing
+*inserts* to round that corner (see A2's residual above) — they claim to be on
+the edge while curving inward. That is A3b/A4's job. Re-check after those land;
+`splitAtAngle` puts a cap at every sharp corner, so it is not a rare case.
+
+### B0 — measure before building
+
+Paired smoothing removes the vertex-count mismatch the needle fan is built from.
+Re-render study1 at the same seed and worst-case corners and see what is actually
+left of B before writing any of it.
+
+### B1 / B2 — the two fold treatments
+
+Shared: the windowed predicate — `±width/2` of arc length, fire above 2 radians,
+window clamped at fragment boundaries.
+
+- **B1 `ClampInner`** — geometry build. Pull the inner vertex back toward the
+  centerline; record it in `uv.y`, leave `width` alone.
+- **B2 `NarrowWidth`** — a `Line` transformation. Reduce `width` until the
+  predicate holds; `uv.y` stays `0`/`1`.
+- `FoldTreatment` opaque type, default `Leave`, so existing strokes are
+  untouched.
+
+### B3 — compare
+
+Render the same worst-case corners under both and decide which mark suits which
+kind of stroke. Inner texture clipped against stroke narrowed; they also compose.
+
+### Explicitly not doing
+
+A1 (subdivision), A4-flat (per-segment flat varyings), B0-blend (`BlendOp.Max`),
+B3–B5 (the union family) and B6 (bounding the miter factor). The union family
+buys the corner by flattening the stroke's overlap with itself; B6 buys it by
+forbidding sharp turns. Both prices are the brush.
+
+### Deferred to the API-surface review
+
+`splitAtAngle`'s threshold naming, and a `subdivide` / `resample` counterpart to
+`cleanup`.
 
 ---
 
 ## 5. Open questions
 
-- **Is `uv.y` meant to be exactly bilinear?** A2/A3 assume that "half way across
-  the stroke" means half way in _distance_, at every point. At a mitre the ribs
-  are oblique, and there is a second plausible definition (perpendicular from
-  the centerline) that differs. Which one the shade wants is a look decision.
-- **Should the cross-stroke coordinate be normalized at all?** The world-unit `d` in
-  canvas units may be more useful than `v` for everything except the edge
-  falloff. If so, the library should offer both and say which is which.
-- **Is `uv.x` allowed to stay affine?** Stated above as a requirement (arc
-  length must remain arc length). Worth confirming that nothing wants the
-  projective form at joins.
-- **Should `cleanup`'s counterpart exist** — a `subdivide`/`resample`
-  transformation — independently of this issue? It has uses beyond A1
-  (animation along the path, per-vertex data variation) and the study already
-  hand-rolls one via `flatMapWithNeighbours`.
-- **Where does the width-vs-radius constraint belong?** As a `Line`
-  transformation next to `cleanup` / `smoothEdges` (reusable, but it silently
-  rewrites widths the caller chose), or as a rule the point generator follows
-  (explicit, but re-implemented per sketch). And when it triggers: narrow the
-  width, or round out the corner?
-- **Where exactly is the line between a wanted overlap and the fold-back?** The
-  windowed predicate draws it at "the half-width does not fit in the radius the
-  line achieves", which is a clean geometric criterion — but the split-fragment
-  caps overlap at those same corners and are wanted. Worth checking on real
-  strokes that the predicate fires on the fold and not on the cap overlap that
-  sits right next to it.
+None remain. Resolved in the course of the review, kept as a record of what was
+decided:
+
+- _Can the fold predicate misfire on the wanted split-fragment cap overlap?_ —
+  No, by construction. `splitAtAngle` hands `toBufferedGeometry` separate
+  fragments, so a split corner is a fragment **endpoint**: no `prev`/`next` on
+  that side, no mitre, nothing for the predicate to see. A reversal's overlap is
+  structurally out of reach of B1/B2.
+
+- _Is `uv.y` meant to be exactly bilinear at oblique mitre ribs?_ — Decided by
+  construction: `v` is interpolated **along the rib**, so it is measured along
+  the rib. Paired smoothing makes that the tessellation's own frame.
+- _Should the cross-stroke coordinate be normalized at all?_ — Both. `v` and
+  `d` come from the same two varyings; the shade picks per pattern.
+- _Is `uv.x` allowed to stay affine?_ — Yes. Arc length stays arc length; only
+  `v` takes the divide.
+- _Where does the width-vs-radius constraint belong?_ — B2, as an opt-in `Line`
+  transformation, with B1 as the alternative treatment. Narrow **or** clamp is
+  the caller's choice, not the library's.
+
+Carried to the API-surface review, not to this plan:
+
+- **A `subdivide` / `resample` counterpart to `cleanup`.** Rejected as an A fix
+  (A1), but it has uses of its own — animation along the path, per-vertex data
+  variation — and the study already hand-rolls one via `flatMapWithNeighbours`.
+- **`splitAtAngle`'s threshold naming**, as recorded under section 1.
