@@ -833,7 +833,7 @@ brush.
 | --- | -------------------------------------------- | ------- | ----------- |
 | —   | `tests/line2d-debug` verification sketch     | sketch  | **done**    |
 | A2  | Projective `v` proof of concept              | sketch  | **done** \* |
-| A3a | `width` means full width                     | library | next        |
+| A3a | `width` means full width                     | library | **done**    |
 | A3b | Attribute carries the produced width         | library | after A3a   |
 | A3c | `v` / `d` helper for shades                  | library | after A3b   |
 | A4  | Rib-preserving paired contour smoothing      | library | after A3    |
@@ -897,14 +897,36 @@ The breaking change, in one commit.
 
 - `LineVertex.width`, `Line.add`, `Line.defaultWidth` mean full stroke width.
 - The rib loop halves once, where it offsets.
-- Halve the width constants in every consumer: `sketches/strokes/base1`,
+- **Double** the width constants in every consumer — today's `width` is the
+  half-extent, so a stroke is `2 × width` wide and the same stroke needs twice
+  the number under full-width semantics. (`sketches/strokes/base1`,
   `sketches/strokes/tile-strokes`, `sketches/experiments/strokes/study1`,
-  `trivalibs/examples/bevel_lines_2d`.
-- Re-pick, do not rescale, `cleanup(minLenWidRatio, …)` and the `5 × width`
-  miter cap — both shift meaning by 2×.
+  `sketches/tests/line2d-debug`, `trivalibs/examples/bevel_lines_2d`.)
+- `cleanup(minLenWidRatio, …)` now measures against full width, so its meaning
+  improves — "min length as a fraction of the stroke width" rather than of the
+  half-extent — but the number must be **halved** to preserve behaviour.
+- The `5 × width` miter cap keeps its factor, applied to the half-extent, so it
+  is unchanged in effect. Sharp miters are wanted (B6 rejected), so leave it
+  generous.
 - `smoothMinLength` is a length; unaffected.
 
-**Gate**: every consumer renders as before at halved constants.
+**Gate**: every consumer renders as before at doubled constants.
+
+**Done.** `halfWidth = v.width * 0.5` computed once per rib and used for the
+mitre offset, the mitre cap and both fragment cap extensions; the attribute and
+the outline payload keep the full width. Scaladoc on `LineVertex`, `Line`,
+`cleanup` and `LineAttribs` now state the convention, and `LineAttribs`
+documents the divide (`v = num/den`, `d = num − 0.5·den`).
+
+Consumers: `BrushHeightRatio` 1/14 → 1/7 (base1); `WidthMin` / `WidthMax`
+doubled and `CleanupMinLenWidRatio` 0.5 → 0.25 (study1, line2d-debug);
+`randWidth` and `Line(20)` doubled, `cleanup(0.5, …)` → `0.25` (bevel_lines_2d).
+tile-strokes keeps `brushSize` — it also drives tile layout and stroke counts —
+and takes a local `strokeWidth = brushSize * 2.0` at the `Line` call.
+
+`Line2dTest` caught the change (`toBufferedGeometry writes position and width`,
+expecting `±2.0` for a width-2 line); updated to `±1.0` and the whole suite
+passes. Worth noting the test existed and did its job.
 
 ### A3b — the attribute carries the produced width
 

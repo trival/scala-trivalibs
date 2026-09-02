@@ -18,6 +18,10 @@ import trivalibs.utils.numbers.NumExt.given
   * direction of the segment leading to the **next** vertex (`len` / `dir`, both
   * filled in by [[Line.addVert]] once that next vertex arrives), plus arbitrary
   * user `data`. Use `LineVertex(pos, width)` for data-less lines.
+  *
+  * `width` is the **full** stroke width in the line's own units — the outline
+  * sits at `±width/2` from the centre line, as `lineWidth` does in SVG and
+  * Canvas.
   */
 class LineVertex[T](
     val pos: Vec2,
@@ -89,6 +93,9 @@ private def lerpVert[T: Lerp](
   * fresh lines. Convert to GPU geometry with `toBufferedGeometry` (single line)
   * or `toBufferedGeometries` (an `Arr` of fragments, e.g. from
   * [[splitAtAngle]]).
+  *
+  * All widths — `defaultWidth` and every `add` — are **full** stroke widths in
+  * the line's own units; the outline sits at `±width/2`.
   *
   * `lenOffset` is where this line starts along a longer conceptual stroke —
   * [[splitAtAngle]] threads it through the fragments so `uv.x` stays continuous
@@ -211,6 +218,9 @@ class Line[T](
     * as a relative width difference, `angleThreshold` as `1 - dot` of the
     * directions). The first and last vertex are always kept.
     *
+    * `minLenWidRatio` is a fraction of the **full** stroke width, so `0.25`
+    * means "drop vertices closer than a quarter of the local stroke width".
+    *
     * `minLenFloor` defaults to `1.0`, i.e. "never bother below one pixel" for a
     * line measured in pixels. A line in any other unit has to say so — left at
     * the default, a line laid out in normalized units is thinned down to its
@@ -293,7 +303,13 @@ class Line[T](
   * `Attribs`. `uv.x` runs `0..1` along the whole stroke (all fragments),
   * `localUv.x` along this fragment alone; `y` is `0`/`1` across the stroke and
   * `0.5` at the two end caps. `length` is the accumulated distance in the
-  * line's own units.
+  * line's own units, and `width` is the **full** stroke width there.
+  *
+  * A width change along the stroke shears the quads, so interpolating `uv.y`
+  * directly kinks at every triangle diagonal. Divide instead: pass
+  * `uv.y * width` and `width` as varyings, then in the fragment stage
+  * `v = num / den` (exact) and `d = num - 0.5 * den` for a signed distance from
+  * the centre line in world units.
   */
 type LineAttribs = (
     position: Vec2,
@@ -403,16 +419,17 @@ object Line:
         val hasNext = i < n - 1
 
         // --- mitre positions: offset along the bisector of the two segment
-        // normals, capped at 5x the width so needle-sharp turns stay finite
+        // normals, capped at 5x the half-width so needle-sharp turns stay finite
+        val halfWidth = v.width * 0.5
         val nextNormal = normalOf(v.dir)
         var normal = nextNormal
-        var offset = v.width
+        var offset = halfWidth
         if hasPrev then
           val prevDir = src(i - 1).dir
           if prevDir.x != v.dir.x || prevDir.y != v.dir.y then
             val prevNormal = normalOf(prevDir)
             normal = (nextNormal + prevNormal).normalize
-            offset = (v.width / normal.dot(prevNormal)).min(v.width * 5.0)
+            offset = (halfWidth / normal.dot(prevNormal)).min(halfWidth * 5.0)
 
         var top = normal * offset + v.pos
         var bottom = normal * -offset + v.pos
@@ -425,8 +442,8 @@ object Line:
           if prevDirection.notNull then
             // extend the cap so it meets the preceding fragment's end
             val prevDir = prevDirection.get
-            val c = v.width / (prevDir * -1.0 + v.dir).normalize.dot(v.dir)
-            val a = (c * c - v.width * v.width).sqrt
+            val c = halfWidth / (prevDir * -1.0 + v.dir).normalize.dot(v.dir)
+            val a = (c * c - halfWidth * halfWidth).sqrt
             if a > 0.001 then
               if cross2d(v.dir, prevDir) > 0.0 then
                 top = top + v.dir * -a
@@ -437,8 +454,8 @@ object Line:
 
         if !hasNext && nextDirection.notNull then
           val nextDir = nextDirection.get
-          val c = v.width / (v.dir * -1.0 + nextDir).normalize.dot(nextDir)
-          val a = (c * c - v.width * v.width).sqrt
+          val c = halfWidth / (v.dir * -1.0 + nextDir).normalize.dot(nextDir)
+          val a = (c * c - halfWidth * halfWidth).sqrt
           if a > 0.001 then
             if cross2d(nextDir, v.dir) > 0.0 then
               top = top + v.dir * a

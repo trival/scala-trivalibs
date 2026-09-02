@@ -265,9 +265,9 @@ class Line2dTest extends FunSuite:
     assertEqualsDouble(readF(geom, 0, 0), 0.0, 1e-6)
     assertEqualsDouble(readF(geom, 0, 4), 0.0, 1e-6)
     assertEqualsDouble(readF(geom, 0, 8), 2.0, 1e-6)
-    // the outline pair is offset by ±width along the normal (0, -1)
-    assertEqualsDouble(readF(geom, 2, 4), -2.0, 1e-6)
-    assertEqualsDouble(readF(geom, 3, 4), 2.0, 1e-6)
+    // the outline pair is offset by ±width/2 along the normal (0, -1)
+    assertEqualsDouble(readF(geom, 2, 4), -1.0, 1e-6)
+    assertEqualsDouble(readF(geom, 3, 4), 1.0, 1e-6)
 
   test("toBufferedGeometries threads directions and a shared total length"):
     val line = Line.fromPoints(

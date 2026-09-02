@@ -20,7 +20,7 @@ type Uniforms = (size: VertexUniform[Vec2])
 
 val PointCount = 20
 
-def randWidth(): Double = rand() * 280.0 + 20.0
+def randWidth(): Double = rand() * 560.0 + 40.0
 
 /** A single wildly-varying polyline, put through every `Line` transformation
   * and split into fragments at its sharp corners — one geometry per fragment.
@@ -30,7 +30,7 @@ def generateGeometry(
     height: Double,
 ): Arr[BufferedGeometry[LineAttribsBuffer]] =
   // random points spread over 1.5x the canvas, so the stroke runs off-screen
-  val line = Line(20.0)
+  val line = Line(40.0)
   for _ <- 0 until PointCount do
     line.add(
       Vec2((rand() - 0.5) * width * 1.5, (rand() - 0.5) * height * 1.5),
@@ -50,7 +50,7 @@ def generateGeometry(
       )
 
   subdivided
-    .cleanup(0.5, 0.1, 0.1)
+    .cleanup(0.25, 0.1, 0.1)
     .splitAtAngle(math.Pi * 3.0 / 4.0)
     .toBufferedGeometries(
       smoothDepth = 4,
