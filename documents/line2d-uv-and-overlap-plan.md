@@ -1,15 +1,20 @@
 # Line2D — UV distortion on width changes, and fold-back overlap on tight turns
 
-Status: **A2 done and verified; A3–A4 approved and next. B approved in shape.**
-See section 4 for the step-by-step status.
+Status: **A2 and A3 done; A4 next. B approved in shape.** See section 4 for the
+step-by-step status.
 
-- **A — approved and started.** A2 (projective `v`) is implemented in study1 and
-  **confirmed against many regenerated random geometries: no zig-zag anywhere**.
-  That was the condition on the rest, so the full-width semantics change, the
-  honest `width` attribute and rib-preserving paired smoothing are unblocked.
+- **A — approved and under way.** A2 (projective `v`) is implemented in study1
+  and **confirmed against many regenerated random geometries: no zig-zag
+  anywhere** — that was the condition on the rest. A3 (full-width semantics)
+  has landed. Next is A4: rib-preserving paired smoothing together with the
+  measured `width` attribute, in one step.
 - **API naming — `width` means full width, approved** (it is load-bearing for
   A3). The `splitAtAngle` naming question is **deferred** to a later API-surface
   review, noted below.
+- **C — the optional cap treatment is parked behind B**, deliberately. A4's
+  default already makes caps correct, so C is only the alternative look — and
+  B builds the treatment type and the opt-in plumbing that C would otherwise
+  have to invent, worse and twice.
 - **B — under review.** Settled so far: **B6 is rejected** — a sharp miter then
   smoothed is how a brush turn is modelled, so bounding the miter factor forbids
   the corners we want. **B1 and B2 are both wanted**, both programmatic and
@@ -130,13 +135,13 @@ functions**, and that is the lever (A2 below).
 - **Cap ribs.** The first and last outline vertex sit on the centerline with
   `uv.y = 0.5` (`line2d.scala:500`), compressing the full `0..1` cross range into
   a degenerate first quad. **Deliberate** — it is what gives the contour a corner
-  for `smoothEdges` to cut, and therefore what rounds the cap; see A5. The
+  for `smoothEdges` to cut, and therefore what rounds the cap; see C. The
   distortion it implies has not shown a glitch. The cap problem that _is_ real
   lies in the vertices that rounding inserts.
 
 The first two of these are not separate problems: both are consequences of the
-two contours being smoothed independently, and rib-preserving smoothing (under
-A3, below) removes them together.
+two contours being smoothed independently, and rib-preserving smoothing (A4,
+below) removes them together.
 
 ### Strategies
 
@@ -833,21 +838,20 @@ brush.
 | --- | -------------------------------------------- | ------- | ----------- |
 | —   | `tests/line2d-debug` verification sketch     | sketch  | **done**    |
 | A2  | Projective `v` proof of concept              | sketch  | **done** \* |
-| A3a | `width` means full width                     | library | **done**    |
-| A3b | Attribute carries the produced width         | library | after A3a   |
-| A3c | `v` / `d` helper for shades                  | library | after A3b   |
-| A4  | Rib-preserving paired contour smoothing      | library | after A3    |
-| A5  | Re-check cap ribs                            | —       | after A4    |
+| A3  | `width` means full width                     | library | **done**    |
+| A4  | Paired smoothing **+** measured width, one step | library | **next**  |
+| A5  | Shared `v` / `d` helper, derived from two shades | library | last     |
 | B0  | Re-render, measure what is left of the fan   | sketch  | after A4    |
 | B1  | `ClampInner` treatment                       | library | after B0    |
 | B2  | `NarrowWidth` treatment                      | library | after B0    |
 | B3  | Compare the two marks, pick defaults per use | sketch  | after B1/B2 |
+| C   | Optional cap treatment — **only if still wanted** | library | after B |
 
 (Step ids are local to this plan and unrelated to the strategy labels in
 sections 1–2.)
 
 \* Tapers are fixed and verified. Zig-zag remains at smoothing-rounded caps from
-a separate cause — see below; A3b/A4 carry the fix.
+a separate cause — see below; A4 carries the fix.
 
 ### The verification sketch — done
 
@@ -881,17 +885,17 @@ rounds a cap by _inserting_ vertices around that corner, and each inserted
 vertex inherits the full-edge `0` / `1` while physically curving inward toward
 the centerline. A vertex at 20% of the half extent claims to be on the edge.
 
-That is exactly what A3b's rule fixes — `uv.y` carries what the geometry actually
+That is exactly what A4's rule fixes — `uv.y` carries what the geometry actually
 did — once A4 makes the placement measurable
 (`0.5 ± |vertex − mid| / width`). So the cap residual is already covered by the
-approved plan; it is now a concrete failing case for A3b/A4 rather than a
+approved plan; it is now a concrete failing case for A4 rather than a
 suspicion.
 
 Note also what A2 does not yet prove: it runs against the current half-extent
 `width` attribute, so mitre joins remain approximated. That the taper kink is
 invisible even so is evidence the taper term dominated.
 
-### A3a — `width` means full width
+### A3 — `width` means full width
 
 The breaking change, in one commit.
 
@@ -928,54 +932,120 @@ and takes a local `strokeWidth = brushSize * 2.0` at the `Line` call.
 expecting `±2.0` for a width-2 line); updated to `±1.0` and the whole suite
 passes. Worth noting the test existed and did its job.
 
-### A3b — the attribute carries the produced width
+### A4 — paired smoothing and measured width, in one step
 
-Write the width the geometry actually produced, not the requested one. Deviations
-go into `uv.y` per the intent rule; cap vertices keep a positive width and stay
-at `uv.y = 0.5`.
+Measuring the produced width and rib-preserving smoothing ship
+together, because measuring is only meaningful once ribs are genuine pairs:
+`|top_i − bottom_i|` means nothing while the `balance` walk is pairing vertices
+that sit at different `length` values. Measuring alone against today's pairing
+would trade one inaccuracy for another and make its gate dishonest.
+
+**Order inside the step**
+
+1. **Paired smoothing pass.** One walk over rib indices instead of two
+   independent `smoothEdges` runs. When a rib bevels, *both* contours emit two
+   vertices at the same lerp ratios; on a side with no turn those land on its
+   existing edge, so the shape is unchanged and only vertex density rises.
+2. **Simplify the strip walk.** With equal counts and matching indices the
+   `balance` / `topLen` / `bottomLen` reconciliation goes; emission becomes
+   `emit top_i, bottom_i`.
+3. **Measure and write.** `mid_i = (top_i + bottom_i) / 2`,
+   `width_i = |top_i − bottom_i|`, `uv.y` stays `0` / `1`, plus the tip rule
+   below.
+
+**Decisions taken** (previously listed as open):
+
+- **Bevel trigger for the pair**: bevel when **either** side's turn exceeds
+  `smoothAngleThreshold`. Today each contour decides alone, so "either"
+  reproduces the union of what is currently cut; requiring both would leave the
+  sharp side unsmoothed and change the look.
+- **`smoothMinLength`**: tested against the **side that wants the bevel**, again
+  matching today. The other side emits at the same ratios regardless — a short
+  edge there simply yields a short offset, not a degeneracy.
+
+Write the width the geometry actually produced, not the requested one.
+
+The default is **keep `uv`, measure `width`** — see below. Only caps and fold
+regions get a strategy choice, and where a deviation is recorded there is a
+**look decision, not a fact**.
+
+**This step alone delivers world-space cross coordinates.** With `uv.y` at
+`0`/`1` and `width_i = |top_i − bottom_i|`, `d = V − 0.5·Q` gives `∓w/2` at the
+outline — the exact signed distance from the rib midpoint, everywhere, smoothed
+corners included. The later cap and fold treatments change only what is
+*written* inside their spans; the shader-side `d` is identical under all of
+them, so nothing built on `d` now needs revisiting.
+
+**The degenerate tip rib needs one rule, here rather than later.** `top_0` and
+`bottom_0` are the same point, so a measured width there is `0` — that is a
+`Q = 0` and a `v = 0/0` at the tip under the *plain default*, not only under
+keep-uv. Avoid it without a special case downstream: **the tip keeps
+`uv.y = 0.5` and inherits the adjacent rib's measured width.** Then
+`d = 0.5·w − 0.5·w = 0` (exact — the tip really is on the centre line, where
+both outlines coincide) and `v = 0.5`, with the inherited width serving only as
+a denominator and never claiming an extent.
 
 **Gate**: study1 unchanged except that mitre joins stop being approximate — visible
 by tightening `edgeFade` until the falloff would show a seam at a corner.
 
-### A3c — a `v` / `d` helper
+### The default, and the two regions that get a choice
 
-Once two sketches want it, lift the divide out of the shade into
-`shader/lib/`: takes the varying pair, returns `v = V/Q` and
-`d = V − 0.5·Q`. Scaladoc on `LineAttribs` explaining the pair. Not before —
-see "don't extract unasked".
+**Default, and it covers almost everything: keep `uv`, measure `width` from the
+actual vertices.** `uv.y` stays `0` / `1` at the outline and
+`width = |top_i − bottom_i|`. A mildly curved stroke whose flat corners have been
+smoothed needs no decision at all — the pattern squeezes a little through a
+corner, which is what a brush mark does on the inside of a turn. Corners pinched
+by smoothing are therefore **not** a decision point; they are the normal case.
 
-### A4 — rib-preserving paired contour smoothing
+Two regions are genuinely exceptional, and only there is a strategy chosen:
 
-One pass over rib indices; when either side bevels, both emit at the same lerp
-ratios. Settle the two open details first: what triggers a bevel for the pair
-(either side over the angle threshold, or the max), and which side
-`smoothMinLength` tests against.
+1. **Caps** — the span from the `uv.y = 0.5` centerline vertex to the **first
+   vertex smoothing did not move**. That is exactly the range the cap bevel
+   cascade touches, and it is a usable boundary to implement against: outside
+   it, the default applies unchanged.
+2. **Sharp curves** where the turn radius is under the width — the fold region
+   the windowed predicate marks, treated by B1 / B2.
 
-Then the payoff, all of which is checkable:
+In both, the question is the same: **record the narrowing in `width`, or in
+`uv.y`?** `d` comes out **exact either way**, so nothing is lost geometrically.
+Take a cap vertex at distance `e`:
 
-- `balance` / `topLen` / `bottomLen` reconciliation deleted, strip walk becomes
-  `emit top_i, bottom_i`.
-- Paired vertices carry identical `length`, so `uv.x` agrees across a rib.
-- `|top_i − bottom_i|` measurable, so A3b's value stops being predicted.
-- Caps still round.
+```
+keep width:   uv.y = 0.5 ± e/W,   Q = W     →  d = uv.y·W − 0.5·W = ±e
+keep uv:      uv.y = 0 or 1,      Q = 2·e   →  d = 0 − e          = −e
+```
 
-**Gate**: no degenerate triangles in the output; study1 renders with the corners
-visibly cleaner and the caps still rounded.
+The difference is entirely in `v`, and it is visible:
 
-### A5 — cap ribs
+| treatment      | `v`                  | a `v`-keyed pattern              |
+| -------------- | -------------------- | -------------------------------- |
+| **keep width** | compresses toward center | holds its scale, gets **cropped** at the narrowing |
+| **keep uv**    | stays full `0..1`    | **squeezes** into the narrowing   |
 
-**The degenerate first quad is deliberate and stays.** The centerline vertex at
-`uv.y = 0.5` is what gives the contour a *corner* at the first rib; without it
-that rib would be the contour's endpoint, and `smoothEdges` skips endpoints
-(`if prev.isNull || next.isNull then Arr(curr.copy)`), so there would be nothing
-to cut and no rounded cap. The compressed cross range is the price of the
-rounding, it was paid knowingly, and it has produced no visible glitch so far.
-Do not "fix" it.
+Both are legitimate marks — the same pair as B1 `ClampInner` and B2
+`NarrowWidth`, so one vocabulary should cover both regions rather than two
+ad-hoc rules.
 
-What is a real defect is the index-assigned `uv.y` on the vertices smoothing
-*inserts* to round that corner (see A2's residual above) — they claim to be on
-the edge while curving inward. That is A3b/A4's job. Re-check after those land;
-`splitAtAngle` puts a cap at every sharp corner, so it is not a rare case.
+**Separate flags or one?** Open, leaning separate. They are independent looks: a
+cap is the brush landing or lifting, where letting the texture run out to the
+tip is often right, while at a fold the width is usually the thing worth
+keeping. Two parameters cost little and can be defaulted differently. Where they
+meet — and they do meet, since `splitAtAngle` puts a cap at every sharp
+corner — the **cap span wins** inside its range, the fold treatment outside it.
+
+**Which default for caps** is undecided and wants a render. Keep-uv is the
+smaller conceptual step — it is what the plain default already produces in the
+cap span — and lets the pattern reach the tip. Keep-width holds the pattern's
+scale and crops it instead, closer to today's look.
+
+**The tip is handled once, in A4**, by keeping `uv.y = 0.5` there and
+inheriting the neighbouring rib's width — see above. Neither treatment needs to
+revisit it: both give `d = 0` at a point that genuinely lies on the centre line.
+
+Neither treatment is exact *around* a curved cap, since the quad there is not a
+trapezoid under either encoding — worth saying plainly rather than claiming
+exactness twice.
+
 
 ### B0 — measure before building
 
@@ -999,6 +1069,53 @@ window clamped at fragment boundaries.
 
 Render the same worst-case corners under both and decide which mark suits which
 kind of stroke. Inner texture clipped against stroke narrowed; they also compose.
+
+### A5 — a shared `v` / `d` helper, last
+
+Deliberately at the end, and reached from real use rather than designed up
+front. Both study1 and `tests/line2d-debug` already compute
+`v = V/Q` inline; once there is more sketch work leaning on `d`, let the two
+shades keep their own version until the shape has settled, **then** derive the
+shared helper from what they converged on and reuse it in both.
+
+Landing place `shader/lib/`: takes the varying pair, returns `v = V/Q` and
+`d = V − 0.5·Q`, with `LineAttribs`' scaladoc pointing at it. Extracting before
+two real users agree is exactly the move "don't extract unasked" warns about —
+the helper would encode a guess about what shades want from the pair.
+
+### C — optional cap treatment, only if still wanted
+
+**A4 already fixes the cap defect.** Today's cap zig-zag comes from the
+index-assigned `uv.y`: vertices smoothing *inserts* to round the cap claim
+`0`/`1` while the `width` attribute still reports the full intended width, so
+they assert an edge they are not on. Under A4's default they keep `0`/`1` and
+carry their **measured** width — which is the keep-uv treatment, correctly
+applied. Nothing further is required for correctness.
+
+What is left is only the **alternative look**: keep-width across the cap span,
+where the inserted vertices take `uv.y = 0.5 ± e/W` against the full width, so a
+`v`-keyed pattern holds its scale and is cropped at the tip rather than
+squeezing into it.
+
+**Deferred behind B on purpose, for two reasons.**
+
+- **B builds the machinery.** After B there is already a `FoldTreatment`-shaped
+  type, an opt-in parameter threaded through the geometry build, and a settled
+  answer for where a deviation is recorded. C then shrinks to applying that
+  existing vocabulary across a different span — the cap span, from the `0.5`
+  vertex to the first vertex smoothing left in place. Doing it first would mean
+  inventing the same API twice, and probably inventing it worse, since the fold
+  case is the one with two genuinely competing marks to design against.
+- **It may not be wanted.** A4's default may be everything a cap needs. Adding
+  a configuration point before that is known is inventing a knob.
+
+**The degenerate first quad is deliberate and stays**, whichever way this goes.
+The centerline vertex at `uv.y = 0.5` is what gives the contour a *corner* at
+the first rib; without it that rib would be the contour's endpoint, and
+`smoothEdges` skips endpoints (`if prev.isNull || next.isNull then
+Arr(curr.copy)`), so there would be nothing to cut and no rounded cap. The
+compressed cross range is the price of the rounding, paid knowingly, and it has
+produced no visible glitch. Do not "fix" it.
 
 ### Explicitly not doing
 
