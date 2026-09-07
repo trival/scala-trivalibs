@@ -839,7 +839,8 @@ brush.
 | —   | `tests/line2d-debug` verification sketch     | sketch  | **done**    |
 | A2  | Projective `v` proof of concept              | sketch  | **done** \* |
 | A3  | `width` means full width                     | library | **done**    |
-| A4  | Paired smoothing **+** measured width, one step | library | **next**  |
+| A4a | Paired rib-preserving smoothing              | library | **done**    |
+| A4b | Attribute carries the measured width         | library | **next**    |
 | A5  | Shared `v` / `d` helper, derived from two shades | library | last     |
 | B0  | Re-render, measure what is left of the fan   | sketch  | after A4    |
 | B1  | `ClampInner` treatment                       | library | after B0    |
@@ -932,7 +933,32 @@ and takes a local `strokeWidth = brushSize * 2.0` at the `Line` call.
 expecting `±2.0` for a width-2 line); updated to `±1.0` and the whole suite
 passes. Worth noting the test existed and did its job.
 
-### A4 — paired smoothing and measured width, in one step
+### A4 — paired smoothing and measured width
+
+Split for review: **A4a** paired smoothing and the strip simplification,
+**A4b** the measured width. A4a is **done**.
+
+#### A4a — paired smoothing — done
+
+`smoothEdgesPaired` + `wantsBevel` (private, `line2d.scala`), called from
+`toBufferedGeometry` in place of two independent `Line.smoothEdges` runs. The
+strip walk collapses to `for each rib: emit top, bottom` — `balance`, `topLen`,
+`bottomLen`, the two cursors and the index-repeat branches all deleted, so no
+degenerate triangles remain.
+
+No API change: both helpers are private, and `Line.smoothEdges`,
+`toBufferedGeometry`'s parameters and `LineAttribs` are untouched. Consumers at
+`smoothDepth = 4` (`bevel_lines_2d`, study1, line2d-debug) pick it up
+automatically; `base1` and `tile-strokes` default to `smoothDepth = 0` and are
+bit-identical, since with equal counts and equal per-rib `data` the old
+`balance` walk already emitted exactly `top, bottom` per rib.
+
+**Verified visually.** Corners are cleaner, and — the interesting part — **the
+B spikes are now fewer, smaller and symmetric, but still present**. That is the
+predicted split arriving on schedule: paired smoothing removes the
+*amplification* (the vertex-count mismatch that fanned one bad vertex into fifty
+slivers), not the *fold* itself, which is geometry and remains B1/B2's job. It
+also partly answers B0 in advance — what is left of B is the fold alone.
 
 Measuring the produced width and rib-preserving smoothing ship
 together, because measuring is only meaningful once ribs are genuine pairs:
@@ -1049,9 +1075,11 @@ exactness twice.
 
 ### B0 — measure before building
 
-Paired smoothing removes the vertex-count mismatch the needle fan is built from.
-Re-render study1 at the same seed and worst-case corners and see what is actually
-left of B before writing any of it.
+**Partly answered by A4a already**: with the amplification gone the spikes are
+fewer, smaller and symmetric, but still there. So what remains is the fold
+itself, and B1/B2 are still needed — the question narrows to how visible it is
+once A is complete. Re-render at the same seed after A4b before writing any of
+it.
 
 ### B1 / B2 — the two fold treatments
 

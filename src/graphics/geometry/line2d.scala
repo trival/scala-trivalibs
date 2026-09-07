@@ -328,6 +328,59 @@ type LineAttribsBuffer =
 
 private def normalOf(dir: Vec2): Vec2 = Vec2(dir.y, -dir.x)
 
+/** True when this vertex is a corner worth bevelling on its own contour: both
+  * neighbouring segments are long enough, and the turn exceeds the threshold.
+  */
+private def wantsBevel[T](
+    line: Line[T],
+    i: Int,
+    minDist: Double,
+    angleThreshold: Double,
+): Boolean =
+  val prev = line.get(i - 1)
+  val curr = line.get(i)
+  if prev.len < minDist || curr.len < minDist then false
+  else 1.0 - curr.dir.dot(prev.dir) > angleThreshold
+
+/** One bevel pass over **both** contours at once, keeping them rib-paired.
+  *
+  * `Line.smoothEdges` run on each contour separately lets them drift apart:
+  * a corner cut on one side but not the other leaves the two with different
+  * vertex counts, so the strip can no longer pair them and `uv` disagrees
+  * across a rib. Here the decision is made per rib index and applied to both —
+  * when either side wants a bevel, both emit two vertices at the same lerp
+  * ratios. On a side with no turn those land on its existing edge, so its shape
+  * is unchanged and only its vertex density rises.
+  */
+private def smoothEdgesPaired[T: Lerp](
+    top: Line[T],
+    bottom: Line[T],
+    ratio: Double,
+    minDist: Double,
+    angleThreshold: Double,
+): (top: Line[T], bottom: Line[T]) =
+  val outTop = new Line[T](top.defaultWidth, top.lenOffset, top.defaultData)
+  val outBottom =
+    new Line[T](bottom.defaultWidth, bottom.lenOffset, bottom.defaultData)
+  val n = top.vertCount
+  var i = 0
+  while i < n do
+    if i == 0 || i == n - 1 then
+      outTop.addVert(top.get(i).copy)
+      outBottom.addVert(bottom.get(i).copy)
+    else if wantsBevel(top, i, minDist, angleThreshold) ||
+      wantsBevel(bottom, i, minDist, angleThreshold)
+    then
+      outTop.addVert(lerpVert(top.get(i - 1), top.get(i), 1.0 - ratio))
+      outTop.addVert(lerpVert(top.get(i), top.get(i + 1), ratio))
+      outBottom.addVert(lerpVert(bottom.get(i - 1), bottom.get(i), 1.0 - ratio))
+      outBottom.addVert(lerpVert(bottom.get(i), bottom.get(i + 1), ratio))
+    else
+      outTop.addVert(top.get(i).copy)
+      outBottom.addVert(bottom.get(i).copy)
+    i += 1
+  (top = outTop, bottom = outBottom)
+
 private def cross2d(a: Vec2, b: Vec2): Double = a.x * b.y - a.y * b.x
 
 private def writeLineVert(
@@ -477,86 +530,63 @@ object Line:
 
       var d = 0
       while d < smoothDepth do
-        topLine = topLine.smoothEdges(
+        val smoothed = smoothEdgesPaired(
+          topLine,
+          bottomLine,
           0.25,
           smoothMinLength,
           smoothAngleThreshold,
         )
-        bottomLine = bottomLine.smoothEdges(
-          0.25,
-          smoothMinLength,
-          smoothAngleThreshold,
-        )
+        topLine = smoothed.top
+        bottomLine = smoothed.bottom
         d += 1
 
       val uvLength = totalLength.getOr(lineLength)
       val localLength = line.plannedLength.getOr(line.totalLength)
-      val topCount = topLine.vertCount
-      val bottomCount = bottomLine.vertCount
-      val out = StructArray.allocate[LineAttribsBuffer](topCount + bottomCount)
+      val ribCount = topLine.vertCount
+      val vertCount = ribCount * 2
+      val out = StructArray.allocate[LineAttribsBuffer](vertCount)
       val indices = Arr[Int]()
 
-      // Zig-zag the two outlines into one triangle strip. `balance` keeps the
-      // strip from skewing when the outlines have different vertex counts (the
-      // bevel passes above add vertices to each side independently): whichever
-      // side lags in accumulated length is the one that advances.
-      var topIdx = 0
-      var bottomIdx = 0
-      var nextIdx = 0
-      var topLen = 0.0
-      var bottomLen = 0.0
-      var balance = 0.0
-      var topI = 0
-      var bottomI = 0
+      // The two outlines are rib-paired, so the strip is just every rib in
+      // order: top, bottom, top, bottom.
+      var r = 0
+      while r < ribCount do
+        val tv = topLine.get(r)
+        val bv = bottomLine.get(r)
+        val isCap = r == 0 || r == ribCount - 1
+        val topUvY =
+          if isCap then 0.5
+          else if swapTextureOrientation then 1.0
+          else 0.0
+        val bottomUvY =
+          if isCap then 0.5
+          else if swapTextureOrientation then 0.0
+          else 1.0
 
-      while topI < topCount || bottomI < bottomCount do
-        if topI < topCount && balance <= 0.0 then
-          val tv = topLine.get(topI)
-          topLen = tv.data
-          val uvY =
-            if topI == 0 || topI == topCount - 1 then 0.5
-            else if swapTextureOrientation then 1.0
-            else 0.0
-          writeLineVert(
-            out(nextIdx),
-            tv.pos,
-            tv.width,
-            topLen,
-            topLen / uvLength,
-            uvY,
-            (topLen - line.lenOffset) / localLength,
-          )
-          indices.push(nextIdx)
-          topIdx = nextIdx
-          nextIdx += 1
-          topI += 1
-        else indices.push(topIdx)
+        writeLineVert(
+          out(r * 2),
+          tv.pos,
+          tv.width,
+          tv.data,
+          tv.data / uvLength,
+          topUvY,
+          (tv.data - line.lenOffset) / localLength,
+        )
+        writeLineVert(
+          out(r * 2 + 1),
+          bv.pos,
+          bv.width,
+          bv.data,
+          bv.data / uvLength,
+          bottomUvY,
+          (bv.data - line.lenOffset) / localLength,
+        )
+        indices.push(r * 2)
+        indices.push(r * 2 + 1)
+        r += 1
 
-        if bottomI < bottomCount && balance >= 0.0 then
-          val bv = bottomLine.get(bottomI)
-          bottomLen = bv.data
-          val uvY =
-            if bottomI == 0 || bottomI == bottomCount - 1 then 0.5
-            else if swapTextureOrientation then 0.0
-            else 1.0
-          writeLineVert(
-            out(nextIdx),
-            bv.pos,
-            bv.width,
-            bottomLen,
-            bottomLen / uvLength,
-            uvY,
-            (bottomLen - line.lenOffset) / localLength,
-          )
-          indices.push(nextIdx)
-          bottomIdx = nextIdx
-          nextIdx += 1
-          bottomI += 1
-        else indices.push(bottomIdx)
-
-        balance = topLen - bottomLen
-
-      BufferedGeometry(out, makeIndexArray(indices, topCount + bottomCount))
+      BufferedGeometry(out, makeIndexArray(indices, vertCount))
 
   extension [T](lines: Arr[Line[T]])
     /** Expand stroke fragments (typically from [[Line.splitAtAngle]]) into one
