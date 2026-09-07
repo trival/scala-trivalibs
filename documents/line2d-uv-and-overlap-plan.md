@@ -843,8 +843,8 @@ brush.
 | A4b | Attribute carries the measured width              | library | **done**          |
 | A5  | Shared `v` / `d` helper, derived from two shades  | library | last              |
 | B0  | Re-render, measure what is left of the fan        | sketch  | after A4          |
-| B1  | `ClampInner` treatment                            | library | after B0          |
-| B2  | `NarrowWidth` treatment                           | library | after B0          |
+| B2  | `NarrowWidth` treatment **— do this one first**   | library | after B0          |
+| B1  | `ClampInner` treatment                            | library | after B2          |
 | B3  | Compare the two marks, pick defaults per use      | sketch  | after B1/B2       |
 | C   | Optional cap treatment — **only if still wanted** | library | after B           |
 | D   | Subdivide corner fans by outer arc length         | library | after B, proposed |
@@ -1151,12 +1151,29 @@ it.
 Shared: the windowed predicate — `±width/2` of arc length, fire above 2 radians,
 window clamped at fragment boundaries.
 
-- **B1 `ClampInner`** — geometry build. Pull the inner vertex back toward the
-  centerline; record it in `uv.y`, leave `width` alone.
 - **B2 `NarrowWidth`** — a `Line` transformation. Reduce `width` until the
   predicate holds; `uv.y` stays `0`/`1`.
-- `FoldTreatment` opaque type, default `Leave`, so existing strokes are
-  untouched.
+- **B1 `ClampInner`** — geometry build. Pull the inner vertex back toward the
+  centerline; record it in `uv.y`, leave `width` alone.
+- `FoldTreatment` opaque type, default `Leave` — **no manipulation at all**, so
+  existing geometry is bit-identical unless a sketch opts in. Both act only
+  *inside* a fragment; split angles stay `splitAtAngle`'s business.
+
+**Do B2 first**, though B1 is the more wanted mark:
+
+1. It **hosts the shared predicate** with no other moving parts, so the test
+   both treatments need gets written and validated once, in isolation.
+2. It **cannot destabilize A4** — centerline data in, centerline data out, never
+   touching the rib loop, paired smoothing or the attribute writing. Whatever it
+   emits is an ordinary valid ribbon.
+3. It is **testable without rendering**, being pure CPU geometry.
+4. It **answers how much of B is left** fastest. If narrowing removes the spikes
+   and reads acceptably, B1's urgency drops — and we learn that before touching
+   the geometry builder.
+
+B1 also carries an unresolved interaction that is easier to design against once
+the predicate is proven: **its clamp happens at rib placement, but paired
+smoothing runs afterwards and can cut a clamped corner back into a fold.**
 
 ### B3 — compare
 

@@ -7,6 +7,7 @@ import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.math.gpu.{*, given}
 import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.dsl.{*, given}
+import trivalibs.graphics.shader.lib.line.*
 import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
 import trivalibs.utils.js.*
@@ -15,7 +16,7 @@ import trivalibs.utils.random.*
 import scala.scalajs.js.annotation.*
 
 type Attribs = LineAttribs
-type Varyings = (uv: Vec2, localUv: Vec2)
+type Varyings = (uv: Vec2, localUv: Vec2, cross: Vec2)
 type Uniforms = (size: VertexUniform[Vec2])
 
 val PointCount = 20
@@ -71,12 +72,17 @@ def main(): Unit =
           pos := ctx.in.position / ctx.bindings.size,
           ctx.out.uv := ctx.in.uv,
           ctx.out.localUv := ctx.in.localUv,
+          // the cross coordinate is packed here and divided in the fragment
+          // stage — interpolating `uv.y` directly kinks at every triangle
+          // diagonal wherever the width changes. See `shader.lib.line`.
+          ctx.out.cross := lineCross(ctx.in.uv.y, ctx.in.width),
           ctx.out.position := vec4(pos.x, -pos.y, 0.0, 1.0),
         )
       // uv debug color: any broken mitre or uv discontinuity shows up as a
       // seam in the gradient
       program.frag: ctx =>
-        ctx.out.color := vec4(ctx.in.uv, 1.0, 1.0)
+        ctx.out.color :=
+          vec4(ctx.in.uv.x, ctx.in.cross.lineV, 1.0, 1.0)
 
     val size = p.binding[Vec2]
 
