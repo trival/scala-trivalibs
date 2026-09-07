@@ -1,26 +1,28 @@
 # Line2D — UV distortion on width changes, and fold-back overlap on tight turns
 
-Status: **A2 and A3 done; A4 next. B approved in shape.** See section 4 for the
-step-by-step status.
+Status: **A and B implemented. D is now the most visible artifact; C needs a
+decision; B3 waits for a real stroke.** See section 4 for the step-by-step
+status.
 
-- **A — approved and under way.** A2 (projective `v`) is implemented in study1
-  and **confirmed against many regenerated random geometries: no zig-zag
-  anywhere** — that was the condition on the rest. A3 (full-width semantics)
-  has landed. Next is A4: rib-preserving paired smoothing together with the
-  measured `width` attribute, in one step.
+- **A — done and verified.** Projective `v`, full-width semantics, paired
+  rib-preserving smoothing, the measured `width` attribute, and the shared
+  `shader.lib.line` helper. The zig-zag is gone from tapers and from caps, and
+  `d` gives world-unit cross-stroke coordinates.
+- **B — both treatments implemented, opt-in, default unchanged.**
+  `Line.narrowAtTightTurns` and `FoldTreatment.ClampInner`. Much improved, not
+  perfect: occasional thin spikes remain. **B3, choosing between the two marks,
+  is deliberately not settled** — the stress-test strokes are too extreme to
+  judge a look against.
+- **D is now the most visible artifact**, ahead of anything left of B: the
+  staircase where the outer side of a sharp turn has too few ribs for the
+  screen area it covers.
+- **C landed in one direction by accident** — see its section; caps switched
+  from keep-uv to keep-width as a side effect of the B1 attribute rule.
 - **API naming — `width` means full width, approved** (it is load-bearing for
   A3). The `splitAtAngle` naming question is **deferred** to a later API-surface
   review, noted below.
-- **C — the optional cap treatment is parked behind B**, deliberately. A4's
-  default already makes caps correct, so C is only the alternative look — and
-  B builds the treatment type and the opt-in plumbing that C would otherwise
-  have to invent, worse and twice.
-- **B — under review.** Settled so far: **B6 is rejected** — a sharp miter then
-  smoothed is how a brush turn is modelled, so bounding the miter factor forbids
-  the corners we want. **B1 and B2 are both wanted**, both programmatic and
-  opt-in, as a selectable pair: B1 keeps the width and clamps the inner texture,
-  B2 narrows the stroke and keeps the texture complete. Much of the fan falls out
-  of A's paired smoothing anyway.
+- **B6 stays rejected** — a sharp miter then smoothed is how a brush turn is
+  modelled, so bounding the miter factor would forbid the corners we want.
 
 Two artifacts became visible in `sketches/experiments/strokes/study1` that the
 opaque uv-debug shade in `examples/bevel_lines_2d` cannot show:
@@ -841,13 +843,13 @@ brush.
 | A3  | `width` means full width                          | library | **done**          |
 | A4a | Paired rib-preserving smoothing                   | library | **done**          |
 | A4b | Attribute carries the measured width              | library | **done**          |
-| A5  | Shared `v` / `d` helper, derived from two shades  | library | last              |
-| B0  | Re-render, measure what is left of the fan        | sketch  | after A4          |
-| B2  | `NarrowWidth` treatment **— do this one first**   | library | after B0          |
-| B1  | `ClampInner` treatment                            | library | after B2          |
-| B3  | Compare the two marks, pick defaults per use      | sketch  | after B1/B2       |
-| C   | Optional cap treatment — **only if still wanted** | library | after B           |
-| D   | Subdivide corner fans by outer arc length         | library | after B, proposed |
+| A5  | Shared `v` / `d` helper, derived from two shades  | library | **done**          |
+| B0  | Re-render, measure what is left of the fan        | sketch  | **done**          |
+| B2  | `NarrowWidth` treatment                           | library | **done**          |
+| B1  | `ClampInner` treatment                            | library | **done**          |
+| B3  | Compare the two marks, pick defaults per use      | sketch  | **open** — needs a real stroke |
+| C   | Optional cap treatment                            | library | **partly landed by accident** |
+| D   | Subdivide corner fans by outer arc length         | library | **now the most visible artifact** |
 
 (Step ids are local to this plan and unrelated to the strategy labels in
 sections 1–2.)
@@ -1135,8 +1137,74 @@ rejected for: A1 was dismissed as a fix for the taper zig-zag, which A2 solved
 exactly and for free. Here subdivision is the right tool, because the problem
 genuinely is sampling density.
 
-Sequence it after B — it is cosmetic next to the fold, and B may change the
-corner geometry it would be tuned against.
+Sequenced after B, and B is now done — **so this is next.** It was called
+cosmetic next to the fold; with B1 and B2 in, that has inverted: the staircase
+is the most visible distortion of the pattern left, more so than the occasional
+remaining spike.
+
+### B2 — `narrowAtTightTurns` — done
+
+`Line.narrowAtTightTurns(factor = 1.0)`, a transformation alongside `cleanup` /
+`smoothEdges`. Two limits bind and the tighter wins:
+
+- **isolated corner** — the inner offsets meet `halfWidth · tan(turn/2)` back
+  along each segment, so `halfWidth ≤ min(prevLen, len) / tan(turn/2)`;
+- **distributed turn** — a window of arc `s` carrying total turn `Δθ` achieves
+  radius ≈ `s / Δθ`, and the half width must fit inside it. The window grows
+  outward, shorter side first, and stops once it is `4 ×` wider than the limit
+  it is constraining, keeping the pass near-linear rather than quadratic.
+
+**Correction to this document.** The single-corner test was written above as
+`halfWidth ≤ len · tan(θ/2)`, which is inverted unless `θ` is read as the
+interior angle. In deviation terms it is `halfWidth ≤ len / tan(δ/2)`, which is
+what the code does.
+
+**And the "±width/2 window, fire above 2 radians" form is not used as the
+primary test.** It degenerates on a polyline: a single vertex carries all its
+turn at zero arc length, so that form drives the width to zero at any corner
+sharper than ≈114°. The `tan` form is exact for isolated corners; the windowed
+form is kept for genuinely distributed turns, which is what it was derived for.
+
+### B1 — `FoldTreatment.ClampInner` — done
+
+An opt-in parameter on `toBufferedGeometry` / `toBufferedGeometries`, defaulting
+to `Leave` so existing geometry is unchanged. Where a turn is too tight, the
+inner vertex is pulled back to where the two inner offsets actually meet; the
+outer one is untouched.
+
+**The attribute rule turned out to be uniform, with no branch on treatment.**
+`uv.y` became a carried payload rather than an index-derived constant, and the
+width is
+
+```
+width = |top − bottom| / (uv.y_bottom − uv.y_top)
+```
+
+the rib length divided by the `uv.y` range it spans. Unclamped, the span is `1`
+and this is just the rib length — the A4b rule unchanged. Clamped, with the
+outer at `a` and the inner at `b`, the span is `0.5 + b/2a` and the rib is
+`a + b`, so the divide recovers `2a`: the width the rib *would* have had. `d`
+comes out exact on **both** sides while the outer stays pinned at `0`/`1`, so
+the pattern keeps its scale and is cropped on the inside.
+
+That was the user's suggestion and it replaced a worse design, in which
+`ClampInner` kept the requested width and `v` consequently ran past `0`/`1` at
+every outer mitre.
+
+### C — partly landed as a side effect, needs a decision
+
+Making `uv.y` a payload has a consequence that was not chosen: the vertices
+smoothing inserts to round a **cap** now carry a lerp between the cap's `0.5`
+and the outline's `0`/`1`, so they record where they sit and the divide recovers
+the nominal width. That is the **keep-width** cap treatment — pattern holds its
+scale and is cropped at the tip. Before it, caps were keep-uv, with the pattern
+squeezed into the tip.
+
+Both are self-consistent and `d` is exact under either; it is purely a look. But
+it arrived as a side effect rather than a decision, and A4b's caps had already
+been verified in the other mode. **Look at the caps and decide.** Restoring
+keep-uv means distinguishing a clamped `uv.y` from a smoothing-lerped one, which
+is a small addition rather than a free one.
 
 ### B0 — measure before building
 
@@ -1175,10 +1243,26 @@ B1 also carries an unresolved interaction that is easier to design against once
 the predicate is proven: **its clamp happens at rib placement, but paired
 smoothing runs afterwards and can cut a clamped corner back into a fold.**
 
-### B3 — compare
+### B3 — compare — open, and blocked on the wrong test subject
 
-Render the same worst-case corners under both and decide which mark suits which
-kind of stroke. Inner texture clipped against stroke narrowed; they also compose.
+Both marks are now one line apart in study1 and `tests/line2d-debug`:
+`NarrowFactor = 0.8` with `Fold = Leave` for the narrowed version, against
+`NarrowFactor = 0.0` with `Fold = ClampInner` for the clamped one. They compose,
+too.
+
+**But neither sketch can settle it.** Both generate deliberately extreme
+geometry — 20 random points across the canvas, widths from `1/25` to `1/2`,
+fresh random width every two vertices — to stress the builder. That is what
+made every artifact in this document findable, and it is exactly what makes it
+a poor judge of how a treatment *looks*. A stroke that violent is not a stroke
+anyone will draw.
+
+So B3 waits for a real stroke to judge against, rather than being forced now on
+the stress test.
+
+**Current state after B1 + B2**: much improved, not perfect. Thin spikes still
+appear occasionally, and the D staircase is now the most visible distortion of
+the pattern — more so than anything left of B.
 
 ### A5 — a shared `v` / `d` helper, last
 

@@ -264,6 +264,78 @@ class Line[T](
             Arr[LineVertex[T]]()
           else Arr(curr.copy)
 
+  /** Narrow the stroke wherever the line turns tighter than its own width can
+    * carry, so the inner outline never folds back through the corner.
+    *
+    * A ribbon is the centre line offset by half its width. Offsetting by more
+    * than the turn can accommodate makes the inner offset self-intersect: it
+    * runs forward, doubles back through the corner and runs forward again,
+    * covering that patch three times. This pass prevents it by construction —
+    * the widths come down, so the ribbon stays a valid ribbon, and there is no
+    * special case anywhere downstream.
+    *
+    * Two limits bind, and the tighter one wins:
+    *
+    *   - **an isolated corner**, where the inner offsets of the two segments
+    *     meet `halfWidth * tan(turn/2)` back along each of them, so that has to
+    *     fit inside the shorter neighbour;
+    *   - **a run of small turns**, where no single vertex turns much but the
+    *     line still comes round faster than the width allows. Over a window of
+    *     arc length `s` carrying total turn `Δθ` the line achieves a radius of
+    *     about `s / Δθ`, and the half width has to fit inside it.
+    *
+    * `factor` scales the result — below `1.0` leaves headroom, above `1.0`
+    * allows a little folding back. This is the `NarrowWidth` treatment: the
+    * stroke visibly thins through a tight turn, and `uv.y` still spans the full
+    * `0..1`, so a cross-stroke pattern stays complete and is squeezed rather
+    * than clipped. Compare [[Line.narrowAtTightTurns]] against clamping the
+    * inner outline instead, which keeps the width and crops the pattern.
+    */
+  def narrowAtTightTurns(factor: Double = 1.0): Line[T] =
+    val n = verts.length
+    val out = new Line[T](defaultWidth, lenOffset, defaultData)
+    var i = 0
+    while i < n do
+      val v = verts(i)
+      val copy = v.copy
+      if i > 0 && i < n - 1 then
+        val turn = turnBetween(verts(i - 1).dir, v.dir)
+        if turn > MinTurn then
+          var maxHalf =
+            verts(i - 1).len.min(v.len) / (turn * 0.5).tan
+          // widen the window outward from this vertex, keeping the tightest
+          // radius any of them achieves; a corner spread over several small
+          // turns only shows up here
+          var lo = i - 1
+          var hi = i + 1
+          var arc = verts(i - 1).len + v.len
+          var sum = turn
+          var searching = true
+          while searching do
+            val canGrowLo = lo > 0
+            val canGrowHi = hi < n - 1
+            if !canGrowLo && !canGrowHi then searching = false
+            else
+              if canGrowLo && (!canGrowHi || verts(lo - 1).len <= verts(hi).len)
+              then
+                lo -= 1
+                sum += turnBetween(verts(lo).dir, verts(lo + 1).dir)
+                arc += verts(lo).len
+              else
+                hi += 1
+                sum += turnBetween(verts(hi - 1).dir, verts(hi).dir)
+                arc += verts(hi - 1).len
+              val radius = arc / sum
+              if radius < maxHalf then maxHalf = radius
+              // past this the window is far wider than anything it could still
+              // constrain, so stop rather than walking the whole line
+              if arc > maxHalf * WindowReach then searching = false
+          val maxWidth = maxHalf * 2.0 * factor
+          if maxWidth < copy.width then copy.width = maxWidth
+      out.addVert(copy)
+      i += 1
+    out
+
   /** Split the line into fragments wherever it turns by more than
     * `angleThreshold` radians. The corner vertex is duplicated into both
     * fragments (ending one, starting the next), and each fragment's
@@ -333,6 +405,45 @@ type LineAttribsBuffer =
     Vec2Buffer *: EmptyTuple
 
 private def normalOf(dir: Vec2): Vec2 = Vec2(dir.y, -dir.x)
+
+/** What `toBufferedGeometry` does where the line turns tighter than its width
+  * can carry, i.e. where the inner outline would fold back through the corner.
+  *
+  *   - [[FoldTreatment.Leave]] — nothing. The fold is emitted as it falls out
+  *     of the mitre, covering the corner two or three times. The default, so
+  *     existing geometry is unchanged.
+  *   - [[FoldTreatment.ClampInner]] — pull the inner vertex back to where the
+  *     two inner offsets actually meet, keeping the requested width. The stroke
+  *     stays full width and a cross-stroke pattern keeps its scale, cropped on
+  *     the inside of the corner.
+  *
+  * The third treatment, narrowing the stroke so the fold cannot arise, is
+  * [[Line.narrowAtTightTurns]] — a transformation rather than a build option,
+  * since it changes the line's own data.
+  */
+opaque type FoldTreatment = Int
+object FoldTreatment:
+  val Leave: FoldTreatment = 0
+  val ClampInner: FoldTreatment = 1
+  extension (t: FoldTreatment) inline def id: Int = t
+
+/** Turn angle between two travel directions, `0` straight and `Pi` a reversal. */
+private def turnBetween(a: Vec2, b: Vec2): Double =
+  a.dot(b).clamp(-1.0, 1.0).acos
+
+/** Below this a vertex counts as straight and constrains nothing. */
+private inline val MinTurn = 1e-6
+
+/** Below this a rib spans no `uv.y` range worth dividing by — the cap ribs, and
+  * anything smoothing has collapsed onto them.
+  */
+private inline val MinUvSpan = 1e-9
+
+/** How far past the current limit the window walk keeps going before giving up
+  * — a window much wider than the width it is constraining cannot tighten it
+  * further, and walking the whole line for every vertex would be quadratic.
+  */
+private inline val WindowReach = 4.0
 
 /** True when this vertex is a corner worth bevelling on its own contour: both
   * neighbouring segments are long enough, and the turn exceeds the threshold.
@@ -453,6 +564,9 @@ object Line:
       *   direction the following fragment leaves with, for the end cap
       * @param swapTextureOrientation
       *   flips `uv.y`, alternated per fragment by `toBufferedGeometries`
+      * @param foldTreatment
+      *   what to do where a turn is too tight for the width — see
+      *   [[FoldTreatment]]
       */
     def toBufferedGeometry(
         smoothDepth: Int = 0,
@@ -462,11 +576,17 @@ object Line:
         prevDirection: Opt[Vec2] = null,
         nextDirection: Opt[Vec2] = null,
         swapTextureOrientation: Boolean = false,
+        foldTreatment: FoldTreatment = FoldTreatment.Leave,
     ): BufferedGeometry[LineAttribsBuffer] =
-      // The two outlines of the stroke, carrying the accumulated stroke length
-      // as their vertex data so it survives the bevel passes below.
-      var topLine = new Line[Double](line.defaultWidth, 0.0, 0.0)
-      var bottomLine = new Line[Double](line.defaultWidth, 0.0, 0.0)
+      val clampInner = foldTreatment.id == FoldTreatment.ClampInner.id
+
+      // The two outlines of the stroke. Their vertex data carries the
+      // accumulated stroke length and the vertex's `uv.y`, so both survive the
+      // bevel passes below. `uv.y` is a payload rather than a constant because
+      // `ClampInner` moves the inner vertex inward, and where it sits across
+      // the stroke is exactly what that treatment records.
+      var topLine = new Line[Vec2](line.defaultWidth, 0.0, Vec2.zero)
+      var bottomLine = new Line[Vec2](line.defaultWidth, 0.0, Vec2.zero)
       var lineLength = line.lenOffset
 
       val src = line.verts
@@ -490,13 +610,42 @@ object Line:
             normal = (nextNormal + prevNormal).normalize
             offset = (halfWidth / normal.dot(prevNormal)).min(halfWidth * 5.0)
 
-        var top = normal * offset + v.pos
-        var bottom = normal * -offset + v.pos
+        // `ClampInner`: the two inner offsets meet `halfWidth * tan(turn/2)`
+        // back along each segment, and past the shorter of them the inner
+        // outline would run backwards through the corner. Pull it in to where
+        // they actually meet. `normalOf` points right of travel, so a turn with
+        // positive cross product curves away from it and `bottom` is inside.
+        //
+        // The outer vertex keeps `uv.y = 0` / `1` — it is the stroke's edge,
+        // whatever the mitre does with it — while the clamped one records where
+        // it actually sits, so a cross-stroke pattern holds its scale and is
+        // cropped on the inside of the corner.
+        var topOffset = offset
+        var bottomOffset = offset
+        var topUv = 0.0
+        var bottomUv = 1.0
+        if clampInner && hasPrev && hasNext then
+          val prevDir = src(i - 1).dir
+          val turn = turnBetween(prevDir, v.dir)
+          if turn > MinTurn then
+            val reach = src(i - 1).len.min(v.len) / (turn * 0.5).tan
+            if reach < offset then
+              // relative to the unclamped rib, so the width divides back out of
+              // it — see `ribWidth`
+              if cross2d(prevDir, v.dir) > 0.0 then
+                bottomOffset = reach
+                bottomUv = 0.5 + reach / (offset * 2.0)
+              else
+                topOffset = reach
+                topUv = 0.5 - reach / (offset * 2.0)
+
+        var top = normal * topOffset + v.pos
+        var bottom = normal * -bottomOffset + v.pos
 
         if !hasPrev then
           // start cap: a degenerate vertex on the centre line
-          topLine.add(v.pos, v.width, lineLength)
-          bottomLine.add(v.pos, v.width, lineLength)
+          topLine.add(v.pos, v.width, Vec2(lineLength, 0.5))
+          bottomLine.add(v.pos, v.width, Vec2(lineLength, 0.5))
 
           if prevDirection.notNull then
             // extend the cap so it meets the preceding fragment's end
@@ -523,13 +672,13 @@ object Line:
               top = top + v.dir * -a
               bottom = bottom + v.dir * a
 
-        topLine.add(top, v.width, lineLength)
-        bottomLine.add(bottom, v.width, lineLength)
+        topLine.add(top, v.width, Vec2(lineLength, topUv))
+        bottomLine.add(bottom, v.width, Vec2(lineLength, bottomUv))
 
         if !hasNext then
           // end cap
-          topLine.add(v.pos, v.width, lineLength)
-          bottomLine.add(v.pos, v.width, lineLength)
+          topLine.add(v.pos, v.width, Vec2(lineLength, 0.5))
+          bottomLine.add(v.pos, v.width, Vec2(lineLength, 0.5))
 
         lineLength += v.len
         i += 1
@@ -554,18 +703,30 @@ object Line:
       val out = StructArray.allocate[LineAttribsBuffer](vertCount)
       val indices = Arr[Int]()
 
-      // The width the geometry actually produced, measured across the rib —
-      // after mitring and smoothing, not the width that was asked for. Cap ribs
-      // are degenerate (both outline vertices sit on the centre line), so they
-      // borrow their neighbour's: `uv.y = 0.5` already places them at distance
-      // zero, and this keeps the divisor positive for `v = uv.y * width /
-      // width` in the shader.
+      // The width the geometry actually produced — measured across the rib
+      // after mitring and smoothing, not the width that was asked for.
+      //
+      // Divided by the `uv.y` range the rib spans, because the outline does not
+      // always sit at 0 and 1: `ClampInner` pulls the inner vertex in and
+      // records where it landed, so the rib covers less than the full range.
+      // Dividing recovers the width the rib would have had unclamped, which
+      // keeps `d = uv.y * width - 0.5 * width` the true signed distance on both
+      // sides. With no clamping the span is 1 and this is just the rib length.
+      //
+      // Cap ribs are degenerate — both vertices sit on the centre line at
+      // `uv.y = 0.5`, so the rib has no length and no span — and borrow their
+      // neighbour's. That keeps the divisor positive while `uv.y = 0.5` is what
+      // places them at distance zero.
       def ribWidth(r: Int): Double =
         val i =
           if r == 0 then (ribCount - 1).min(1)
           else if r == ribCount - 1 then (ribCount - 2).max(0)
           else r
-        (topLine.get(i).pos - bottomLine.get(i).pos).length
+        val tv = topLine.get(i)
+        val bv = bottomLine.get(i)
+        val span = bv.data.y - tv.data.y
+        if span < MinUvSpan then 0.0
+        else (tv.pos - bv.pos).length / span
 
       // The two outlines are rib-paired, so the strip is just every rib in
       // order: top, bottom, top, bottom.
@@ -574,33 +735,28 @@ object Line:
         val tv = topLine.get(r)
         val bv = bottomLine.get(r)
         val width = ribWidth(r)
-        val isCap = r == 0 || r == ribCount - 1
         val topUvY =
-          if isCap then 0.5
-          else if swapTextureOrientation then 1.0
-          else 0.0
+          if swapTextureOrientation then 1.0 - tv.data.y else tv.data.y
         val bottomUvY =
-          if isCap then 0.5
-          else if swapTextureOrientation then 0.0
-          else 1.0
+          if swapTextureOrientation then 1.0 - bv.data.y else bv.data.y
 
         writeLineVert(
           out(r * 2),
           tv.pos,
           width,
-          tv.data,
-          tv.data / uvLength,
+          tv.data.x,
+          tv.data.x / uvLength,
           topUvY,
-          (tv.data - line.lenOffset) / localLength,
+          (tv.data.x - line.lenOffset) / localLength,
         )
         writeLineVert(
           out(r * 2 + 1),
           bv.pos,
           width,
-          bv.data,
-          bv.data / uvLength,
+          bv.data.x,
+          bv.data.x / uvLength,
           bottomUvY,
-          (bv.data - line.lenOffset) / localLength,
+          (bv.data.x - line.lenOffset) / localLength,
         )
         indices.push(r * 2)
         indices.push(r * 2 + 1)
@@ -626,6 +782,7 @@ object Line:
         smoothAngleThreshold: Double = 0.05,
         smoothMinLength: Double = 3.0,
         totalLength: Opt[Double] = null,
+        foldTreatment: FoldTreatment = FoldTreatment.Leave,
     ): Arr[BufferedGeometry[LineAttribsBuffer]] =
       var total = 0.0
       if totalLength.notNull then total = totalLength.get
@@ -650,6 +807,7 @@ object Line:
             prevDirection = prevDir,
             nextDirection = nextDir,
             swapTextureOrientation = i % 2 != 0,
+            foldTreatment = foldTreatment,
           ),
         )
         i += 1

@@ -299,11 +299,13 @@ class Line2dTest extends FunSuite:
       val bottom = Vec2(readF(geom, i * 2 + 1, 0), readF(geom, i * 2 + 1, 4))
       val measured = (top - bottom).length
       val attrib = readF(geom, i * 2, 8)
+      val uvSpan = readF(geom, i * 2 + 1, 20) - readF(geom, i * 2, 20)
       // both vertices of a rib carry the same width …
       assertEqualsDouble(readF(geom, i * 2 + 1, 8), attrib, 1e-5)
-      // … and away from the caps it is the distance between them
+      // … and it is the rib length divided by the uv.y range the rib spans,
+      // which recovers the width an unclamped, unrounded rib would have had
       if i > 0 && i < geom.vertices.length / 2 - 1 then
-        assertEqualsDouble(attrib, measured, 1e-5)
+        assertEqualsDouble(attrib, measured / uvSpan, 1e-4)
       i += 1
 
   test("cap ribs borrow a positive width so the shader divisor never vanishes"):
