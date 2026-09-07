@@ -834,20 +834,20 @@ brush.
 
 ## 4. Implementation plan
 
-| #   | Step                                         | Where   | Status      |
-| --- | -------------------------------------------- | ------- | ----------- |
-| —   | `tests/line2d-debug` verification sketch     | sketch  | **done**    |
-| A2  | Projective `v` proof of concept              | sketch  | **done**    |
-| A3  | `width` means full width                     | library | **done**    |
-| A4a | Paired rib-preserving smoothing              | library | **done**    |
-| A4b | Attribute carries the measured width         | library | **done**    |
-| A5  | Shared `v` / `d` helper, derived from two shades | library | last     |
-| B0  | Re-render, measure what is left of the fan   | sketch  | after A4    |
-| B1  | `ClampInner` treatment                       | library | after B0    |
-| B2  | `NarrowWidth` treatment                      | library | after B0    |
-| B3  | Compare the two marks, pick defaults per use | sketch  | after B1/B2 |
-| C   | Optional cap treatment — **only if still wanted** | library | after B |
-| D   | Subdivide corner fans by outer arc length    | library | after B, proposed |
+| #   | Step                                              | Where   | Status            |
+| --- | ------------------------------------------------- | ------- | ----------------- |
+| —   | `tests/line2d-debug` verification sketch          | sketch  | **done**          |
+| A2  | Projective `v` proof of concept                   | sketch  | **done**          |
+| A3  | `width` means full width                          | library | **done**          |
+| A4a | Paired rib-preserving smoothing                   | library | **done**          |
+| A4b | Attribute carries the measured width              | library | **done**          |
+| A5  | Shared `v` / `d` helper, derived from two shades  | library | last              |
+| B0  | Re-render, measure what is left of the fan        | sketch  | after A4          |
+| B1  | `ClampInner` treatment                            | library | after B0          |
+| B2  | `NarrowWidth` treatment                           | library | after B0          |
+| B3  | Compare the two marks, pick defaults per use      | sketch  | after B1/B2       |
+| C   | Optional cap treatment — **only if still wanted** | library | after B           |
+| D   | Subdivide corner fans by outer arc length         | library | after B, proposed |
 
 (Step ids are local to this plan and unrelated to the strategy labels in
 sections 1–2.)
@@ -980,8 +980,8 @@ world-unit coordinate directly.
 part — **the
 B spikes are now fewer, smaller and symmetric, but still present**. That is the
 predicted split arriving on schedule: paired smoothing removes the
-*amplification* (the vertex-count mismatch that fanned one bad vertex into fifty
-slivers), not the *fold* itself, which is geometry and remains B1/B2's job. It
+_amplification_ (the vertex-count mismatch that fanned one bad vertex into fifty
+slivers), not the _fold_ itself, which is geometry and remains B1/B2's job. It
 also partly answers B0 in advance — what is left of B is the fold alone.
 
 Measuring the produced width and rib-preserving smoothing ship
@@ -993,7 +993,7 @@ would trade one inaccuracy for another and make its gate dishonest.
 **Order inside the step**
 
 1. **Paired smoothing pass.** One walk over rib indices instead of two
-   independent `smoothEdges` runs. When a rib bevels, *both* contours emit two
+   independent `smoothEdges` runs. When a rib bevels, _both_ contours emit two
    vertices at the same lerp ratios; on a side with no turn those land on its
    existing edge, so the shape is unchanged and only vertex density rises.
 2. **Simplify the strip walk.** With equal counts and matching indices the
@@ -1023,12 +1023,12 @@ regions get a strategy choice, and where a deviation is recorded there is a
 `0`/`1` and `width_i = |top_i − bottom_i|`, `d = V − 0.5·Q` gives `∓w/2` at the
 outline — the exact signed distance from the rib midpoint, everywhere, smoothed
 corners included. The later cap and fold treatments change only what is
-*written* inside their spans; the shader-side `d` is identical under all of
+_written_ inside their spans; the shader-side `d` is identical under all of
 them, so nothing built on `d` now needs revisiting.
 
 **The degenerate tip rib needs one rule, here rather than later.** `top_0` and
 `bottom_0` are the same point, so a measured width there is `0` — that is a
-`Q = 0` and a `v = 0/0` at the tip under the *plain default*, not only under
+`Q = 0` and a `v = 0/0` at the tip under the _plain default_, not only under
 keep-uv. Avoid it without a special case downstream: **the tip keeps
 `uv.y = 0.5` and inherits the adjacent rib's measured width.** Then
 `d = 0.5·w − 0.5·w = 0` (exact — the tip really is on the centre line, where
@@ -1067,10 +1067,10 @@ keep uv:      uv.y = 0 or 1,      Q = 2·e   →  d = 0 − e          = −e
 
 The difference is entirely in `v`, and it is visible:
 
-| treatment      | `v`                  | a `v`-keyed pattern              |
-| -------------- | -------------------- | -------------------------------- |
+| treatment      | `v`                      | a `v`-keyed pattern                                |
+| -------------- | ------------------------ | -------------------------------------------------- |
 | **keep width** | compresses toward center | holds its scale, gets **cropped** at the narrowing |
-| **keep uv**    | stays full `0..1`    | **squeezes** into the narrowing   |
+| **keep uv**    | stays full `0..1`        | **squeezes** into the narrowing                    |
 
 Both are legitimate marks — the same pair as B1 `ClampInner` and B2
 `NarrowWidth`, so one vocabulary should cover both regions rather than two
@@ -1092,10 +1092,9 @@ scale and crops it instead, closer to today's look.
 inheriting the neighbouring rib's width — see above. Neither treatment needs to
 revisit it: both give `d = 0` at a point that genuinely lies on the centre line.
 
-Neither treatment is exact *around* a curved cap, since the quad there is not a
+Neither treatment is exact _around_ a curved cap, since the quad there is not a
 trapezoid under either encoding — worth saying plainly rather than claiming
 exactness twice.
-
 
 ### D — rib density at corner fans (new, found after A4)
 
@@ -1125,10 +1124,10 @@ Three things to keep apart:
   for any fine along-stroke pattern, not only for this debug shade.
 
 **Proposed fix, not yet approved: subdivide by outer arc length.** Rib density at
-a corner is currently set by the corner *angle*; what needs bounding is the outer
+a corner is currently set by the corner _angle_; what needs bounding is the outer
 arc, which is `angle × outer offset` and so grows with the width. A wide stroke
 at a sharp turn sweeps a long arc and gets no more ribs than a narrow one at the
-same angle. A criterion of "split while a quad's outer edge exceeds *L*" sizes it
+same angle. A criterion of "split while a quad's outer edge exceeds _L_" sizes it
 automatically — nothing on gentle corners, many ribs on wide sharp ones.
 
 This is A1 (lengthwise subdivision) resurrected for a symptom it was **not**
@@ -1180,7 +1179,7 @@ the helper would encode a guess about what shades want from the pair.
 ### C — optional cap treatment, only if still wanted
 
 **A4 already fixes the cap defect.** Today's cap zig-zag comes from the
-index-assigned `uv.y`: vertices smoothing *inserts* to round the cap claim
+index-assigned `uv.y`: vertices smoothing _inserts_ to round the cap claim
 `0`/`1` while the `width` attribute still reports the full intended width, so
 they assert an edge they are not on. Under A4's default they keep `0`/`1` and
 carry their **measured** width — which is the keep-uv treatment, correctly
@@ -1204,7 +1203,7 @@ squeezing into it.
   a configuration point before that is known is inventing a knob.
 
 **The degenerate first quad is deliberate and stays**, whichever way this goes.
-The centerline vertex at `uv.y = 0.5` is what gives the contour a *corner* at
+The centerline vertex at `uv.y = 0.5` is what gives the contour a _corner_ at
 the first rib; without it that rib would be the contour's endpoint, and
 `smoothEdges` skips endpoints (`if prev.isNull || next.isNull then
 Arr(curr.copy)`), so there would be nothing to cut and no rounded cap. The
