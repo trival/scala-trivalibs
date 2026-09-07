@@ -269,6 +269,57 @@ class Line2dTest extends FunSuite:
     assertEqualsDouble(readF(geom, 2, 4), -1.0, 1e-6)
     assertEqualsDouble(readF(geom, 3, 4), 1.0, 1e-6)
 
+  test("smoothing keeps the two outlines rib-paired"):
+    val line = Line.fromPoints(
+      2.0,
+      Arr(Vec2(0.0, 0.0), Vec2(10.0, 0.0), Vec2(14.0, 6.0), Vec2(24.0, 7.0)),
+    )
+    val geom = line.toBufferedGeometry(
+      smoothDepth = 3,
+      smoothAngleThreshold = 0.001,
+      smoothMinLength = 0.5,
+    )
+    // one vertex per outline per rib, so the buffer is always even and the
+    // strip needs no index repeats to reconcile two different counts
+    assertEquals(geom.vertices.length % 2, 0)
+
+  test("the width attribute is the produced width, measured across the rib"):
+    val line = Line.fromPoints(
+      2.0,
+      Arr(Vec2(0.0, 0.0), Vec2(10.0, 0.0), Vec2(14.0, 6.0), Vec2(24.0, 7.0)),
+    )
+    val geom = line.toBufferedGeometry(
+      smoothDepth = 3,
+      smoothAngleThreshold = 0.001,
+      smoothMinLength = 0.5,
+    )
+    var i = 0
+    while i < geom.vertices.length / 2 do
+      val top = Vec2(readF(geom, i * 2, 0), readF(geom, i * 2, 4))
+      val bottom = Vec2(readF(geom, i * 2 + 1, 0), readF(geom, i * 2 + 1, 4))
+      val measured = (top - bottom).length
+      val attrib = readF(geom, i * 2, 8)
+      // both vertices of a rib carry the same width …
+      assertEqualsDouble(readF(geom, i * 2 + 1, 8), attrib, 1e-5)
+      // … and away from the caps it is the distance between them
+      if i > 0 && i < geom.vertices.length / 2 - 1 then
+        assertEqualsDouble(attrib, measured, 1e-5)
+      i += 1
+
+  test("cap ribs borrow a positive width so the shader divisor never vanishes"):
+    val line = Line.fromPoints(
+      2.0,
+      Arr(Vec2(0.0, 0.0), Vec2(10.0, 0.0)),
+    )
+    val geom = line.toBufferedGeometry()
+    val last = geom.vertices.length / 2 - 1
+    // the cap vertices coincide on the centre line, so their own extent is 0
+    assert(readF(geom, 0, 8) > 0.0)
+    assert(readF(geom, last * 2, 8) > 0.0)
+    // uv.y = 0.5 is what places them at distance zero, not the width
+    assertEqualsDouble(readF(geom, 0, 20), 0.5, 1e-6)
+    assertEqualsDouble(readF(geom, last * 2, 20), 0.5, 1e-6)
+
   test("toBufferedGeometries threads directions and a shared total length"):
     val line = Line.fromPoints(
       2.0,

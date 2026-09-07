@@ -303,7 +303,13 @@ class Line[T](
   * `Attribs`. `uv.x` runs `0..1` along the whole stroke (all fragments),
   * `localUv.x` along this fragment alone; `y` is `0`/`1` across the stroke and
   * `0.5` at the two end caps. `length` is the accumulated distance in the
-  * line's own units, and `width` is the **full** stroke width there.
+  * line's own units.
+  *
+  * `width` is the **full stroke width the geometry actually produced** at that
+  * rib — measured across it, after mitring and smoothing, so it reports the
+  * narrowing at a bevelled corner rather than the width that was requested. Cap
+  * ribs borrow their neighbour's, since their own is zero and `uv.y = 0.5`
+  * already places them on the centre line.
   *
   * A width change along the stroke shears the quads, so interpolating `uv.y`
   * directly kinks at every triangle diagonal. Divide instead: pass
@@ -548,12 +554,26 @@ object Line:
       val out = StructArray.allocate[LineAttribsBuffer](vertCount)
       val indices = Arr[Int]()
 
+      // The width the geometry actually produced, measured across the rib —
+      // after mitring and smoothing, not the width that was asked for. Cap ribs
+      // are degenerate (both outline vertices sit on the centre line), so they
+      // borrow their neighbour's: `uv.y = 0.5` already places them at distance
+      // zero, and this keeps the divisor positive for `v = uv.y * width /
+      // width` in the shader.
+      def ribWidth(r: Int): Double =
+        val i =
+          if r == 0 then (ribCount - 1).min(1)
+          else if r == ribCount - 1 then (ribCount - 2).max(0)
+          else r
+        (topLine.get(i).pos - bottomLine.get(i).pos).length
+
       // The two outlines are rib-paired, so the strip is just every rib in
       // order: top, bottom, top, bottom.
       var r = 0
       while r < ribCount do
         val tv = topLine.get(r)
         val bv = bottomLine.get(r)
+        val width = ribWidth(r)
         val isCap = r == 0 || r == ribCount - 1
         val topUvY =
           if isCap then 0.5
@@ -567,7 +587,7 @@ object Line:
         writeLineVert(
           out(r * 2),
           tv.pos,
-          tv.width,
+          width,
           tv.data,
           tv.data / uvLength,
           topUvY,
@@ -576,7 +596,7 @@ object Line:
         writeLineVert(
           out(r * 2 + 1),
           bv.pos,
-          bv.width,
+          width,
           bv.data,
           bv.data / uvLength,
           bottomUvY,

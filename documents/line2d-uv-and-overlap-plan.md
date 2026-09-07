@@ -837,22 +837,23 @@ brush.
 | #   | Step                                         | Where   | Status      |
 | --- | -------------------------------------------- | ------- | ----------- |
 | —   | `tests/line2d-debug` verification sketch     | sketch  | **done**    |
-| A2  | Projective `v` proof of concept              | sketch  | **done** \* |
+| A2  | Projective `v` proof of concept              | sketch  | **done**    |
 | A3  | `width` means full width                     | library | **done**    |
 | A4a | Paired rib-preserving smoothing              | library | **done**    |
-| A4b | Attribute carries the measured width         | library | **next**    |
+| A4b | Attribute carries the measured width         | library | **done**    |
 | A5  | Shared `v` / `d` helper, derived from two shades | library | last     |
 | B0  | Re-render, measure what is left of the fan   | sketch  | after A4    |
 | B1  | `ClampInner` treatment                       | library | after B0    |
 | B2  | `NarrowWidth` treatment                      | library | after B0    |
 | B3  | Compare the two marks, pick defaults per use | sketch  | after B1/B2 |
 | C   | Optional cap treatment — **only if still wanted** | library | after B |
+| D   | Subdivide corner fans by outer arc length    | library | after B, proposed |
 
 (Step ids are local to this plan and unrelated to the strategy labels in
 sections 1–2.)
 
-\* Tapers are fixed and verified. Zig-zag remains at smoothing-rounded caps from
-a separate cause — see below; A4 carries the fix.
+A2 fixed the tapers; the cap zig-zag it left behind had a separate cause and was
+closed by A4b.
 
 ### The verification sketch — done
 
@@ -953,7 +954,30 @@ automatically; `base1` and `tile-strokes` default to `smoothDepth = 0` and are
 bit-identical, since with equal counts and equal per-rib `data` the old
 `balance` walk already emitted exactly `top, bottom` per rib.
 
-**Verified visually.** Corners are cleaner, and — the interesting part — **the
+#### A4b — measured width — done
+
+`ribWidth(r) = |top_r − bottom_r|`, written to both vertices of the rib in place
+of the carried payload width. Cap ribs borrow their neighbour's, since their own
+outline vertices coincide on the centre line; `uv.y = 0.5` is what places them at
+distance zero, so the borrowed value only ever serves as a divisor. `uv.y` is
+otherwise untouched — this is the keep-uv default.
+
+Three tests added to `Line2dTest` (24 total, green): outlines stay rib-paired
+under smoothing, both vertices of a rib carry the same width and away from the
+caps it equals the measured distance between them, and cap ribs carry a positive
+width with `uv.y = 0.5`.
+
+`d = uv.y·width − 0.5·width` is now a world-unit signed distance from the rib
+midpoint, everywhere.
+
+**Verified visually: the cap zig-zag is gone and the lines read smooth
+throughout.** That closes A2's residual — its diagnosis (inserted rounding
+vertices claiming the full requested width) is confirmed by the fix working.
+`tests/line2d-debug` gained a `WorldAcross` mode keyed on `d` to exercise the
+world-unit coordinate directly.
+
+**Verified visually** (after A4a). Corners are cleaner, and — the interesting
+part — **the
 B spikes are now fewer, smaller and symmetric, but still present**. That is the
 predicted split arriving on schedule: paired smoothing removes the
 *amplification* (the vertex-count mismatch that fanned one bad vertex into fifty
@@ -1072,6 +1096,48 @@ Neither treatment is exact *around* a curved cap, since the quad there is not a
 trapezoid under either encoding — worth saying plainly rather than claiming
 exactness twice.
 
+
+### D — rib density at corner fans (new, found after A4)
+
+A third phenomenon, distinct from A's zig-zag and B's fold, seen once the lines
+were otherwise clean: **on the outer side of a sharp turn the pattern steps per
+rib** — a staircase, not a kink and not an overlap.
+
+**Cause.** `uv.x` is centerline arc length, but at a corner the outer edge sweeps
+a long arc while the centerline barely advances — the `1 − d·κ` stretch, with the
+sign that expands. So a large screen area maps to a tiny `u` range. Each quad is
+linear in `u`, its range is small and close to its neighbour's, and the gradient
+collapses into one flat step per quad. The same sparse, strongly oblique ribs
+make `v`'s gradient change per quad, which is the "stairs" in the cross
+direction. One cause, two symptoms.
+
+**Confirmed** on `tests/line2d-debug`: the effect appears **only on the outer
+side** (a rib-count problem alone would show on both), and raising `smoothDepth`
+4 → 7 made the steps **much finer but still stepped**, with moiré appearing as
+rib spacing approached the stripe period.
+
+Three things to keep apart:
+
+- The **compression is correct** — the outer edge does travel farther per unit
+  of stroke progress, and a `u`-keyed pattern should stretch there.
+- The **stepping is a sampling artifact** — too few ribs for the screen area.
+- The **moiré is frequency beating** between pattern and rib spacing. A warning
+  for any fine along-stroke pattern, not only for this debug shade.
+
+**Proposed fix, not yet approved: subdivide by outer arc length.** Rib density at
+a corner is currently set by the corner *angle*; what needs bounding is the outer
+arc, which is `angle × outer offset` and so grows with the width. A wide stroke
+at a sharp turn sweeps a long arc and gets no more ribs than a narrow one at the
+same angle. A criterion of "split while a quad's outer edge exceeds *L*" sizes it
+automatically — nothing on gentle corners, many ribs on wide sharp ones.
+
+This is A1 (lengthwise subdivision) resurrected for a symptom it was **not**
+rejected for: A1 was dismissed as a fix for the taper zig-zag, which A2 solved
+exactly and for free. Here subdivision is the right tool, because the problem
+genuinely is sampling density.
+
+Sequence it after B — it is cosmetic next to the fold, and B may change the
+corner geometry it would be tuned against.
 
 ### B0 — measure before building
 
