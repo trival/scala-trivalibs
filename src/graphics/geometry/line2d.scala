@@ -296,42 +296,9 @@ class Line[T](
     val out = new Line[T](defaultWidth, lenOffset, defaultData)
     var i = 0
     while i < n do
-      val v = verts(i)
-      val copy = v.copy
-      if i > 0 && i < n - 1 then
-        val turn = turnBetween(verts(i - 1).dir, v.dir)
-        if turn > MinTurn then
-          var maxHalf =
-            verts(i - 1).len.min(v.len) / (turn * 0.5).tan
-          // widen the window outward from this vertex, keeping the tightest
-          // radius any of them achieves; a corner spread over several small
-          // turns only shows up here
-          var lo = i - 1
-          var hi = i + 1
-          var arc = verts(i - 1).len + v.len
-          var sum = turn
-          var searching = true
-          while searching do
-            val canGrowLo = lo > 0
-            val canGrowHi = hi < n - 1
-            if !canGrowLo && !canGrowHi then searching = false
-            else
-              if canGrowLo && (!canGrowHi || verts(lo - 1).len <= verts(hi).len)
-              then
-                lo -= 1
-                sum += turnBetween(verts(lo).dir, verts(lo + 1).dir)
-                arc += verts(lo).len
-              else
-                hi += 1
-                sum += turnBetween(verts(hi - 1).dir, verts(hi).dir)
-                arc += verts(hi - 1).len
-              val radius = arc / sum
-              if radius < maxHalf then maxHalf = radius
-              // past this the window is far wider than anything it could still
-              // constrain, so stop rather than walking the whole line
-              if arc > maxHalf * WindowReach then searching = false
-          val maxWidth = maxHalf * 2.0 * factor
-          if maxWidth < copy.width then copy.width = maxWidth
+      val copy = verts(i).copy
+      val maxWidth = maxHalfExtentAt(verts, i) * 2.0 * factor
+      if maxWidth < copy.width then copy.width = maxWidth
       out.addVert(copy)
       i += 1
     out
@@ -430,6 +397,73 @@ object FoldTreatment:
 /** Turn angle between two travel directions, `0` straight and `Pi` a reversal. */
 private def turnBetween(a: Vec2, b: Vec2): Double =
   a.dot(b).clamp(-1.0, 1.0).acos
+
+/** Turn angle carrying its direction, negative one way and positive the other.
+  *
+  * The window in [[maxHalfExtentAt]] has to accumulate this rather than the
+  * magnitude: an S-curve's two bends turn opposite ways, and a window spanning
+  * the inflection between them must let them cancel. Summing magnitudes would
+  * read the S as one long bend and narrow the stroke exactly where it is
+  * straightest and nothing can fold.
+  */
+private def signedTurnBetween(a: Vec2, b: Vec2): Double =
+  Math.atan2(cross2d(a, b), a.dot(b))
+
+/** How far the outline can be offset at `verts(i)` before the inner side folds
+  * back through the corner — `PositiveInfinity` where nothing constrains it.
+  *
+  * The single question both fold treatments ask, so that they answer it the
+  * same way: [[Line.narrowAtTightTurns]] brings the width down to fit inside
+  * it, `FoldTreatment.ClampInner` leaves the width alone and pulls the inner
+  * vertex in to it.
+  *
+  * Two limits bind, and the tighter wins:
+  *
+  *   - **an isolated corner**, where the two inner offsets meet
+  *     `halfExtent * tan(turn/2)` back along each segment and so have to fit
+  *     inside the shorter neighbour;
+  *   - **a run of small turns**, where no single vertex turns much but the line
+  *     still comes round faster than the offset allows. Over a window of arc
+  *     length `s` carrying total turn `Δθ` the line achieves a radius of about
+  *     `s / Δθ`, and the offset has to fit inside that.
+  *
+  * The window grows outward from the vertex, shorter side first, and stops once
+  * it is much wider than the limit it is constraining — a window that large
+  * cannot tighten it further, and walking the whole line at every vertex would
+  * be quadratic.
+  */
+private def maxHalfExtentAt[T](verts: Arr[LineVertex[T]], i: Int): Double =
+  val n = verts.length
+  if i <= 0 || i >= n - 1 then Double.PositiveInfinity
+  else
+    val turn = turnBetween(verts(i - 1).dir, verts(i).dir)
+    if turn <= MinTurn then Double.PositiveInfinity
+    else
+      var limit = verts(i - 1).len.min(verts(i).len) / (turn * 0.5).tan
+      var lo = i - 1
+      var hi = i + 1
+      var arc = verts(i - 1).len + verts(i).len
+      var sum = signedTurnBetween(verts(i - 1).dir, verts(i).dir)
+      var searching = true
+      while searching do
+        val canGrowLo = lo > 0
+        val canGrowHi = hi < n - 1
+        if !canGrowLo && !canGrowHi then searching = false
+        else
+          if canGrowLo && (!canGrowHi || verts(lo - 1).len <= verts(hi).len) then
+            lo -= 1
+            sum += signedTurnBetween(verts(lo).dir, verts(lo + 1).dir)
+            arc += verts(lo).len
+          else
+            hi += 1
+            sum += signedTurnBetween(verts(hi - 1).dir, verts(hi).dir)
+            arc += verts(hi - 1).len
+          val net = sum.abs
+          if net > MinTurn then
+            val radius = arc / net
+            if radius < limit then limit = radius
+          if arc > limit * WindowReach then searching = false
+      limit
 
 /** Below this a vertex counts as straight and constrains nothing. */
 private inline val MinTurn = 1e-6
@@ -610,34 +644,29 @@ object Line:
             normal = (nextNormal + prevNormal).normalize
             offset = (halfWidth / normal.dot(prevNormal)).min(halfWidth * 5.0)
 
-        // `ClampInner`: the two inner offsets meet `halfWidth * tan(turn/2)`
-        // back along each segment, and past the shorter of them the inner
-        // outline would run backwards through the corner. Pull it in to where
-        // they actually meet. `normalOf` points right of travel, so a turn with
-        // positive cross product curves away from it and `bottom` is inside.
+        // `ClampInner`: pull the inner vertex in to the furthest the corner can
+        // carry — the same limit `narrowAtTightTurns` brings the width down to.
+        // `normalOf` points right of travel, so a turn with a positive cross
+        // product curves away from it and `bottom` is the inner side.
         //
         // The outer vertex keeps `uv.y = 0` / `1` — it is the stroke's edge,
         // whatever the mitre does with it — while the clamped one records where
-        // it actually sits, so a cross-stroke pattern holds its scale and is
-        // cropped on the inside of the corner.
+        // it actually sits, relative to the unclamped rib so that `ribWidth`
+        // divides the width back out of it. A cross-stroke pattern therefore
+        // holds its scale and is cropped on the inside of the corner.
         var topOffset = offset
         var bottomOffset = offset
         var topUv = 0.0
         var bottomUv = 1.0
-        if clampInner && hasPrev && hasNext then
-          val prevDir = src(i - 1).dir
-          val turn = turnBetween(prevDir, v.dir)
-          if turn > MinTurn then
-            val reach = src(i - 1).len.min(v.len) / (turn * 0.5).tan
-            if reach < offset then
-              // relative to the unclamped rib, so the width divides back out of
-              // it — see `ribWidth`
-              if cross2d(prevDir, v.dir) > 0.0 then
-                bottomOffset = reach
-                bottomUv = 0.5 + reach / (offset * 2.0)
-              else
-                topOffset = reach
-                topUv = 0.5 - reach / (offset * 2.0)
+        if clampInner then
+          val reach = maxHalfExtentAt(src, i)
+          if reach < offset then
+            if cross2d(src(i - 1).dir, v.dir) > 0.0 then
+              bottomOffset = reach
+              bottomUv = 0.5 + reach / (offset * 2.0)
+            else
+              topOffset = reach
+              topUv = 0.5 - reach / (offset * 2.0)
 
         var top = normal * topOffset + v.pos
         var bottom = normal * -bottomOffset + v.pos
