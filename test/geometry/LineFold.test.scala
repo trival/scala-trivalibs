@@ -20,9 +20,12 @@ class LineFoldTest extends FunSuite:
     */
   private val Wide = 1000.0
 
-  private def limits(points: Arr[Vec2]): Arr[Double] =
+  private def limits(
+      points: Arr[Vec2],
+      proximity: Boolean = false,
+  ): Arr[Double] =
     val line = Line.fromPoints(Wide, points)
-    val narrowed = line.narrowAtTightTurns()
+    val narrowed = line.narrowAtTightTurns(proximity = proximity)
     val out = Arr[Double]()
     var i = 0
     while i < narrowed.vertCount do
@@ -117,6 +120,69 @@ class LineFoldTest extends FunSuite:
       s"limit did not relax away from the crest: ${ls(crest)} then " +
         s"${ls(crest + 20)}",
     )
+
+  /** A symmetric V: `arm` long each side, `interior` radians between the arms,
+    * apex at the origin opening along +x.
+    */
+  private def vee(arm: Double, interior: Double, count: Int): Arr[Vec2] =
+    val half = interior * 0.5
+    val out = Arr[Vec2]()
+    var i = count
+    while i >= 1 do
+      val d = arm * i / count
+      out.push(Vec2(d * math.cos(half), -d * math.sin(half)))
+      i -= 1
+    out.push(Vec2(0, 0))
+    var j = 1
+    while j <= count do
+      val d = arm * j / count
+      out.push(Vec2(d * math.cos(half), d * math.sin(half)))
+      j += 1
+    out
+
+  test("a narrow V's arms are left alone unless proximity is asked for"):
+    // the apex is a real corner and the curvature limit narrows it, but the
+    // arms are straight, so by default nothing else in the V is touched
+    val points = vee(1.0, math.Pi * 50.0 / 180.0, 10)
+    val ls = limits(points)
+    assert(ls(10) < Unlimited, "the apex should still be narrowed")
+    assertUnlimited(ls(5), "a straight arm vertex")
+    assertUnlimited(ls(15), "a straight arm vertex")
+
+  test("a narrow V is limited by its arms' proximity, not by any turn"):
+    // 50 degrees between the arms. Every vertex along an arm is straight, so
+    // the curvature test says nothing at all — but the two arms are close
+    // enough in space that a wide stroke would run each one through the other.
+    val points = vee(1.0, math.Pi * 50.0 / 180.0, 10)
+    val ls = limits(points, proximity = true)
+    val mid = ls(5) // halfway along the first arm
+
+    assert(mid < Unlimited, "a straight arm vertex went unconstrained")
+    // the gap to the opposite arm at that distance from the apex, halved
+    val d = 0.5
+    val expected = d * math.sin(math.Pi * 25.0 / 180.0)
+    assertEqualsDouble(mid, expected, expected * 0.25)
+
+  test("the proximity limit grows with the gap"):
+    val narrow = limits(vee(1.0, math.Pi * 30.0 / 180.0, 10), true)(5)
+    val wide = limits(vee(1.0, math.Pi * 90.0 / 180.0, 10), true)(5)
+    assert(
+      wide > narrow * 1.5,
+      s"a 90 degree V ($wide) should allow far more than a 30 degree one " +
+        s"($narrow)",
+    )
+
+  test("a straight line is not constrained by its own neighbours"):
+    // the exclusion has to be scale-free: a long line and a short one are
+    // equally unconstrained, however densely they are sampled
+    val sparse = Arr(Vec2(0, 0), Vec2(1, 0), Vec2(2, 0), Vec2(3, 0))
+    val dense = Arr[Vec2]()
+    var i = 0
+    while i < 40 do
+      dense.push(Vec2(i * 0.01, 0))
+      i += 1
+    limits(sparse, true).foreach(l => assertUnlimited(l, "a sparse vertex"))
+    limits(dense, true).foreach(l => assertUnlimited(l, "a dense vertex"))
 
   test("narrowing never widens a line that already fits"):
     val points = arc(1.0, math.Pi * 0.5, 60)

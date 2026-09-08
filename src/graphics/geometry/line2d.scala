@@ -284,20 +284,30 @@ class Line[T](
     *     arc length `s` carrying total turn `Δθ` the line achieves a radius of
     *     about `s / Δθ`, and the half width has to fit inside it.
     *
+    * **Apply this after [[splitAtAngle]], to each fragment.** Before the split a
+    * reversal corner is still an interior vertex turning by nearly `Pi`, so the
+    * limit there collapses to nothing and takes the width with it; after it, the
+    * corner is a fragment endpoint, which the split already handles.
+    *
     * `factor` scales the result — below `1.0` leaves headroom, above `1.0`
-    * allows a little folding back. This is the `NarrowWidth` treatment: the
+    * allows a little folding back. `proximity` adds the non-local half of the
+    * limit, which is off by default; see `maxHalfExtentAt` for what it costs
+    * and when it is worth it. This is the `NarrowWidth` treatment: the
     * stroke visibly thins through a tight turn, and `uv.y` still spans the full
     * `0..1`, so a cross-stroke pattern stays complete and is squeezed rather
     * than clipped. Compare [[Line.narrowAtTightTurns]] against clamping the
     * inner outline instead, which keeps the width and crops the pattern.
     */
-  def narrowAtTightTurns(factor: Double = 1.0): Line[T] =
+  def narrowAtTightTurns(
+      factor: Double = 1.0,
+      proximity: Boolean = false,
+  ): Line[T] =
     val n = verts.length
     val out = new Line[T](defaultWidth, lenOffset, defaultData)
     var i = 0
     while i < n do
       val copy = verts(i).copy
-      val maxWidth = maxHalfExtentAt(verts, i) * 2.0 * factor
+      val maxWidth = maxHalfExtentAt(verts, i, proximity) * 2.0 * factor
       if maxWidth < copy.width then copy.width = maxWidth
       out.addVert(copy)
       i += 1
@@ -409,15 +419,20 @@ private def turnBetween(a: Vec2, b: Vec2): Double =
 private def signedTurnBetween(a: Vec2, b: Vec2): Double =
   Math.atan2(cross2d(a, b), a.dot(b))
 
-/** How far the outline can be offset at `verts(i)` before the inner side folds
-  * back through the corner — `PositiveInfinity` where nothing constrains it.
+/** How far the outline can be offset at `verts(i)` before the inner side runs
+  * into itself — `PositiveInfinity` where nothing constrains it.
   *
   * The single question both fold treatments ask, so that they answer it the
   * same way: [[Line.narrowAtTightTurns]] brings the width down to fit inside
   * it, `FoldTreatment.ClampInner` leaves the width alone and pulls the inner
   * vertex in to it.
   *
-  * Two limits bind, and the tighter wins:
+  * This is the line's **local feature size**: an offset curve stays free of
+  * self-intersection exactly while the offset stays under the distance to the
+  * medial axis, and that has a curvature part and a proximity part. Three
+  * limits bind here, and the tightest wins.
+  *
+  * Curvature, which is local:
   *
   *   - **an isolated corner**, where the two inner offsets meet
   *     `halfExtent * tan(turn/2)` back along each segment and so have to fit
@@ -425,14 +440,96 @@ private def signedTurnBetween(a: Vec2, b: Vec2): Double =
   *   - **a run of small turns**, where no single vertex turns much but the line
   *     still comes round faster than the offset allows. Over a window of arc
   *     length `s` carrying total turn `Δθ` the line achieves a radius of about
-  *     `s / Δθ`, and the offset has to fit inside that.
+  *     `s / Δθ`, and the offset has to fit inside that. The window grows
+  *     outward, shorter side first, and stops once it is much wider than the
+  *     limit it constrains — a window that large cannot tighten it further, and
+  *     walking the whole line at every vertex would be quadratic.
   *
-  * The window grows outward from the vertex, shorter side first, and stops once
-  * it is much wider than the limit it is constraining — a window that large
-  * cannot tighten it further, and walking the whole line at every vertex would
-  * be quadratic.
+  * Proximity, which is not local at all, and **off unless asked for**:
+  *
+  *   - **another part of the line passing close by in space** while being far
+  *     away along it. A narrow V that thickens along both arms is the pure
+  *     case: every vertex turns gently, so no curvature test fires, yet each
+  *     arm's inner edge reaches across the gap and through the other arm. The
+  *     offset has to stay under half the distance to the nearest such point,
+  *     half because both sides advance toward each other.
+  *
+  * What counts as "another part" is decided by the ratio of arc length to
+  * straight-line distance — see [[proximityLimitAt]]. Without that exclusion a
+  * vertex's own neighbours would constrain it and every line would collapse.
+  *
+  * Proximity is opt-in because it is the blunt half. The curvature limits are
+  * exact and parameterless — they fall out of the geometry. Proximity needs two
+  * thresholds picked by judgement, and it works by suppressing overlap, which a
+  * stroke crossing itself deliberately wants to keep. It earns its place on a
+  * stroke that folds close alongside itself and looks wrong for it, not by
+  * default.
+  *
+  * A caveat before turning it on with `FoldTreatment.ClampInner`: that
+  * treatment reads which side is "inner" from the turn direction, which is the
+  * right question for a curvature limit and meaningless for a proximity one —
+  * there the side that matters is the one facing the near part, and on a
+  * near-straight run the turn direction is close to noise. Until that is fixed,
+  * proximity pairs properly only with narrowing, which is symmetric and needs
+  * no side.
   */
-private def maxHalfExtentAt[T](verts: Arr[LineVertex[T]], i: Int): Double =
+private def maxHalfExtentAt[T](
+    verts: Arr[LineVertex[T]],
+    i: Int,
+    proximity: Boolean,
+): Double =
+  val curvature = curvatureLimitAt(verts, i)
+  if !proximity then curvature
+  else
+    val near = proximityLimitAt(verts, i)
+    if near < curvature then near else curvature
+
+/** The distance to the nearest part of the line that is close in space while
+  * being far away along it, halved — both sides advance toward each other, so
+  * each may claim half the gap.
+  *
+  * "Far away along it" is the whole difficulty: every vertex has neighbours a
+  * millimetre away, and counting those would collapse the line to nothing. The
+  * test is the ratio of arc length to straight-line distance. Walking along a
+  * straight or gently curving stretch those are nearly equal, so nothing
+  * counts; where the line has come back around toward itself the arc is much
+  * longer than the gap, and the ratio picks it out. It is scale-free, which
+  * matters — a width-based exclusion would have to be tuned per stroke.
+  *
+  * The search reaches [[ProximityArcReach]] widths along the line and no
+  * further — see there for why a stroke that crosses itself elsewhere must be
+  * left alone.
+  */
+private def proximityLimitAt[T](verts: Arr[LineVertex[T]], i: Int): Double =
+  val n = verts.length
+  val p = verts(i).pos
+  val maxArc = verts(i).width * ProximityArcReach
+  var limit = Double.PositiveInfinity
+
+  var arc = 0.0
+  var j = i - 1
+  while j >= 0 && arc <= maxArc do
+    arc += verts(j).len
+    val gap = (verts(j).pos - p).length
+    if arc > gap * ProximityChordRatio && gap * 0.5 < limit then
+      limit = gap * 0.5
+    j -= 1
+
+  arc = 0.0
+  j = i
+  while j < n - 1 && arc <= maxArc do
+    arc += verts(j).len
+    val gap = (verts(j + 1).pos - p).length
+    if arc > gap * ProximityChordRatio && gap * 0.5 < limit then
+      limit = gap * 0.5
+    j += 1
+
+  limit
+
+/** The curvature half of the limit — how tightly the line turns at this vertex,
+  * both as an isolated corner and as a run of small turns.
+  */
+private def curvatureLimitAt[T](verts: Arr[LineVertex[T]], i: Int): Double =
   val n = verts.length
   if i <= 0 || i >= n - 1 then Double.PositiveInfinity
   else
@@ -468,6 +565,25 @@ private def maxHalfExtentAt[T](verts: Arr[LineVertex[T]], i: Int): Double =
 /** Below this a vertex counts as straight and constrains nothing. */
 private inline val MinTurn = 1e-6
 
+/** How much longer the way along the line has to be than the way straight
+  * across before a vertex counts as a different part of the stroke. `1` would
+  * count every neighbour; a V with a 50° interior angle gives about `2.4`.
+  */
+private inline val ProximityChordRatio = 1.5
+
+/** How far along the line, in stroke widths, the proximity test looks.
+  *
+  * This is what separates a stroke folding back on itself — where the two sides
+  * are a few widths apart along the line and the sliver between them is an
+  * artifact — from a stroke crossing itself somewhere else entirely, which is
+  * pigment laid over pigment and wanted. Without the bound a wandering stroke
+  * finds some other part of itself near almost everywhere and thins to nothing.
+  *
+  * It also keeps the scan local, so the pass stays linear rather than
+  * quadratic in the vertex count.
+  */
+private inline val ProximityArcReach = 3.0
+
 /** Below this a rib spans no `uv.y` range worth dividing by — the cap ribs, and
   * anything smoothing has collapsed onto them.
   */
@@ -478,6 +594,11 @@ private inline val MinUvSpan = 1e-9
   * further, and walking the whole line for every vertex would be quadratic.
   */
 private inline val WindowReach = 4.0
+
+/** How far `ClampInner` pulls the inner vertex in, as a fraction of the
+  * geometric limit — the distance at which the two inner offsets actually meet.
+  */
+private inline val ClampStrength = 1.0
 
 /** True when this vertex is a corner worth bevelling on its own contour: both
   * neighbouring segments are long enough, and the turn exceeds the threshold.
@@ -658,8 +779,14 @@ object Line:
         var bottomOffset = offset
         var topUv = 0.0
         var bottomUv = 1.0
-        if clampInner then
-          val reach = maxHalfExtentAt(src, i)
+        // only where there is a turn to have an inside: which side is inner is
+        // read from the turn direction, and a fragment's end vertices have no
+        // turn at all
+        if clampInner && hasPrev && hasNext then
+          // curvature only: this treatment picks the inner side from the turn
+          // direction, which a proximity limit cannot supply — see
+          // `maxHalfExtentAt`
+          val reach = maxHalfExtentAt(src, i, proximity = false) * ClampStrength
           if reach < offset then
             if cross2d(src(i - 1).dir, v.dir) > 0.0 then
               bottomOffset = reach

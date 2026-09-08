@@ -13,6 +13,10 @@ status.
   perfect: occasional thin spikes remain. **B3, choosing between the two marks,
   is deliberately not settled** — the stress-test strokes are too extreme to
   judge a look against.
+- **E — the proximity limit** completes the fold test with its non-local half
+  (local feature size), fixing arms that meet after a narrow turn. Implemented
+  but **off by default**: it is the half that needs tuned thresholds and that
+  suppresses overlap, and `ClampInner` cannot use it correctly yet.
 - **D is now the most visible artifact**, ahead of anything left of B: the
   staircase where the outer side of a sharp turn has too few ribs for the
   screen area it covers.
@@ -836,20 +840,22 @@ brush.
 
 ## 4. Implementation plan
 
-| #   | Step                                              | Where   | Status            |
-| --- | ------------------------------------------------- | ------- | ----------------- |
-| —   | `tests/line2d-debug` verification sketch          | sketch  | **done**          |
-| A2  | Projective `v` proof of concept                   | sketch  | **done**          |
-| A3  | `width` means full width                          | library | **done**          |
-| A4a | Paired rib-preserving smoothing                   | library | **done**          |
-| A4b | Attribute carries the measured width              | library | **done**          |
-| A5  | Shared `v` / `d` helper, derived from two shades  | library | **done**          |
-| B0  | Re-render, measure what is left of the fan        | sketch  | **done**          |
-| B2  | `NarrowWidth` treatment                           | library | **done**          |
-| B1  | `ClampInner` treatment                            | library | **done**          |
-| B3  | Compare the two marks, pick defaults per use      | sketch  | **open** — needs a real stroke |
-| C   | Optional cap treatment                            | library | **partly landed by accident** |
-| D   | Subdivide corner fans by outer arc length         | library | **now the most visible artifact** |
+| #   | Step                                               | Where   | Status                            |
+| --- | -------------------------------------------------- | ------- | --------------------------------- |
+| —   | `tests/line2d-debug` verification sketch           | sketch  | **done**                          |
+| A2  | Projective `v` proof of concept                    | sketch  | **done**                          |
+| A3  | `width` means full width                           | library | **done**                          |
+| A4a | Paired rib-preserving smoothing                    | library | **done**                          |
+| A4b | Attribute carries the measured width               | library | **done**                          |
+| A5  | Shared `v` / `d` helper, derived from two shades   | library | **done**                          |
+| B0  | Re-render, measure what is left of the fan         | sketch  | **done**                          |
+| B2  | `NarrowWidth` treatment                            | library | **done**                          |
+| B1  | `ClampInner` treatment                             | library | **done**                          |
+| B3  | Compare the two marks, pick defaults per use       | sketch  | **open** — needs a real stroke    |
+| C   | Optional cap treatment                             | library | **partly landed by accident**     |
+| E   | Proximity limit — arms meeting after a narrow turn | library | **done, opt-in, off by default**  |
+| E′  | Side-aware clamping, so `ClampInner` can use E     | library | not done, deliberately            |
+| D   | Subdivide corner fans by outer arc length          | library | **now the most visible artifact** |
 
 (Step ids are local to this plan and unrelated to the strategy labels in
 sections 1–2.)
@@ -867,6 +873,17 @@ show themselves. `Mode` at the top selects `Across` (corrected `v`),
 
 This is the instrument for every gate below — the real shade's blurred noise was
 too soft to judge against.
+
+**`sketches/tests/line2d-debug2/` is the second instrument, and it was overdue.**
+One symmetric V with every property under a constant: turn angle, apex width,
+arm width, ramp, vertex count. The first debug sketch generates twenty random
+points and every artifact at once, which is what _found_ them and what made
+several of them impossible to reason about — three hypotheses in a row were
+formed from renders of it and all three were wrong. A minimal reproduction
+settled E in one look, and gave a fixture to test the fix against.
+
+The lesson is worth keeping: build the isolated case earlier. The stress test is
+for discovery, not for diagnosis.
 
 ### A2 — done
 
@@ -1098,6 +1115,76 @@ Neither treatment is exact _around_ a curved cap, since the quad there is not a
 trapezoid under either encoding — worth saying plainly rather than claiming
 exactness twice.
 
+### E — arms meeting after a narrow turn (found after B, fixed, opt-in)
+
+A fourth phenomenon, and the one that finally explained the spikes B could not
+reach: **a turn whose apex is narrow while both arms are wide**. The arms
+thicken away from the corner until each one's inner edge reaches across the gap
+and through the other. Rendered, it is a long thin dark wedge along the axis
+between the arms, ending in a fan of needles.
+
+**Why every earlier fix missed it.** Every vertex along an arm is _straight_.
+No curvature test has anything to say about a straight vertex, so widening the
+window did nothing, narrowing did nothing, and clamping the inner vertex — even
+all the way onto the centre line — did nothing, because the crossing happens at
+arm vertices, not at the apex.
+
+**The missing term has a name.** An offset curve stays free of
+self-intersection exactly while the offset stays below the **local feature
+size**: the distance to the medial axis. That has two parts — the curvature
+radius, and the distance to other parts of the curve that come near in space.
+`maxHalfExtentAt` implemented only the first. A narrow V that thickens is the
+pure case of the second: curvature fine everywhere, proximity violated.
+
+**Implemented** as `proximityLimitAt`, taking the min with the curvature limit.
+It caps the half extent at half the distance to the nearest point that is close
+in space but far along the line — half, because both sides advance toward each
+other. Two thresholds decide what "far along the line" means:
+
+- `ProximityChordRatio` — arc length must exceed the straight-line gap by this
+  factor. Scale-free, which matters: it distinguishes a neighbour (arc ≈ gap)
+  from a fold-back (a 50° V gives ≈ 2.4) without reference to the width.
+- `ProximityArcReach` — how far along the line to look, in widths. This is what
+  separates a stroke folding back beside itself from one **crossing itself
+  somewhere else**, which is pigment over pigment and wanted. Without it a
+  wandering stroke finds some other part of itself near almost everywhere and
+  thins to nothing — which is exactly what study1 did before the bound went in.
+  It also keeps the scan local, so the pass is linear rather than quadratic.
+
+**Off by default, opt-in via `narrowAtTightTurns(proximity = true)`.** The
+reasoning is worth keeping, because it is the difference between the two halves
+of this limit:
+
+- The curvature limits are **exact and parameterless** — they fall out of the
+  geometry, and there is nothing to tune.
+- Proximity needs **two thresholds picked by judgement**, and it works by
+  suppressing overlap, which is a thing this project has repeatedly decided it
+  wants. It earns its place on a stroke that visibly folds alongside itself, not
+  by default.
+- The artifact was found in the stress test and reproduced in a V constructed
+  from that stress test. We had already agreed the stress test is a poor judge
+  of what a real stroke needs.
+
+**Known gap: `ClampInner` cannot use it.** That treatment reads which side is
+"inner" from the turn direction — the right question for a curvature limit, and
+meaningless for a proximity one, where the side that matters is the one facing
+the near part and the turn direction on a near-straight arm is close to noise.
+Confirmed visually: clamping with proximity on looks wrong in places. So
+`ClampInner` passes `proximity = false` explicitly.
+
+Fixing it properly means `maxHalfExtentAt` reporting **which** term bound the
+limit and in which direction, and the clamp carrying an independent limit per
+side, since the two terms can disagree. Roughly forty lines plus tests; the
+`ribWidth` recovery generalises to both sides unchanged. Not done, because
+`ClampInner` is the preferred treatment and proximity is the unproven half —
+doing that work before a real stroke asks for it would be building on a guess.
+
+**Where it lives**: `sketches/tests/line2d-debug2/` is one symmetric V with
+every property under a constant, kept with `Proximity = true` as the term's
+test render. `LineFoldTest` covers both paths — the V's arms untouched by
+default, limited correctly when asked, the limit growing with the gap, and
+straight lines unconstrained at any sampling density.
+
 ### D — rib density at corner fans (new, found after A4)
 
 A third phenomenon, distinct from A's zig-zag and B's fold, seen once the lines
@@ -1144,6 +1231,18 @@ remaining spike.
 
 ### B2 — `narrowAtTightTurns` — done
 
+**It belongs after `splitAtAngle`, applied per fragment.** Before the split, a
+reversal corner is still an interior vertex with a turn approaching `π`, so
+`tan(turn/2)` explodes, the limit collapses to nearly zero, and the width at
+that vertex is narrowed away — dragging its whole neighbourhood thin. After the
+split it is a fragment endpoint, which the split already handles and the limit
+correctly leaves alone.
+
+This was flagged as a risk early and then both sketches were wired the wrong way
+round anyway; study1 stayed wrong long enough to look thinner than the debug
+sketch on identical constants, which is how it surfaced. The scaladoc should say
+so — the ordering is not discoverable from the API.
+
 `Line.narrowAtTightTurns(factor = 1.0)`, a transformation alongside `cleanup` /
 `smoothEdges`. Two limits bind and the tighter wins:
 
@@ -1183,7 +1282,7 @@ width = |top − bottom| / (uv.y_bottom − uv.y_top)
 the rib length divided by the `uv.y` range it spans. Unclamped, the span is `1`
 and this is just the rib length — the A4b rule unchanged. Clamped, with the
 outer at `a` and the inner at `b`, the span is `0.5 + b/2a` and the rib is
-`a + b`, so the divide recovers `2a`: the width the rib *would* have had. `d`
+`a + b`, so the divide recovers `2a`: the width the rib _would_ have had. `d`
 comes out exact on **both** sides while the outer stays pinned at `0`/`1`, so
 the pattern keeps its scale and is cropped on the inside.
 
@@ -1225,7 +1324,7 @@ window clamped at fragment boundaries.
   centerline; record it in `uv.y`, leave `width` alone.
 - `FoldTreatment` opaque type, default `Leave` — **no manipulation at all**, so
   existing geometry is bit-identical unless a sketch opts in. Both act only
-  *inside* a fragment; split angles stay `splitAtAngle`'s business.
+  _inside_ a fragment; split angles stay `splitAtAngle`'s business.
 
 **Do B2 first**, though B1 is the more wanted mark:
 
@@ -1254,7 +1353,7 @@ too.
 geometry — 20 random points across the canvas, widths from `1/25` to `1/2`,
 fresh random width every two vertices — to stress the builder. That is what
 made every artifact in this document findable, and it is exactly what makes it
-a poor judge of how a treatment *looks*. A stroke that violent is not a stroke
+a poor judge of how a treatment _looks_. A stroke that violent is not a stroke
 anyone will draw.
 
 So B3 waits for a real stroke to judge against, rather than being forced now on
