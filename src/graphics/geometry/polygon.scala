@@ -40,7 +40,7 @@ object Triangle:
 // Quad winding: tl(0), bl(1), br(2), tr(3) — CCW viewed from front.
 /** A quad of four vertices `T`, ordered `tl, bl, br, tr` (CCW from the front).
   * A [[Mesh]] [[Face]]. Ops (need a [[Position]]): `.tl`/`.bl`/`.br`/`.tr`,
-  * `.normal`, `.toTriangles`, and (with [[Lerp]]) `.subdivideH`/`.subdivideV`,
+  * `.normal`, `.toTriangles`, and (with [[trivalibs.graphics.math.Lerp]]) `.subdivideH`/`.subdivideV`,
   * `.splitByPlane`. Build with [[Quad.apply]] or the `fromDimensions`/
   * `fromCorners` helpers. */
 opaque type Quad[T] <: Arr[T] = Arr[T]

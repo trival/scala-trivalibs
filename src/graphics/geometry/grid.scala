@@ -37,7 +37,7 @@ class Vertex[T](
 
 /** A 2D grid of values `T` — the basis for plane/terrain-style geometry. Build
   * it (`addCol`/`addRow`, `Grid.fromCols`/`fromRows`), navigate via [[Vertex]]
-  * neighbours, `map`/`flatMap`, and (with [[Lerp]]) `subdivide`. Turn it into
+  * neighbours, `map`/`flatMap`, and (with [[trivalibs.graphics.math.Lerp]]) `subdivide`. Turn it into
   * mesh faces with `.quads` (= `.ccwQuads`) → `Mesh(grid.quads)` →
   * [[toBufferedGeometry]]. `coordOps` sets edge behaviour (clamp vs wrap) for
   * neighbour lookups.

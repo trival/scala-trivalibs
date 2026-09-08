@@ -14,7 +14,7 @@ import trivalibs.graphics.math.gpu.{*, given}
   *
   * Pack in the vertex stage, unpack in the fragment stage:
   *
-  * ```scala
+  * ```scala sc:nocompile
   * type Varyings = (uv: Vec2, cross: Vec2)
   *
   * program.vert: ctx =>
@@ -22,7 +22,7 @@ import trivalibs.graphics.math.gpu.{*, given}
   *
   * program.frag: ctx =>
   *   val v = ctx.in.cross.lineV            // 0..1 across the stroke
-  *   val d = ctx.in.cross.lineOffset       // world units from the centre line
+  *   val d = ctx.in.cross.lineOffset       // world units from the center line
   * ```
   *
   * Only the **cross** direction takes the divide. `uv.x` stays as it is: it is
