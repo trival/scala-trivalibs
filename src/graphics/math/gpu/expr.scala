@@ -531,6 +531,40 @@ def when(cond: BoolExpr, body: Block): Stmt = Stmt.ifBlock(cond, body)
 def ifElse(cond: BoolExpr, thenBody: Block, elseBody: Block): Stmt =
   Stmt.ifElseBlock(cond, thenBody, elseBody)
 
+/** Repeat a statement group once per index, at BUILD TIME — the index is a
+  * Scala `Int`, so every use of it constant-folds and the emitted WGSL is
+  * straight-line code with no loop in it.
+  *
+  * This is the shape to reach for when the trip count is a compile-time
+  * constant: a fixed [[trivalibs.graphics.buffers.UniformArray]] capacity, a
+  * build-time-known edge set, a fixed number of taps. It says "deliberately
+  * unrolled" where a WGSL loop would say "runs on the GPU".
+  *
+  * {{{
+  * Block(
+  *   col := stops(0).rgb,
+  *   unroll(1, MaxStops)(i =>
+  *     col := col.mix(stops(i).rgb, weight(i))
+  *   ),
+  *   ctx.out.color := vec4(col, 1.0),
+  * )
+  * }}}
+  *
+  * A `var` accumulated across the iterations must be declared before the
+  * unroll, as `col` is above — the first `:=` on a `Var` emits its declaration,
+  * and inside the body that would re-declare it every iteration.
+  */
+def unroll(from: Int, until: Int)(body: Int => Block): Stmt =
+  val parts = Arr[String]()
+  var i = from
+  while i < until do
+    parts.push(Block.unwrap(body(i)))
+    i += 1
+  parts.join("\n")
+
+/** [[unroll]] over `0 until count`. */
+def unroll(count: Int)(body: Int => Block): Stmt = unroll(0, count)(body)
+
 /** Multi-branch `if / else if / ... [/ else]` chain. Start with `ifChain`,
   * append `.elseIf(...)` for each additional branch, terminate with
   * `.orElse(...)` for a final else, or use the chain directly as a `Stmt` for

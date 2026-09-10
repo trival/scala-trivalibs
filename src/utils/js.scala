@@ -19,7 +19,8 @@ extension [A](m: Maybe[A])
     if js.isUndefined(m.asInstanceOf[js.Any]) then default
     else m.asInstanceOf[A]
   inline def orMaybe(default: => Any): Maybe[A] =
-    if js.isUndefined(m.asInstanceOf[js.Any]) then default.asInstanceOf[Maybe[A]]
+    if js.isUndefined(m.asInstanceOf[js.Any]) then
+      default.asInstanceOf[Maybe[A]]
     else m
   inline def safe: A =
     m.asInstanceOf[A]
@@ -81,7 +82,8 @@ object Arr:
   inline def apply[A](a: A): js.Array[A] = js.Array(a)
   inline def apply[A](a: A, b: A): js.Array[A] = js.Array(a, b)
   inline def apply[A](a: A, b: A, c: A): js.Array[A] = js.Array(a, b, c)
-  inline def apply[A](a: A, b: A, c: A, d: A): js.Array[A] = js.Array(a, b, c, d)
+  inline def apply[A](a: A, b: A, c: A, d: A): js.Array[A] =
+    js.Array(a, b, c, d)
   inline def apply[A](a: A, b: A, c: A, d: A, e: A): js.Array[A] =
     js.Array(a, b, c, d, e)
   inline def apply[A](a: A, b: A, c: A, d: A, e: A, f: A): js.Array[A] =
@@ -89,26 +91,71 @@ object Arr:
   inline def apply[A](a: A, b: A, c: A, d: A, e: A, f: A, g: A): js.Array[A] =
     js.Array(a, b, c, d, e, f, g)
   inline def apply[A](
-      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A,
+      a: A,
+      b: A,
+      c: A,
+      d: A,
+      e: A,
+      f: A,
+      g: A,
+      h: A,
   ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h)
   inline def apply[A](
-      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A,
+      a: A,
+      b: A,
+      c: A,
+      d: A,
+      e: A,
+      f: A,
+      g: A,
+      h: A,
+      i: A,
   ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i)
   inline def apply[A](
-      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A, j: A,
+      a: A,
+      b: A,
+      c: A,
+      d: A,
+      e: A,
+      f: A,
+      g: A,
+      h: A,
+      i: A,
+      j: A,
   ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i, j)
   inline def apply[A](
-      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A, j: A, k: A,
+      a: A,
+      b: A,
+      c: A,
+      d: A,
+      e: A,
+      f: A,
+      g: A,
+      h: A,
+      i: A,
+      j: A,
+      k: A,
   ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i, j, k)
   inline def apply[A](
-      a: A, b: A, c: A, d: A, e: A, f: A, g: A, h: A, i: A, j: A, k: A, l: A,
+      a: A,
+      b: A,
+      c: A,
+      d: A,
+      e: A,
+      f: A,
+      g: A,
+      h: A,
+      i: A,
+      j: A,
+      k: A,
+      l: A,
   ): js.Array[A] = js.Array(a, b, c, d, e, f, g, h, i, j, k, l)
 
 /** Non-mutating append / prepend / concat, each compiling to a bare JS
-  * `.concat`. These shadow the same-named `SeqOps` methods that
-  * `js.ArrayOps` would otherwise supply via implicit conversion — those go
-  * through `View` + `IterableFactory` + builders, i.e. the Scala collections
-  * machinery this library keeps out of runtime paths.
+  * `.concat`. These shadow the same-named `SeqOps` methods that `js.ArrayOps`
+  * would otherwise supply via implicit conversion — those go through `View` +
+  * `IterableFactory` + builders, i.e. the Scala collections machinery this
+  * library keeps out of runtime paths.
   *
   * All three copy. Push onto the array directly when building one up in a hot
   * loop.
@@ -136,8 +183,7 @@ extension [A](promise: js.Promise[A])
   inline def withFilter(p: A => Boolean): js.Promise[A] =
     promise.`then`[A]: a =>
       if p(a) then a
-      else
-        throw jsError("Promise.withFilter predicate failed")
+      else throw jsError("Promise.withFilter predicate failed")
 
   inline def recover[B >: A](pf: PartialFunction[Any, B]): js.Promise[B] =
     promise.`catch`[B]: (err: Any) =>

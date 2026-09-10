@@ -76,21 +76,20 @@ def main(): Unit =
         // segment's own eased parameter. The mix factor saturates at 1 before
         // the next segment starts, so the chain reproduces the piecewise
         // gradient exactly and holds the final color past the last stop.
-        val stmts = Arr[Stmt]()
-        stmts.push(col := stops(0).rgb)
-        var i = 1
-        while i < MaxStops do
-          val prev = stops(i - 1)
-          val cur = stops(i)
-          // The denominator is clamped because unused stops sit on top of each
-          // other; `live` zeroes their contribution anyway.
-          val t = ((x - prev.w) / (cur.w - prev.w).max(0.00001)).clamp01
-          val eased = t.pow(curves(i - 1).x)
-          val live = count.gte(i + 1)
-          stmts.push(col := col.mix(cur.rgb, eased * live))
-          i += 1
-        stmts.push(ctx.out.color := vec4(col, 1.0))
-        Block(stmts)
+        Block(
+          col := stops(0).rgb,
+          unroll(1, MaxStops)(i =>
+            val prev = stops(i - 1)
+            val cur = stops(i)
+            // The denominator is clamped because unused stops sit on top of
+            // each other; `live` zeroes their contribution anyway.
+            val t = ((x - prev.w) / (cur.w - prev.w).max(0.00001)).clamp01
+            val eased = t.pow(curves(i - 1).x)
+            val live = count.gte(i + 1)
+            col := col.mix(cur.rgb, eased * live),
+          ),
+          ctx.out.color := vec4(col, 1.0),
+        )
 
     val vertices = allocateAttribs[Attribs](6)
     vertices(0).set0(0.0, 0.0)

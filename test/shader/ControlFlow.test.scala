@@ -222,3 +222,41 @@ class ControlFlowTest extends FunSuite:
     assert(src.contains("if ((x < 0.0)) {"), src)
     assert(src.contains("    return 0.0;"), src)
     assert(src.contains("\n  return x;\n"), src)
+
+  // ---------------------------------------------------------------------------
+  // unroll — build-time repetition, no loop in the emitted WGSL
+  // ---------------------------------------------------------------------------
+
+  test("unroll emits one statement group per index"):
+    val acc = VarFloat("acc")
+    val s = Block(
+      acc := FloatExpr("0.0"),
+      unroll(1, 4)(i => acc := acc + FloatExpr(s"v[$i]")),
+    )
+    val expected =
+      """|  var acc = 0.0;
+         |  acc = (acc + v[1]);
+         |  acc = (acc + v[2]);
+         |  acc = (acc + v[3]);""".stripMargin
+    assertEquals(Block.unwrap(s), expected)
+
+  test("unroll(count) starts at zero"):
+    val s = unroll(3)(i => Stmt.raw(s"  x$i;"))
+    assertEquals(Block.unwrap(s), "  x0;\n  x1;\n  x2;")
+
+  test("unroll emits nothing for an empty range"):
+    assertEquals(Block.unwrap(unroll(2, 2)(i => Stmt.raw(s"  x$i;"))), "")
+
+  test("unroll accepts a multi-statement body"):
+    val s = unroll(2)(i =>
+      Block(
+        Stmt.raw(s"  let a$i = 1.0;"),
+        Stmt.raw(s"  let b$i = 2.0;"),
+      ),
+    )
+    val expected =
+      """|  let a0 = 1.0;
+         |  let b0 = 2.0;
+         |  let a1 = 1.0;
+         |  let b1 = 2.0;""".stripMargin
+    assertEquals(Block.unwrap(s), expected)
