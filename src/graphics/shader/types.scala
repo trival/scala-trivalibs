@@ -1,6 +1,8 @@
 package trivalibs.graphics.shader
 
 import trivalibs.bufferdata.F32
+import trivalibs.graphics.buffers.UniformArray
+import trivalibs.graphics.buffers.UniformArrayElem
 import trivalibs.graphics.math.cpu.*
 import trivalibs.graphics.math.gpu.Expr.DepthTexture2D
 import trivalibs.graphics.math.gpu.Expr.Sampler
@@ -97,6 +99,29 @@ given WGSLType[Mat4]:
   def vertexFormat = ""
   type AttribBuffer = Mat4Buffer
   type UniformBuffer = Mat4Buffer
+
+// =============================================================================
+// Uniform Arrays — `array<T, N>` in the uniform address space
+// =============================================================================
+
+/** `UniformBuffer` stays the ELEMENT layout; the row count travels with the
+  * value's `UniformValue.rows`. Never a vertex attribute, hence the empty
+  * `AttribBuffer` and format.
+  */
+given [T, N <: Int]
+  => (
+      inner: WGSLType[T],
+      n: ValueOf[N],
+      e: UniformArrayElem[T],
+) => WGSLType[UniformArray[T, N]]:
+  def wgslName = s"array<${inner.wgslName}, ${n.value}>"
+  // A uniform array pads every element up to a 16-byte stride — which is also
+  // the constraint UniformArrayElem enforces on T.
+  def byteSize = ((inner.byteSize + 15) / 16) * 16 * n.value
+  def alignment = 16
+  def vertexFormat = ""
+  type AttribBuffer = EmptyTuple
+  type UniformBuffer = inner.UniformBuffer
 
 // =============================================================================
 // Utility Type Aliases

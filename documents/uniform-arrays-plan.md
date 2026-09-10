@@ -1,6 +1,9 @@
 # Uniform Arrays — `UniformArray[T, N]`
 
-Status: **proposed, awaiting approval**. Nothing implemented yet.
+Status: **implemented in trivalibs and rendering**, with
+`examples/uniform_array_gradient/` as the result. The consuming
+`sketches/textures/` gradient sketch is still to come and gets its own
+`PLAN.md`. Two design points changed under implementation — see _Result_.
 
 ## Where this was planned before
 
@@ -182,6 +185,8 @@ so they follow automatically. That makes the row count the single hook needed.
 trait UniformValue[T, F <: Tuple]:
   def write(ref: StructRef[F], value: T): Unit
   def read(ref: StructRef[F]): T
+  /** Byte size of one `F` row — the array's element stride. */
+  def rowBytes: Int
   /** Rows of `F` this value occupies. 1 for every scalar value; N for a
     * UniformArray. */
   def rows: Int = 1
@@ -195,13 +200,15 @@ machinery — one word plus a defaulted member.
 `src/graphics/buffers/uniform_array.scala`
 
 ```scala
-opaque type UniformArray[T, N <: Int] = Arr[T]
+final class UniformArray[T, N <: Int](val values: Arr[T])
 
 object UniformArray:
-  inline def apply[T: UniformArrayElem, N <: Int](values: Arr[T]): UniformArray[T, N] = values
-  extension [T, N <: Int](a: UniformArray[T, N])
-    inline def values: Arr[T] = a
+  inline def apply[T: UniformArrayElem, N <: Int](values: Arr[T]): UniformArray[T, N] =
+    new UniformArray[T, N](values)
 ```
+
+(Planned as an `opaque type` over `Arr[T]`; nominal for the match-type reason in
+_Result_.)
 
 `UniformArrayElem[T]` is a marker typeclass with instances **only** for element
 types WGSL permits in the uniform address space (see below). A `Float` or `Vec2`
@@ -301,7 +308,8 @@ plan.
 ## Follow-ups: DSL loops and storage buffers
 
 These two get talked about together, and they are **separable** — with a clear
-ordering between them.
+ordering between them. **Decided: loops are a close follow-up, storage buffers
+stay deferred.**
 
 ### They are not the same axis
 
@@ -361,29 +369,79 @@ of the DSL rather than re-deriving it.
 
 ---
 
-## Implementation order
+## Result
 
-1. **Smoke-test the WGSL first.** Hand-write
-   `var<uniform> a: array<vec4<f32>, 4>;` into an existing example's shader and
-   confirm Dawn accepts a bare array as a top-level uniform store type.
-   Everything below assumes it does; if it doesn't, the emitter has to wrap the
-   array in a generated `struct`, which changes step 3 and only step 3.
-2. `UniformValue.rows` + the `BufferBinding` allocation change. No behavior
-   change for existing bindings; the whole test suite and every example must
-   still run.
-3. `UniformArray`, `UniformArrayElem`, its `UniformValue`, its `WGSLType`.
-4. `ArrayExpr` + the `ToExpr` case.
+### `examples/uniform_array_gradient/`
+
+The example is the feature's demonstration and its test. Six horizontal bands,
+**one shade**, each band binding its own arrays:
+
+```scala
+type Uniforms = (
+    rect:   VertexUniform[Vec4],
+    stops:  FragmentUniform[UniformArray[Vec4, MaxStops]],  // xyz = color, w = position
+    curves: FragmentUniform[UniformArray[Vec4, MaxStops]],  // x = segment exponent
+    count:  FragmentUniform[Double],
+)
+```
+
+Everything is randomised per page load: **2 to 8 stops per band** (so the
+per-draw `count` masking is exercised, not just described), random hues, jittered
+stop positions, and a log-uniform exponent in [1/8, 8] per segment — one `pow`
+per segment is the whole interpolation vocabulary here, deliberately. The
+richer curve set belongs to the sketch, not to the example.
+
+The fragment body is the unrolled `mix` chain from _The gradient's own
+representation_, built by a Scala `while` emitting `Arr[Stmt]` into
+`Block(stmts)` — a worked instance of the build-time-unroll idiom, and the thing
+a DSL loop would later replace.
+
+`test/graphics/UniformArray.test.scala` covers the GPU-free half: the emitted
+`var<uniform> stops: array<vec4<f32>, 4>;`, both index forms, `rows`/`rowBytes`,
+element offsets in the CPU buffer, untouched rows staying zero, and the
+over-capacity throw.
+
+### Two changes from the plan
+
+**1. `UniformArray` is a nominal `final class`, not an `opaque type` over
+`Arr[T]`.** The DSL maps uniform types to expression types through the `ToExpr`
+match type, and an opaque alias is not provably disjoint from `Vec2` / `Float` /
+… outside its defining file. That stalls the *whole* match — every existing case
+started failing to reduce, not just the array one. A nominal class is trivially
+disjoint. It costs one small object per uniform-array value, which is a setup or
+per-frame cost at most.
+
+**2. `UniformValue` gained `rowBytes` alongside `rows`.** The array's `write`
+needs the element stride to place row *i*, and `constValue[TupleSize[F]]` cannot
+reduce inside the generic given where `F` is abstract. `rowBytes` is abstract on
+the trait and each instance spells it out as `constValue[TupleSize[<its F>]]`,
+where `F` *is* concrete — self-maintaining, no duplicated magic numbers.
+
+### The WGSL smoke test, settled
+
+Step 1 of the plan — does a bare `array<…>` work as a top-level uniform store
+type, or does it have to be wrapped in a generated `struct`? — is **answered
+yes**. The example's full generated shader passes `naga` (30.0.1, the validator
+wgpu and Firefox use) with `Validation successful`, including
+`var<uniform> stops: array<vec4<f32>, 8>;`, both index forms, and the unrolled
+chain. No struct wrapper is needed.
+
+**Confirmed on Tint (Chromium/Dawn) too** — the example renders, so both WGSL
+implementations accept it. The question is closed; the `struct`-wrapper
+contingency is not needed and can be forgotten.
+
+## Implementation order (done)
+
+1. `UniformValue.rowBytes` / `rows` + the `BufferBinding` allocation change —
+   `StructArray.allocate[F](uv.rows)(0)`. No behavior change for existing
+   bindings; the full test suite and every example still build.
+2. `UniformArray`, `UniformArrayElem`, its `UniformValue` —
+   `src/graphics/buffers/uniform_array.scala`.
+3. `WGSLType[UniformArray[T, N]]` — `shader/types.scala`.
+4. `ArrayExpr` + its export + the `ToExpr` case.
 5. Prelude export.
-6. **A test sketch**, `sketches/tests/uniform-array/` — one shade, one quad,
-   an `array<vec4, 8>` of colors indexed by a constant and by a computed index,
-   with a second draw of the same shade under different data, proving the
-   sharing. Registered in `sketches/index.html` in the same change. Per
-   `graphics/CLAUDE.md` this is exactly what "a `src/`-or-library util with its
-   own rendering behavior" earns.
-7. Then the gradient sketch, which gets its own `PLAN.md`.
-
-Steps 2–5 are all in `trivalibs/`; a `trivalibs/test/` unit test covers the CPU
-half (row allocation, element offsets, over-length throw) without a GPU.
+6. The example and the unit test.
+7. **Next:** the `sketches/textures/` gradient sketch, with its own `PLAN.md`.
 
 ## Docs to update when this lands
 

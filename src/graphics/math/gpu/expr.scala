@@ -137,6 +137,23 @@ object Expr:
   opaque type BoolExpr <: Expr = Expr
   object BoolExpr { def apply(s: String): BoolExpr = new Expr(s) }
 
+  /** A WGSL array binding, obtained from `ctx.bindings.<name>` for a
+    * `UniformArray[T, N]` uniform. Index it with a constant or an `IntExpr` —
+    * `stops(0)`, `stops(i)` — to get the element expression `E`.
+    */
+  opaque type ArrayExpr[E] <: Expr = Expr
+  object ArrayExpr:
+    def apply[E](s: String): ArrayExpr[E] = new Expr(s)
+
+    extension [E](a: ArrayExpr[E])
+      /** Element at a build-time constant index. */
+      inline def apply(i: Int): E =
+        new Expr(s"${a.wgsl}[$i]").asInstanceOf[E]
+
+      /** Element at an index computed in the shader. */
+      inline def apply(i: IntExpr): E =
+        new Expr(s"${a.wgsl}[${i.wgsl}]").asInstanceOf[E]
+
   // GPU resource expression types — opaque wrappers used in shader DSL
   // for texture and sampler bindings. No CPU-side representation.
 
@@ -380,6 +397,7 @@ extension (tex: Expr.DepthTexture2D)
     Expr.UVec2Expr(s"textureDimensions(${tex.wgsl})")
 
 export Expr.{
+  ArrayExpr,
   FloatExpr,
   Vec2Expr,
   Vec3Expr,

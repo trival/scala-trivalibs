@@ -278,6 +278,8 @@ object painter:
     BufferBinding,
     UniformValue,
     UniformLayout,
+    UniformArray,
+    UniformArrayElem,
     AttribLayout,
     AttribLayoutHelper,
   }

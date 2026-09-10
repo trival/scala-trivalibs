@@ -3,12 +3,15 @@ package trivalibs.graphics.buffers
 import trivalibs.bufferdata.F32
 import trivalibs.bufferdata.StructArray
 import trivalibs.bufferdata.StructRef
+import trivalibs.bufferdata.TupleSize
 import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.painter.GPUBuffer
 import trivalibs.graphics.painter.GPUBufferUsage
 import trivalibs.graphics.painter.GPUDevice
 import trivalibs.utils.js.Obj
 import trivalibs.utils.numbers.given
+
+import scala.compiletime.constValue
 
 // =============================================================================
 // UniformValue[T, F] typeclass
@@ -20,12 +23,23 @@ import trivalibs.utils.numbers.given
 
 /** Type class mapping a CPU value `T` to/from its GPU buffer layout `F`
   * (handles std140 padding, e.g. `Vec3` → `Vec4Buffer`). Given instances exist
-  * for `Float`, `Double`, `Vec2-4`, `Mat2-4`; you rarely reference it directly —
-  * it's summoned by [[trivalibs.graphics.painter.Painter.binding]].
+  * for `Float`, `Double`, `Vec2-4`, `Mat2-4`; you rarely reference it directly
+  * — it's summoned by [[trivalibs.graphics.painter.Painter.binding]].
   */
 trait UniformValue[T, F <: Tuple]:
   def write(ref: StructRef[F], value: T): Unit
   def read(ref: StructRef[F]): T
+
+  /** Byte size of one `F` row — always `TupleSize[F]`. Spelled out per instance
+    * because `F` is only concrete there. [[UniformArray]] uses it as the
+    * element stride.
+    */
+  def rowBytes: Int
+
+  /** `F` rows the binding must allocate. 1 for every single value; `N` for a
+    * [[UniformArray]].
+    */
+  def rows: Int = 1
 
 object UniformValue:
   // --- Float ---
@@ -33,18 +47,21 @@ object UniformValue:
     inline def write(ref: StructRef[F32 *: EmptyTuple], value: Float): Unit =
       ref.setAt(0)(value)
     inline def read(ref: StructRef[F32 *: EmptyTuple]): Float = ref.getAt(0)
+    def rowBytes = constValue[TupleSize[F32 *: EmptyTuple]]
 
   // --- Double (maps to f32 in WGSL) ---
   given UniformValue[Double, F32 *: EmptyTuple]:
     inline def write(ref: StructRef[F32 *: EmptyTuple], value: Double): Unit =
       ref.setAt(0)(value.toFloat)
     inline def read(ref: StructRef[F32 *: EmptyTuple]): Double = ref.getAt(0)
+    def rowBytes = constValue[TupleSize[F32 *: EmptyTuple]]
 
   // --- Vec2 ---
   given UniformValue[Vec2, Vec2Buffer]:
     inline def write(ref: StructRef[Vec2Buffer], value: Vec2): Unit =
       ref := value
     inline def read(ref: StructRef[Vec2Buffer]): Vec2 = Vec2.from(ref)
+    def rowBytes = constValue[TupleSize[Vec2Buffer]]
 
   // --- Vec3 — uses Vec4Buffer for std140 padding; w component ignored ---
   given UniformValue[Vec3, Vec4Buffer]:
@@ -54,12 +71,14 @@ object UniformValue:
       ref.z = value.z
     inline def read(ref: StructRef[Vec4Buffer]): Vec3 =
       Vec3(ref.x, ref.y, ref.z)
+    def rowBytes = constValue[TupleSize[Vec4Buffer]]
 
   // --- Vec4 ---
   given UniformValue[Vec4, Vec4Buffer]:
     inline def write(ref: StructRef[Vec4Buffer], value: Vec4): Unit =
       ref := value
     inline def read(ref: StructRef[Vec4Buffer]): Vec4 = Vec4.from(ref)
+    def rowBytes = constValue[TupleSize[Vec4Buffer]]
 
   // --- Mat2 ---
   given UniformValue[Mat2, Mat2Buffer]:
@@ -67,18 +86,21 @@ object UniformValue:
     inline def write(ref: StructRef[Mat2Buffer], value: Mat2): Unit =
       ref := value
     inline def read(ref: StructRef[Mat2Buffer]): Mat2 = Mat2.from(ref)
+    def rowBytes = constValue[TupleSize[Mat2Buffer]]
 
   // --- Mat3 — padded buffer; accessors handle padding offsets ---
   given UniformValue[Mat3, Mat3PaddedBuffer]:
     inline def write(ref: StructRef[Mat3PaddedBuffer], value: Mat3): Unit =
       ref := value
     inline def read(ref: StructRef[Mat3PaddedBuffer]): Mat3 = Mat3.from(ref)
+    def rowBytes = constValue[TupleSize[Mat3PaddedBuffer]]
 
   // --- Mat4 ---
   given UniformValue[Mat4, Mat4Buffer]:
     inline def write(ref: StructRef[Mat4Buffer], value: Mat4): Unit =
       ref := value
     inline def read(ref: StructRef[Mat4Buffer]): Mat4 = Mat4.from(ref)
+    def rowBytes = constValue[TupleSize[Mat4Buffer]]
 
 // =============================================================================
 // UniformLayout[T] — single-param typeclass that collapses UniformValue[T, F]
@@ -86,8 +108,8 @@ object UniformValue:
 // =============================================================================
 
 /** Convenience type class that pairs a `T` with its inferred buffer layout so
-  * `Painter.binding[T]` needs only one type argument. Derived automatically from
-  * a [[UniformValue]]; not usually referenced directly.
+  * `Painter.binding[T]` needs only one type argument. Derived automatically
+  * from a [[UniformValue]]; not usually referenced directly.
   */
 trait UniformLayout[T]:
   type Fields <: Tuple
@@ -116,7 +138,8 @@ final class BufferBinding[T, F <: Tuple](
 
   /** The underlying GPU uniform buffer. Exposed for advanced raw-WebGPU interop
     * (e.g. building a bind group by hand); idiomatic code passes the
-    * `BufferBinding` itself as a binding value instead. */
+    * `BufferBinding` itself as a binding value instead.
+    */
   val gpuBuffer = device.createBuffer(
     Obj.literal(
       size = Math.max(16, buffer.dataView.byteLength),
@@ -152,7 +175,10 @@ object BufferBinding:
   inline def apply[T, F <: Tuple](
       device: GPUDevice,
   )(using uv: UniformValue[T, F]): BufferBinding[T, F] =
-    val struct = StructArray.allocate[F](1)(0)
+    // `uv.rows` is 1 for every single value; a UniformArray[T, N] asks for N.
+    // Row 0's DataView spans the whole allocation, so the GPU buffer size and
+    // the upload follow with no further change here.
+    val struct = StructArray.allocate[F](uv.rows)(0)
     new BufferBinding[T, F](struct, device, uv)
 
   inline def apply[T, F <: Tuple](
