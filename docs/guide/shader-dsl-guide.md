@@ -57,7 +57,6 @@ val shade = p.shade[Attribs, Varyings, Uniforms, Panels]: program =>
 | `ctx.out`       | varyings + `out.position` | fragment output `FO` (`out.color`) |
 | `ctx.bindings`  | uniforms `U`              | uniforms `U`                       |
 | `ctx.textures`  | panels `P`                | panels `P`                         |
-| `ctx.locals`    | typed locals `L`          | typed locals `L`                   |
 | `ctx.fragCoord` | —                         | `@builtin(position)` pixel coords  |
 
 `layerShade[U]` (or `[U, P]`, `[U, P, FO]`) is fragment-only; the vertex stage
@@ -68,10 +67,11 @@ not `p.layerShade[EmptyTuple]`.
 
 ## Locals
 
-Two styles:
+Declare them in the body. The Scala `val` is the handle — fully typed, with the
+same ops as any other expression of that type — and the WGSL declaration is
+emitted by its **first** `:=`:
 
 ```scala
-// untyped, ad-hoc:
 program.frag: ctx =>
   val n = LetFloat("n")           // immutable WGSL `let`
   val c = VarVec3("c")            // mutable WGSL `var` (first := declares)
@@ -81,25 +81,23 @@ program.frag: ctx =>
     c := c + vec3(n),             // reassign a var
     ctx.out.color := vec4(c, 1.0),
   )
-
-// typed via the [L] schema (gives Vec*/op typing on ctx.locals.*):
-program.vert[(pos: Vec2)]: ctx =>
-  Block(
-    ctx.locals.pos   := ctx.bindings.rotation * ctx.in.position,
-    ctx.out.position := vec4(ctx.locals.pos, 0.0, 1.0),
-  )
 ```
+
+`Let*` / `Var*` / `Const*` exist for every expression type — `LetVec2`,
+`VarMat4`, `ConstBool`, `LetIVec3`, and so on. One Scala `val` per WGSL name:
+two instances of the same name each emit a declaration, and WGSL rejects the
+redefinition.
 
 ### Assignment statements (`:=` and `+= -= *= /=`)
 
 `:=` produces an assignment `Stmt`. Its WGSL depends on the target:
 
-| target                                    | first `:=`     | later `:=`     |
-| ----------------------------------------- | -------------- | -------------- |
-| `LetFloat` / `LetVec*` … , `ctx.locals.*` | `let n = …;`   | `let n = …;`   |
-| `VarFloat` / `VarVec*` …                  | `var n = …;`   | `n = …;`       |
-| `ConstFloat` / `ConstVec*` …              | `const n = …;` | `const n = …;` |
-| `ctx.out.*`                               | `n = …;`       | `n = …;`       |
+| target                       | first `:=`     | later `:=`     |
+| ---------------------------- | -------------- | -------------- |
+| `LetFloat` / `LetVec*` …     | `let n = …;`   | `let n = …;`   |
+| `VarFloat` / `VarVec*` …     | `var n = …;`   | `n = …;`       |
+| `ConstFloat` / `ConstVec*` … | `const n = …;` | `const n = …;` |
+| `ctx.out.*`                  | `n = …;`       | `n = …;`       |
 
 A `Var*` local is stateful: the **first** `:=` it sees emits the `var`
 declaration, every subsequent `:=` emits a plain reassignment. So declare-then-

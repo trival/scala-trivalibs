@@ -14,10 +14,11 @@ import scala.scalajs.js
 //
 // Usage:
 //   val program = Program[Attribs, Varyings, Uniforms]()
-//   program.vert[(rotated: Vec2)]: ctx =>
+//   program.vert: ctx =>
+//     val rotated = LetVec2("rotated")
 //     Block(
-//       ctx.locals.rotated := ctx.bindings.rotation * ctx.in.position,
-//       ctx.out.position   := vec4(ctx.locals.rotated + ctx.bindings.translation, 0.0, 1.0),
+//       rotated          := ctx.bindings.rotation * ctx.in.position,
+//       ctx.out.position := vec4(rotated + ctx.bindings.translation, 0.0, 1.0),
 //     )
 //   program.frag: ctx =>
 //     Block(
@@ -33,7 +34,10 @@ import scala.scalajs.js
   *     frag); assign with `:=`
   *   - `ctx.bindings` — the `U` uniforms, by field name
   *   - `ctx.textures` — the `P` panel textures, by field name (`.sample(...)`)
-  *   - `ctx.locals` — typed local `var`/`let` declared via the `[L]` type param
+  *
+  * Locals are declared in the body itself — `val p = LetVec2("p")`,
+  * `val col = VarVec3("col")` — and emit their WGSL declaration on the first
+  * `:=`.
   *
   * Each `vert`/`frag` body returns a [[trivalibs.graphics.math.gpu.Block]] of
   * statements. Register reusable helpers with [[fn]] (also auto-collected when a
@@ -64,40 +68,27 @@ class Program[A, V, U, P, FO]:
 
   def helperFnsStr: String = fnSrcs.join("\n\n")
 
-  /** Vertex shader with no typed locals. */
-  inline def vert(body: VertexCtx[A, V, U, EmptyTuple, P] => Block): Unit =
-    vert[EmptyTuple](body)
-
-  /** Vertex shader with optional typed locals. */
-  inline def vert[L](
-      body: VertexCtx[A, V, U, L, P] => Block,
-  ): Unit =
-    val kinds = buildLocalKinds[L]
-    val ctx = VertexCtx[A, V, U, L, P](
+  /** Vertex shader body. Declare locals inside it with `LetVec2("p")` /
+    * `VarVec3("col")` — the Scala `val` is the handle, and its first `:=` emits
+    * the WGSL declaration.
+    */
+  inline def vert(body: VertexCtx[A, V, U, P] => Block): Unit =
+    val ctx = VertexCtx[A, V, U, P](
       in = TypedExprAccessor[NamedTuple.Map[A & AnyNamedTuple, ToExpr]]("in"),
       out = VertexOut[V]("out"),
       bindings =
         TypedExprAccessor[NamedTuple.Map[U & AnyNamedTuple, UniformToExpr]](""),
-      locals =
-        TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]](kinds),
       textures = TypedPanelAccessor[P](),
     )
     val reg = FnRegistry()
     vertBody = FnRegistry.withActive(reg)(body(ctx))
     reg.items.foreach(fnRec)
 
-  /** Fragment shader with no typed locals. */
+  /** Fragment shader body. Locals are declared the same way as in [[vert]]. */
   inline def frag(
-      body: FragmentCtx[V, U, EmptyTuple, P, FO] => Block,
+      body: FragmentCtx[V, U, P, FO] => Block,
   ): Unit =
-    frag[EmptyTuple](body)
-
-  /** Fragment shader with optional typed locals. */
-  inline def frag[L](
-      body: FragmentCtx[V, U, L, P, FO] => Block,
-  ): Unit =
-    val kinds = buildLocalKinds[L]
-    val ctx = FragmentCtx[V, U, L, P, FO](
+    val ctx = FragmentCtx[V, U, P, FO](
       in = TypedExprAccessor[
         NamedTuple.Map[V & AnyNamedTuple, ToExpr],
       ]("in"),
@@ -106,8 +97,6 @@ class Program[A, V, U, P, FO]:
       ]("out"),
       bindings =
         TypedExprAccessor[NamedTuple.Map[U & AnyNamedTuple, UniformToExpr]](""),
-      locals =
-        TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]](kinds),
       textures = TypedPanelAccessor[P](),
     )
     val reg = FnRegistry()

@@ -183,7 +183,7 @@ class WgslFnTest extends FunSuite:
       WgslFn.raw("rotate")("  return v;")
     program.fn(rotate)
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(
         ctx.out.position := vec4(
           rotate(ctx.in.position, ctx.bindings.angle),
@@ -222,19 +222,17 @@ class WgslFnTest extends FunSuite:
     assert(data.src.contains("return acc;"), s"Missing return:\n${data.src}")
 
   // =========================================================================
-  // WgslFn.dsl with typed locals (ctx-style API)
+  // WgslFn.dsl with ad-hoc locals
   // =========================================================================
 
-  test("WgslFn.dsl with typed locals generates var decl and reassignment"):
+  test("WgslFn.dsl with a local var generates decl and reassignment"):
     val fn: WgslFn[(v: Vec2, delta: Vec2), Vec2] =
-      WgslFn.dsl[(acc: Var[Vec2]), (v: Vec2, delta: Vec2), Vec2](
-        "accumulate",
-      ): ctx =>
-        val acc = ctx.locals.acc
+      WgslFn.dsl[(v: Vec2, delta: Vec2), Vec2]("accumulate"): (p, ret) =>
+        val acc = VarVec2("acc")
         Block(
-          acc := ctx.params.v,
-          acc := acc + ctx.params.delta,
-          ctx.ret(acc),
+          acc := p.v,
+          acc := acc + p.delta,
+          ret(acc),
         )
 
     val data = fn.asInstanceOf[WgslFnData]
@@ -247,12 +245,11 @@ class WgslFnTest extends FunSuite:
 
   test("WgslFn.dsl with const local generates const decl"):
     val fn: WgslFn[(v: Vec2, scale: Float), Vec2] =
-      WgslFn.dsl[(s: Const[Float]), (v: Vec2, scale: Float), Vec2](
-        "scaleVec",
-      ): ctx =>
+      WgslFn.dsl[(v: Vec2, scale: Float), Vec2]("scaleVec"): (p, ret) =>
+        val s = ConstFloat("s")
         Block(
-          ctx.locals.s := ctx.params.scale,
-          ctx.ret(ctx.params.v * ctx.locals.s),
+          s := p.scale,
+          ret(p.v * s),
         )
 
     val data = fn.asInstanceOf[WgslFnData]
@@ -263,13 +260,13 @@ class WgslFnTest extends FunSuite:
 
   test("WgslFn.dsl with mixed locals (var + let)"):
     val fn: WgslFn[(v: Vec2), Vec2] =
-      WgslFn.dsl[(acc: Var[Vec2], tmp: Vec2), (v: Vec2), Vec2](
-        "mixedLocals",
-      ): ctx =>
+      WgslFn.dsl[(v: Vec2), Vec2]("mixedLocals"): (p, ret) =>
+        val acc = VarVec2("acc")
+        val tmp = LetVec2("tmp")
         Block(
-          ctx.locals.acc := ctx.params.v,
-          ctx.locals.tmp := ctx.locals.acc,
-          ctx.ret(ctx.locals.tmp),
+          acc := p.v,
+          tmp := acc,
+          ret(tmp),
         )
 
     val data = fn.asInstanceOf[WgslFnData]
@@ -303,7 +300,7 @@ class WgslFnTest extends FunSuite:
     val double_it: WgslFn[Float *: EmptyTuple, Float] =
       WgslFn.raw("double_it")("  return x * 2.0;")
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(
         ctx.out.position := vec4(ctx.in.position, 0.0, 1.0),
       )
@@ -327,7 +324,7 @@ class WgslFnTest extends FunSuite:
 
     val _ = notCalled // touch the val so it is realized; still not invoked
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag: ctx =>
       Block(
@@ -364,7 +361,7 @@ class WgslFnTest extends FunSuite:
       WgslFn.dsl("mid"): (p, ret) =>
         ret(leaf(p.x) + 1.0)
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag: ctx =>
       Block(
@@ -388,7 +385,7 @@ class WgslFnTest extends FunSuite:
     val c: WgslFn[Float *: EmptyTuple, Float] =
       WgslFn.raw("c")("  return b(x);").withDeps(b)
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag: ctx =>
       Block(
@@ -414,7 +411,7 @@ class WgslFnTest extends FunSuite:
       WgslFn.dsl("top_dsl"): (p, ret) =>
         ret(midRaw(p.x) + 1.0)
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag: ctx =>
       Block(
@@ -459,7 +456,7 @@ class WgslFnTest extends FunSuite:
     val twice: WgslFn[Float *: EmptyTuple, Float] =
       WgslFn.raw("twice")("  return x * 2.0;")
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag: ctx =>
       Block(
@@ -486,7 +483,7 @@ class WgslFnTest extends FunSuite:
     // Pre-register explicitly
     program.fn(fn)
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag: ctx =>
       Block(
@@ -527,7 +524,6 @@ class WgslFnTest extends FunSuite:
       EmptyTuple,
       EmptyTuple,
       EmptyTuple,
-      EmptyTuple,
       FragOut,
     ] => Block) = () =>
       ctx =>
@@ -535,7 +531,7 @@ class WgslFnTest extends FunSuite:
           ctx.out.color := vec4(helperFn(FloatExpr("0.5")), 0.0, 0.0, 1.0),
         )
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag(makeBody())
 
@@ -554,7 +550,7 @@ class WgslFnTest extends FunSuite:
       WgslFn.dsl("right"): (p, ret) =>
         ret(shared(p.x) - 1.0)
 
-    program.vert[EmptyTuple]: ctx =>
+    program.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     program.frag: ctx =>
       Block(
@@ -613,7 +609,7 @@ class WgslFnTest extends FunSuite:
     val progA = Program[Attribs, EmptyTuple, EmptyTuple, EmptyTuple, FragOut]()
     val progB = Program[Attribs, EmptyTuple, EmptyTuple, EmptyTuple, FragOut]()
 
-    progA.vert[EmptyTuple]: ctx =>
+    progA.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     progA.frag: ctx =>
       Block(
@@ -625,7 +621,7 @@ class WgslFnTest extends FunSuite:
         ),
       )
 
-    progB.vert[EmptyTuple]: ctx =>
+    progB.vert: ctx =>
       Block(ctx.out.position := vec4(ctx.in.position, 0.0, 1.0))
     progB.frag: ctx =>
       Block(

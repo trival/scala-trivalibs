@@ -190,17 +190,11 @@ class ShaderDslTest extends FunSuite:
     assertEquals(stmt.toString, "  out.color = vec4<f32>(r, g, b, 1.0);")
 
   // =========================================================================
-  // TypedLocalAccessor — ctx.locals
+  // Ad-hoc locals — Let* / Var* / Const* constructors
   // =========================================================================
 
-  test("TypedLocalAccessor returns typed local with := and math ops"):
-    import scala.NamedTuple.Map as NTMap
-
-    type Locals = (rotated: Vec2)
-    type LocalFields = NTMap[Locals, ToLocal]
-    val accessor = TypedLocalAccessor[LocalFields]()
-
-    val rotated: LetVec2 = accessor.rotated
+  test("an ad-hoc local carries := and math ops"):
+    val rotated = LetVec2("rotated")
 
     // := produces let statement
     val letStmt = rotated := Vec2Expr("value")
@@ -234,11 +228,12 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.vert[(rotated: Vec2)]: ctx =>
+    program.vert: ctx =>
+      val rotated = LetVec2("rotated")
       Block(
-        ctx.locals.rotated := ctx.bindings.rotation * ctx.in.position,
+        rotated := ctx.bindings.rotation * ctx.in.position,
         ctx.out.position := vec4(
-          ctx.locals.rotated + ctx.bindings.translation,
+          rotated + ctx.bindings.translation,
           0.0,
           1.0,
         ),
@@ -263,7 +258,7 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.frag[EmptyTuple]: ctx =>
+    program.frag: ctx =>
       Block(
         ctx.out.color := vec4(ctx.bindings.color, 1.0),
       )
@@ -281,8 +276,8 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.vert[(scaled: Vec2)]: ctx =>
-      val scaled = ctx.locals.scaled
+    program.vert: ctx =>
+      val scaled = LetVec2("scaled")
       Block(
         scaled := ctx.in.position * ctx.bindings.scale,
         ctx.out.position := vec4(scaled, 0.0, 1.0),
@@ -305,13 +300,14 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.vert[(moved: Vec2, final_pos: Vec2)]: ctx =>
-      val moved: LetVec2 = ctx.locals.moved
+    program.vert: ctx =>
+      val moved = LetVec2("moved")
+      val finalPos = LetVec2("final_pos")
       val scaled = moved * 2.0
       Block(
-        ctx.locals.moved := ctx.in.position + ctx.bindings.offset,
-        ctx.locals.final_pos := scaled,
-        ctx.out.position := vec4(ctx.locals.final_pos, 0.0, 1.0),
+        moved := ctx.in.position + ctx.bindings.offset,
+        finalPos := scaled,
+        ctx.out.position := vec4(finalPos, 0.0, 1.0),
       )
 
     val body = program.vertBodyStr
@@ -335,7 +331,7 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.frag[EmptyTuple]: ctx =>
+    program.frag: ctx =>
       Block(
         ctx.out.color := ctx.in.color,
       )
@@ -357,17 +353,18 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.vert[(rotated: Vec2)]: ctx =>
+    program.vert: ctx =>
+      val rotated = LetVec2("rotated")
       Block(
-        ctx.locals.rotated := ctx.bindings.rotation * ctx.in.position,
+        rotated := ctx.bindings.rotation * ctx.in.position,
         ctx.out.position := vec4(
-          ctx.locals.rotated + ctx.bindings.translation,
+          rotated + ctx.bindings.translation,
           0.0,
           1.0,
         ),
       )
 
-    program.frag[EmptyTuple]: ctx =>
+    program.frag: ctx =>
       Block(
         ctx.out.color := vec4(ctx.bindings.color, 1.0),
       )
@@ -447,30 +444,24 @@ class ShaderDslTest extends FunSuite:
     assertEquals((s * FloatExpr("x")).toString, "(scale * x)")
 
   // =========================================================================
-  // TypedLocalAccessor with kinds dict — dispatches var/const/let
+  // Var / Const / Let constructors — one declaration per Scala val
   // =========================================================================
 
-  test("TypedLocalAccessor dispatches var/const/let from kinds dict"):
-    import trivalibs.utils.js.Dict
-    import scala.NamedTuple.Map as NTMap
-
-    type Locals = (acc: Var[Vec2], scale: Const[Float], tmp: Vec2)
-    type LocalFields = NTMap[Locals, ToLocal]
-
-    val kinds = Dict[String]()
-    kinds("acc") = "v"
-    kinds("scale") = "c"
-    val accessor = TypedLocalAccessor[LocalFields](kinds)
-
-    val acc: VarVec2 = accessor.acc
-    val scale: ConstFloat = accessor.scale
-    val tmp: LetVec2 = accessor.tmp
+  test("Var declares once, then assigns; Const and Let each declare"):
+    val acc = VarVec2("acc")
+    val scale = ConstFloat("scale")
+    val tmp = LetVec2("tmp")
 
     assertEquals((acc := Vec2Expr("v")).toString, "  var acc = v;")
-    acc := Vec2Expr("v2") // mark as declared
     assertEquals((acc := Vec2Expr("v2")).toString, "  acc = v2;")
     assertEquals((scale := FloatExpr("2.0")).toString, "  const scale = 2.0;")
     assertEquals((tmp := Vec2Expr("t")).toString, "  let tmp = t;")
+
+  test("two instances of the same name each declare — one val per local"):
+    val a = VarVec2("dup")
+    val b = VarVec2("dup")
+    assertEquals((a := Vec2Expr("x")).toString, "  var dup = x;")
+    assertEquals((b := Vec2Expr("y")).toString, "  var dup = y;")
 
   // =========================================================================
   // Full program integration — mixed Var, Const, and bare locals
@@ -483,23 +474,28 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.vert[(acc: Var[Vec2], scale: Const[Float], tmp: Vec2)]: ctx =>
+    program.vert: ctx =>
+      val acc = VarVec2("acc")
+      val scale = ConstFloat("scale")
+      val tmp = LetVec2("tmp")
       Block(
-        ctx.locals.scale := 2.0,
-        ctx.locals.acc := ctx.in.position,
-        ctx.locals.tmp := ctx.locals.acc + ctx.bindings.delta,
-        ctx.locals.acc := ctx.locals.tmp,
-        ctx.out.position := vec4(ctx.locals.acc, 0.0, 1.0),
+        scale := 2.0,
+        acc := ctx.in.position,
+        tmp := acc + ctx.bindings.delta,
+        acc := tmp,
+        ctx.out.position := vec4(acc, 0.0, 1.0),
       )
 
-    val body = program.vertBodyStr
-    assert(body.contains("const scale = 2.0;"), s"Missing const:\n$body")
-    assert(body.contains("var acc = in.position;"), s"Missing var decl:\n$body")
-    assert(body.contains("let tmp = (acc + delta);"), s"Missing let:\n$body")
-    assert(body.contains("acc = tmp;"), s"Missing reassign:\n$body")
-    assert(
-      body.contains("out.position = vec4<f32>(acc, 0.0, 1.0);"),
-      s"Missing position:\n$body",
+    // Asserted as the whole body: a substring check would also pass on a
+    // second `var acc` declaration, which is exactly the bug the old
+    // ctx.locals path had.
+    assertEquals(
+      program.vertBodyStr,
+      """  const scale = 2.0;
+        |  var acc = in.position;
+        |  let tmp = (acc + delta);
+        |  acc = tmp;
+        |  out.position = vec4<f32>(acc, 0.0, 1.0);""".stripMargin,
     )
 
   // =========================================================================
@@ -516,11 +512,12 @@ class ShaderDslTest extends FunSuite:
 
     val program = Program[Attribs, Varyings, Uniforms, EmptyTuple, FragOut]()
 
-    program.vert[(acc: Var[Vec2])]: ctx =>
+    program.vert: ctx =>
+      val acc = VarVec2("acc")
       Block(
-        ctx.locals.acc := ctx.in.position,
-        accumulate(ctx.locals.acc, ctx.bindings.delta),
-        ctx.out.position := vec4(ctx.locals.acc, 0.0, 1.0),
+        acc := ctx.in.position,
+        accumulate(acc, ctx.bindings.delta),
+        ctx.out.position := vec4(acc, 0.0, 1.0),
       )
 
     val body = program.vertBodyStr

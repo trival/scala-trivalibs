@@ -118,16 +118,11 @@ def main(): Unit =
 
     val lightShade =
       painter.layerShade[LightUniforms, LightPanels]: program =>
-        program.frag[(
-            albedo: Vec4,
-            normalEncoded: Vec4,
-            normal: Vec3,
-            nDotL: Float,
-        )]: ctx =>
-          val albedo = ctx.locals.albedo
-          val normalEncoded = ctx.locals.normalEncoded
-          val normal = ctx.locals.normal
-          val nDotL = ctx.locals.nDotL
+        program.frag: ctx =>
+          val albedo = LetVec4("albedo")
+          val normalEncoded = LetVec4("normalEncoded")
+          val normal = LetVec3("normal")
+          val nDotL = LetFloat("nDotL")
           Block(
             albedo := ctx.textures.albedo.sample(
               ctx.in.uv,

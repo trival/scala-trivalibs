@@ -43,27 +43,19 @@ class LayerProgram[U, P, FO]:
 
   def helperFnsStr: String = fnSrcs.join("\n\n")
 
-  /** Fragment shader with no typed locals. `ctx.in.uv` provides screen UV
-    * coords (0..1).
+  /** Fragment shader body. `ctx.in.uv` provides screen UV coords (0..1);
+    * locals are declared in the body with `LetVec2("p")` / `VarVec3("col")`.
     */
   inline def frag(
-      body: FragmentCtx[(uv: Vec2), U, EmptyTuple, P, FO] => Block,
-  ): Unit = frag[EmptyTuple](body)
-
-  /** Fragment shader with typed locals. */
-  inline def frag[L](
-      body: FragmentCtx[(uv: Vec2), U, L, P, FO] => Block,
+      body: FragmentCtx[(uv: Vec2), U, P, FO] => Block,
   ): Unit =
-    val kinds = buildLocalKinds[L]
-    val ctx = FragmentCtx[(uv: Vec2), U, L, P, FO](
+    val ctx = FragmentCtx[(uv: Vec2), U, P, FO](
       in = TypedExprAccessor[NamedTuple.Map[(uv: Vec2) & AnyNamedTuple, ToExpr]]("in"),
       out = TypedAssignAccessor[
         NamedTuple.Map[FO & AnyNamedTuple, ToAssign],
       ]("out"),
       bindings =
         TypedExprAccessor[NamedTuple.Map[U & AnyNamedTuple, UniformToExpr]](""),
-      locals =
-        TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]](kinds),
       textures = TypedPanelAccessor[P](),
     )
     val reg = FnRegistry()

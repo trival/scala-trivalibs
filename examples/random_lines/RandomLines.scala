@@ -70,9 +70,9 @@ def main(): Unit =
 
   Painter.init(canvas): p =>
     val shade = p.shade[Attribs, Varyings, Uniforms]: program =>
-      program.vert[EmptyTuple]: ctx =>
+      program.vert: ctx =>
         ctx.out.position := vec4(ctx.in.position, 0.0, 1.0)
-      program.frag[EmptyTuple]: ctx =>
+      program.frag: ctx =>
         ctx.out.color := vec4(ctx.bindings.color, 1.0)
 
     // All lines live in a single form, one geometry buffer each — drawn in

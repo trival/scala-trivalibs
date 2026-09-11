@@ -1,8 +1,8 @@
 # Shader DSL locals: is `ctx.locals` / the `[L]` schema necessary?
 
-Status: **decided — the `[L]` schema is removed, ad-hoc locals are the one way.**
-Analysis below; the removal plan at the end is the work item. Triggered by the
-milestone 2 loop work
+Status: **done — the `[L]` schema is removed, ad-hoc locals are the one way.**
+The analysis below is kept as the record of why; the removal plan at the end is
+what was carried out. Triggered by the milestone 2 loop work
 (`uniform-arrays-plan.md`), where the same question came up for loop bodies and
 was answered "index-only, ad-hoc locals". This document asks the larger version:
 should the `[L]` locals schema exist at all, or is `LetVec3("name")` /
@@ -157,6 +157,37 @@ their `Let` siblings.
 6. `docs/guide/shader-dsl-guide.md` — collapse the "Two styles" section to one,
    drop the "untyped" mischaracterisation, and fix the `ctx.locals` row in the
    context table (line 60).
+
+### What it came to
+
+Carried out as planned, with two additions the plan did not foresee:
+
+- **`LayerProgram.frag[L]`** had the same overload pair as `Program.frag` and
+  went with it (`dsl/layer_program.scala`) — the plan listed only `Program` and
+  `WgslFn.dsl`.
+- **`sketchlib.utils.bake.TextureBaker`** in the consuming repo types a
+  `FragmentCtx` explicitly, so it needed its type-argument list shortened by one
+  (`src/utils/bake/Bake.scala:294`). The only downstream signature that named a
+  context type directly.
+
+`WgslFn.dsl[L, P, R]` is gone with `WgslFnCtx`; the surviving `dsl[P, R]` form
+takes `(params, ret)`, and the three tests that used locals now declare them
+ad-hoc inside the body. `Var` / `Const` markers, `ToLocal`, `buildLocalKinds`,
+`populateKinds` and `TypedLocalAccessor` are deleted, and the prelude no longer
+exports `Var`, `Const`, `TypedLocalAccessor` or `WgslFnCtx`.
+
+Added first, as the plan required: `VarMat2/3/4`, `ConstMat2/3/4`, `VarBool`,
+`ConstBool`, `VarIVec2-4`, `VarUVec2-4`, `ConstIVec2-4`, `ConstUVec2-4` — the
+local types the schema never covered either, so nothing lost expressiveness.
+
+**The masked bug is now asserted against.** The test that passed on a substring
+of its own broken output
+(`test/shader/ShaderDsl.test.scala`, the Var/Const/bare-locals program) asserts
+the whole emitted body, and a second test pins the one-`val`-per-name rule:
+two `VarVec2("dup")` instances each declare, which is what WGSL rejects.
+
+35 test suites green, all examples compile, and the four sketches that exercise
+the shader DSL rebuild.
 
 ### Knock-on
 

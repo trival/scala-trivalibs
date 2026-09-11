@@ -222,6 +222,18 @@ object Expr:
   opaque type VarVec4 <: Vec4Expr & VarExpr = VarExpr
   object VarVec4 { def apply(s: String): VarVec4 = new VarExpr(s) }
 
+  opaque type VarMat2 <: Mat2Expr & VarExpr = VarExpr
+  object VarMat2 { def apply(s: String): VarMat2 = new VarExpr(s) }
+
+  opaque type VarMat3 <: Mat3Expr & VarExpr = VarExpr
+  object VarMat3 { def apply(s: String): VarMat3 = new VarExpr(s) }
+
+  opaque type VarMat4 <: Mat4Expr & VarExpr = VarExpr
+  object VarMat4 { def apply(s: String): VarMat4 = new VarExpr(s) }
+
+  opaque type VarBool <: BoolExpr & VarExpr = VarExpr
+  object VarBool { def apply(s: String): VarBool = new VarExpr(s) }
+
   // Const types — WGSL compile-time constants
   opaque type ConstFloat <: FloatExpr & ConstExpr = ConstExpr
   object ConstFloat { def apply(s: String): ConstFloat = new ConstExpr(s) }
@@ -234,6 +246,18 @@ object Expr:
 
   opaque type ConstVec4 <: Vec4Expr & ConstExpr = ConstExpr
   object ConstVec4 { def apply(s: String): ConstVec4 = new ConstExpr(s) }
+
+  opaque type ConstMat2 <: Mat2Expr & ConstExpr = ConstExpr
+  object ConstMat2 { def apply(s: String): ConstMat2 = new ConstExpr(s) }
+
+  opaque type ConstMat3 <: Mat3Expr & ConstExpr = ConstExpr
+  object ConstMat3 { def apply(s: String): ConstMat3 = new ConstExpr(s) }
+
+  opaque type ConstMat4 <: Mat4Expr & ConstExpr = ConstExpr
+  object ConstMat4 { def apply(s: String): ConstMat4 = new ConstExpr(s) }
+
+  opaque type ConstBool <: BoolExpr & ConstExpr = ConstExpr
+  object ConstBool { def apply(s: String): ConstBool = new ConstExpr(s) }
 
   // ---------------------------------------------------------------------------
   // Integer scalar expression types
@@ -314,6 +338,43 @@ object Expr:
 
   opaque type LetUVec4 <: UVec4Expr & LetExpr = LetExpr
   object LetUVec4 { def apply(s: String): LetUVec4 = new LetExpr(s) }
+
+  // Var / Const variants for the integer vector types
+  opaque type VarIVec2 <: IVec2Expr & VarExpr = VarExpr
+  object VarIVec2 { def apply(s: String): VarIVec2 = new VarExpr(s) }
+
+  opaque type VarIVec3 <: IVec3Expr & VarExpr = VarExpr
+  object VarIVec3 { def apply(s: String): VarIVec3 = new VarExpr(s) }
+
+  opaque type VarIVec4 <: IVec4Expr & VarExpr = VarExpr
+  object VarIVec4 { def apply(s: String): VarIVec4 = new VarExpr(s) }
+
+  opaque type VarUVec2 <: UVec2Expr & VarExpr = VarExpr
+  object VarUVec2 { def apply(s: String): VarUVec2 = new VarExpr(s) }
+
+  opaque type VarUVec3 <: UVec3Expr & VarExpr = VarExpr
+  object VarUVec3 { def apply(s: String): VarUVec3 = new VarExpr(s) }
+
+  opaque type VarUVec4 <: UVec4Expr & VarExpr = VarExpr
+  object VarUVec4 { def apply(s: String): VarUVec4 = new VarExpr(s) }
+
+  opaque type ConstIVec2 <: IVec2Expr & ConstExpr = ConstExpr
+  object ConstIVec2 { def apply(s: String): ConstIVec2 = new ConstExpr(s) }
+
+  opaque type ConstIVec3 <: IVec3Expr & ConstExpr = ConstExpr
+  object ConstIVec3 { def apply(s: String): ConstIVec3 = new ConstExpr(s) }
+
+  opaque type ConstIVec4 <: IVec4Expr & ConstExpr = ConstExpr
+  object ConstIVec4 { def apply(s: String): ConstIVec4 = new ConstExpr(s) }
+
+  opaque type ConstUVec2 <: UVec2Expr & ConstExpr = ConstExpr
+  object ConstUVec2 { def apply(s: String): ConstUVec2 = new ConstExpr(s) }
+
+  opaque type ConstUVec3 <: UVec3Expr & ConstExpr = ConstExpr
+  object ConstUVec3 { def apply(s: String): ConstUVec3 = new ConstExpr(s) }
+
+  opaque type ConstUVec4 <: UVec4Expr & ConstExpr = ConstExpr
+  object ConstUVec4 { def apply(s: String): ConstUVec4 = new ConstExpr(s) }
 
 /** Texture sampling ops on a panel texture (`ctx.textures.<name>`). */
 extension (tex: Expr.Texture2D)
@@ -445,6 +506,26 @@ export Expr.{
   LetUVec2,
   LetUVec3,
   LetUVec4,
+  VarMat2,
+  VarMat3,
+  VarMat4,
+  VarBool,
+  ConstMat2,
+  ConstMat3,
+  ConstMat4,
+  ConstBool,
+  VarIVec2,
+  VarIVec3,
+  VarIVec4,
+  VarUVec2,
+  VarUVec3,
+  VarUVec4,
+  ConstIVec2,
+  ConstIVec3,
+  ConstIVec4,
+  ConstUVec2,
+  ConstUVec3,
+  ConstUVec4,
 }
 
 // ---------------------------------------------------------------------------

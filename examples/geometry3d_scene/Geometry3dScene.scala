@@ -36,10 +36,10 @@ def main(): Unit =
             ),
             ctx.out.normal := ctx.in.normal,
           )
-        program.frag[(n: Vec3, diffuse: Float, c: Vec3)]: ctx =>
-          val n = ctx.locals.n
-          val diffuse = ctx.locals.diffuse
-          val c = ctx.locals.c
+        program.frag: ctx =>
+          val n = LetVec3("n")
+          val diffuse = LetFloat("diffuse")
+          val c = LetVec3("c")
           val light = vec3(1.0, 2.0, 1.0).normalize
           Block(
             n := ctx.in.normal.normalize,

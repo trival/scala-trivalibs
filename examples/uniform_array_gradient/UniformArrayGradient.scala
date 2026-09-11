@@ -53,21 +53,21 @@ def main(): Unit =
     )
 
     val shade = painter.shade[Attribs, Varyings, Uniforms]: program =>
-      program.vert[(p: Vec2)]: ctx =>
+      program.vert: ctx =>
         val rect = ctx.bindings.rect
-        val p = ctx.locals.p
+        val p = LetVec2("p")
         Block(
           p := rect.xy + ctx.in.position * rect.zw,
           ctx.out.uv := ctx.in.position,
           ctx.out.position := vec4(p.x, p.y, 0.0, 1.0),
         )
 
-      program.frag[(col: Var[Vec3])]: ctx =>
+      program.frag: ctx =>
         val stops = ctx.bindings.stops
         val curves = ctx.bindings.curves
         val count = ctx.bindings.count
         val x = ctx.in.uv.x
-        val col = ctx.locals.col
+        val col = VarVec3("col")
 
         // A loop over the LIVE stop count, not over the capacity. The band with
         // 2 stops runs one iteration; only the array's length is fixed at

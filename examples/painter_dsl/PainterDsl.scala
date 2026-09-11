@@ -40,8 +40,8 @@ def main(): Unit =
         ret(p.offset + p.mat * p.pos)
 
     val shade = painter.shade[Attribs, Varyings, Uniforms]: program =>
-      program.vert[(t: Vec2)]: ctx =>
-        val t = ctx.locals.t
+      program.vert: ctx =>
+        val t = LetVec2("t")
         Block(
           t := applyTransform(
             ctx.in.position,
@@ -50,7 +50,7 @@ def main(): Unit =
           ),
           ctx.out.position := vec4(t.x, t.y, 0.0, 1.0),
         )
-      program.frag[EmptyTuple]: ctx =>
+      program.frag: ctx =>
         ctx.out.color := vec4(ctx.bindings.color, 1.0)
 
     // Simple triangle centered at origin

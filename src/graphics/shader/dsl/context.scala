@@ -74,24 +74,6 @@ class AssignTarget(val target: String):
   inline def :=(value: Mat3): Stmt = this := value.toExpr
   inline def :=(value: Mat4): Stmt = this := value.toExpr
 
-/** Typed read+write accessor for local variables.
-  *
-  * Fields maps to Local* types (e.g., LocalVec2). Each is an opaque type <:
-  * Vec*Expr & LetExpr, so math operations (via Vec*Expr) and `:=` (via LetExpr)
-  * are both available. At runtime all are LetExpr.
-  */
-class TypedLocalAccessor[F <: AnyNamedTuple](
-    kinds: Dict[String] = Dict[String](),
-) extends Selectable:
-  type Fields = F
-
-  def selectDynamic(name: String): Any =
-    if kinds.has(name) then
-      kinds.at(name) match
-        case "v" => VarExpr(name)
-        case _   => ConstExpr(name)
-    else LetExpr(name)
-
 // ---------------------------------------------------------------------------
 // Stage-Specific Context Types
 // ---------------------------------------------------------------------------
@@ -114,16 +96,14 @@ class VertexOut[V](prefix: String) extends Selectable:
   *   - `out.fieldName` — write a named varying passed to the fragment stage
   *   - `in.fieldName` — read a vertex attribute
   *   - `bindings.name` — read a uniform binding
-  *   - `locals.name` — read/write a typed local variable
   *   - `textures.name` — read a panel texture binding (group 1)
   */
-class VertexCtx[A, V, U, L, P](
+class VertexCtx[A, V, U, P](
     val in: TypedExprAccessor[NamedTuple.Map[A & AnyNamedTuple, ToExpr]],
     val out: VertexOut[V],
     val bindings: TypedExprAccessor[
       NamedTuple.Map[U & AnyNamedTuple, UniformToExpr],
     ],
-    val locals: TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]],
     val textures: TypedPanelAccessor[P],
 ):
   /** `@builtin(vertex_index)` — index of the current vertex (`u32`). */
@@ -137,13 +117,12 @@ class VertexCtx[A, V, U, L, P](
   * FO is the fragment output named tuple (default: `(color: Vec4)`). Each field
   * becomes an AssignTarget via `ToAssign`.
   */
-class FragmentCtx[V, U, L, P, FO](
+class FragmentCtx[V, U, P, FO](
     val in: TypedExprAccessor[NamedTuple.Map[V & AnyNamedTuple, ToExpr]],
     val out: TypedAssignAccessor[NamedTuple.Map[FO & AnyNamedTuple, ToAssign]],
     val bindings: TypedExprAccessor[
       NamedTuple.Map[U & AnyNamedTuple, UniformToExpr],
     ],
-    val locals: TypedLocalAccessor[NamedTuple.Map[L & AnyNamedTuple, ToLocal]],
     val textures: TypedPanelAccessor[P],
 ):
   /** The `@builtin(position)` fragment input — framebuffer pixel coordinates
