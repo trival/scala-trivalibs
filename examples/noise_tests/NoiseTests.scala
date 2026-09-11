@@ -40,21 +40,20 @@ private val hashDisplay: WgslFn[(uv: Vec2, time: Float), Vec4] =
         qi := uvec2((p.uv.x * N).toU32, (p.uv.y * M).toU32),
         border := 0.025,
         borderHi := FloatExpr("1.0") - border,
-        when(
-          q.x < border || q.x > borderHi || q.y < border || q.y > borderHi,
+        when(q.x < border || q.x > borderHi || q.y < border || q.y > borderHi)(
           ret(vec4(0.0, 0.0, 0.0, 1.0)),
         ),
         color := vec3(0.0),
         qa := q + vec2(p.time * 0.1, 0.0),
-        ifElse(
-          qi.y === 0.u,
-          ifChain(qi.x === 0.u, color := vec3(Hash.hash1(qa.x.bitsToU32)))
-            .elseIf(qi.x === 1.u, color := vec3(Hash.hash1f(qa.x)))
-            .elseIf(qi.x === 2.u, color := vec3(Hash.hash21(qa.bitsToU32)))
+        when(qi.y === 0.u)(
+          when(qi.x === 0.u)(color := vec3(Hash.hash1(qa.x.bitsToU32)))
+            .elseIf(qi.x === 1.u)(color := vec3(Hash.hash1f(qa.x)))
+            .elseIf(qi.x === 2.u)(color := vec3(Hash.hash21(qa.bitsToU32)))
             .elseDo(color := vec3(Hash.u32ToF32(Hash.hash21i(qa.bitsToU32)))),
-          ifChain(qi.x === 0.u, color := vec3(Hash.hash2(qa.bitsToU32), 0.0))
-            .elseIf(qi.x === 1.u, color := vec3(Hash.hash2f(qa), 0.0))
-            .elseIf(qi.x === 2.u, color := Hash.hash3(qa3.bitsToU32))
+        ).elseDo(
+          when(qi.x === 0.u)(color := vec3(Hash.hash2(qa.bitsToU32), 0.0))
+            .elseIf(qi.x === 1.u)(color := vec3(Hash.hash2f(qa), 0.0))
+            .elseIf(qi.x === 2.u)(color := Hash.hash3(qa3.bitsToU32))
             .elseDo(color := Hash.hash3f(qa3)),
         ),
         ret(vec4(color, 1.0)),

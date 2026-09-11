@@ -74,7 +74,7 @@ class ControlFlowTest extends FunSuite:
     assertEquals(r.toString, "select(cold, hot, c)")
 
   // ---------------------------------------------------------------------------
-  // Stmt.ifBlock / Stmt.ifElseBlock — direct form
+  // Stmt.ifBlock / Stmt.whileBlock — direct form
   // ---------------------------------------------------------------------------
 
   test("Stmt.ifBlock generates if with re-indented body"):
@@ -88,17 +88,14 @@ class ControlFlowTest extends FunSuite:
         |  }""".stripMargin
     assertEquals(s: String, expected)
 
-  test("Stmt.ifElseBlock generates if/else with re-indented bodies"):
-    val s = Stmt.ifElseBlock(
+  test("Stmt.whileBlock generates while with re-indented body"):
+    val s = Stmt.whileBlock(
       BoolExpr("flag"),
       Block(Stmt.let("x", FloatExpr("1.0"))),
-      Block(Stmt.let("x", FloatExpr("2.0"))),
     )
     val expected =
-      """  if (flag) {
+      """  while (flag) {
         |    let x = 1.0;
-        |  } else {
-        |    let x = 2.0;
         |  }""".stripMargin
     assertEquals(s: String, expected)
 
@@ -117,23 +114,20 @@ class ControlFlowTest extends FunSuite:
     assertEquals(outer: String, expected)
 
   // ---------------------------------------------------------------------------
-  // when / ifElse — top-level helpers
+  // when — top-level helper
   // ---------------------------------------------------------------------------
 
   test("when delegates to ifBlock"):
-    val s = when(BoolExpr("c"), Block(Stmt.let("x", FloatExpr("1.0"))))
+    val s: Stmt = when(BoolExpr("c"))(Block(Stmt.let("x", FloatExpr("1.0"))))
     val expected =
       """  if (c) {
         |    let x = 1.0;
         |  }""".stripMargin
     assertEquals(s: String, expected)
 
-  test("ifElse delegates to ifElseBlock"):
-    val s = ifElse(
-      BoolExpr("c"),
-      Block(Stmt.let("x", FloatExpr("1.0"))),
-      Block(Stmt.let("x", FloatExpr("2.0"))),
-    )
+  test("when + elseDo generates if / else"):
+    val s = when(BoolExpr("c"))(Block(Stmt.let("x", FloatExpr("1.0"))))
+      .elseDo(Block(Stmt.let("x", FloatExpr("2.0"))))
     val expected =
       """  if (c) {
         |    let x = 1.0;
@@ -144,7 +138,7 @@ class ControlFlowTest extends FunSuite:
 
   test("Stmt -> Block conversion works for single-statement bodies"):
     // No Block(...) wrapping needed — Stmt is implicitly a Block.
-    val s = when(BoolExpr("c"), Stmt.let("x", FloatExpr("1.0")))
+    val s: Stmt = when(BoolExpr("c"))(Stmt.let("x", FloatExpr("1.0")))
     val expected =
       """  if (c) {
         |    let x = 1.0;
@@ -152,11 +146,11 @@ class ControlFlowTest extends FunSuite:
     assertEquals(s: String, expected)
 
   // ---------------------------------------------------------------------------
-  // BoolExpr.then / .thenElse extensions
+  // BoolExpr extension twins
   // ---------------------------------------------------------------------------
 
   test("BoolExpr.thenDo matches when"):
-    val s = BoolExpr("c").thenDo(Stmt.let("x", FloatExpr("1.0")))
+    val s: Stmt = BoolExpr("c").thenDo(Stmt.let("x", FloatExpr("1.0")))
     assertEquals(
       s: String,
       """  if (c) {
@@ -164,11 +158,10 @@ class ControlFlowTest extends FunSuite:
         |  }""".stripMargin,
     )
 
-  test("BoolExpr.thenElse matches ifElse"):
-    val s = BoolExpr("c").thenElse(
-      Stmt.let("x", FloatExpr("1.0")),
-      Stmt.let("x", FloatExpr("2.0")),
-    )
+  test("BoolExpr.thenDo + elseDo matches when + elseDo"):
+    val s = BoolExpr("c")
+      .thenDo(Stmt.let("x", FloatExpr("1.0")))
+      .elseDo(Stmt.let("x", FloatExpr("2.0")))
     assertEquals(
       s: String,
       """  if (c) {
@@ -179,12 +172,12 @@ class ControlFlowTest extends FunSuite:
     )
 
   // ---------------------------------------------------------------------------
-  // ifChain / elseIf / orElse — multi-branch chain builder
+  // when / elseIf / elseDo — multi-branch chain
   // ---------------------------------------------------------------------------
 
-  test("ifChain + orElse generates if / else if / else"):
-    val s = ifChain(BoolExpr("c1"), Stmt.let("x", FloatExpr("1.0")))
-      .elseIf(BoolExpr("c2"), Stmt.let("x", FloatExpr("2.0")))
+  test("when + elseIf + elseDo generates if / else if / else"):
+    val s: Stmt = when(BoolExpr("c1"))(Stmt.let("x", FloatExpr("1.0")))
+      .elseIf(BoolExpr("c2"))(Stmt.let("x", FloatExpr("2.0")))
       .elseDo(Stmt.let("x", FloatExpr("3.0")))
     val expected =
       """  if (c1) {
@@ -196,9 +189,9 @@ class ControlFlowTest extends FunSuite:
         |  }""".stripMargin
     assertEquals(s: String, expected)
 
-  test("ifChain without orElse acts as Stmt"):
-    val s: Stmt = ifChain(BoolExpr("c1"), Stmt.let("x", FloatExpr("1.0")))
-      .elseIf(BoolExpr("c2"), Stmt.let("x", FloatExpr("2.0")))
+  test("a chain without elseDo acts as Stmt"):
+    val s: Stmt = when(BoolExpr("c1"))(Stmt.let("x", FloatExpr("1.0")))
+      .elseIf(BoolExpr("c2"))(Stmt.let("x", FloatExpr("2.0")))
     val expected =
       """  if (c1) {
         |    let x = 1.0;
@@ -211,11 +204,11 @@ class ControlFlowTest extends FunSuite:
   // Integration — control flow inside WgslFn.dsl
   // ---------------------------------------------------------------------------
 
-  test("ifElse inside WgslFn.dsl with early return"):
+  test("if inside WgslFn.dsl with early return"):
     val fn: WgslFn[(x: Float), Float] =
       WgslFn.dsl("clip"): (p, ret) =>
         Block(
-          when(p.x < 0.0, ret(FloatExpr("0.0"))),
+          when(p.x < 0.0)(ret(FloatExpr("0.0"))),
           ret(p.x),
         )
     val src = fn.asInstanceOf[WgslFnData].src

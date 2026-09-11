@@ -36,8 +36,12 @@ Shipped:
   opaque String alias with implicit conversions to `Stmt` and `Block`, so a
   chain without a final else can be used directly as a statement.
 
-Deferred items from "Out of Scope" remain deferred (loops, numeric `&&`/`||`/`!`,
-numeric `eq`/`ne`, vector bool ops, `switch`).
+**Loops shipped later**, in milestone 2 of
+[uniform-arrays-plan.md](../uniform-arrays-plan.md) — `loop` / `loopIf` /
+`break` / `continue`, plus the by-name-body conversion that folded `ifChain`
+into `when` and removed `ifElse` / `thenElse`. The remaining deferred items from
+"Out of Scope" stay deferred (numeric `&&`/`||`/`!`, numeric `eq`/`ne`, vector
+bool ops, `switch`).
 
 ## Context
 

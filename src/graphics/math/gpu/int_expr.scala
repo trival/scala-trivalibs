@@ -54,6 +54,15 @@ given NumOps[IntExpr]:
     def *(b: IntExpr): IntExpr = IntExpr(s"(${a.wgsl} * ${b.wgsl})")
     def /(b: IntExpr): IntExpr = IntExpr(s"(${a.wgsl} / ${b.wgsl})")
     def unary_- : IntExpr = IntExpr(s"(-${a.wgsl})")
+
+    // Int-literal forms. An `Int` operand cannot reach the `IntExpr` overloads
+    // through a conversion — `Conversion[Int, FloatExpr]` would make a bare int
+    // f32 — so `i - 1` needs its own overload, and these have to live in the
+    // same block as the IntExpr ones to stay one overload set.
+    def +(b: Int): IntExpr = IntExpr(s"(${a.wgsl} + $b)")
+    def -(b: Int): IntExpr = IntExpr(s"(${a.wgsl} - $b)")
+    def *(b: Int): IntExpr = IntExpr(s"(${a.wgsl} * $b)")
+    def /(b: Int): IntExpr = IntExpr(s"(${a.wgsl} / $b)")
   def zero: IntExpr = IntExpr("0")
   def one: IntExpr = IntExpr("1")
 

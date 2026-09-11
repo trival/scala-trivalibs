@@ -16,12 +16,48 @@ In `WgslFn.raw` / raw-string shade bodies, never put two statements on one line
 `inline val Pi` and `inline val Tau` — not `PI` / `TAU`. `Tau` is 2π, one full
 turn, and is the constant to reach for: `t * Tau` is one revolution.
 
+### A `var` declares where its first assignment lands
+
+`VarFloat("t")` and friends carry the declaration on their **first** `:=`, so
+where that statement sits is where `var t = …;` is emitted — the Scala `val` can
+live anywhere.
+
+That matters around loops. A `var` first assigned inside a `loop` / `loopIf` body
+is declared inside the loop's braces: re-initialised every iteration, and gone
+afterwards (`no definition in scope for identifier` at shade build). Seed an
+accumulator **before** the loop:
+
+```scala
+val col = VarVec3("col")
+Block(
+  col := vec3(0.0),          // declares here, in the enclosing scope
+  loop(0, n)(i => col := col + f(i)),
+)
+```
+
+Two corollaries: "first" means first _built_, so statements pre-built into vals
+and emitted in a different order carry the declaration with them; and one Scala
+`val` per WGSL name — two `VarVec3("col")` instances emit two declarations and
+WGSL rejects the redefinition.
+
+`unroll` is the exception that needs no care here: its iterations share one
+scope, so a `var` first assigned in the body declares once and assigns after.
+What _unroll_ needs instead is unique names for locals declared per iteration —
+`LetVec4(s"cur$i")`.
+
+### Sampling inside a loop
+
+`textureSample` needs uniform control flow. A loop bound read from a uniform
+keeps it (verified: a `textureSample` inside `for (… i < i32(taps) …)` passes
+`naga`), but a bound or a `break` that depends on per-fragment data does not —
+use `.sampleLevel(…)` or `.load(…)` there.
+
 ### `Let`-local names can shadow a WGSL builtin
 
 A `LetFloat("mix")` / `VarVec3("step")` emits a WGSL `let mix = …`, which then
 shadows the builtin of that name for the rest of the function — and a later
 `.mix` / `lerp` in the same body fails to parse. It only bites when something
-*after* the local uses the builtin, so it can survive a long time before an
+_after_ the local uses the builtin, so it can survive a long time before an
 unrelated edit trips it. Avoid builtin names (`mix`, `step`, `clamp`, `fract`,
 `length`, …) for locals.
 
@@ -35,14 +71,14 @@ auto-bound to its first panel slot. To read a **different** panel at that slot
 explicitly: `layer.bind("scene" := scenePanel, …)`. Then the painter uses your
 binding instead of the auto-injected one.
 
-Leaving the first slot unbound makes the layer *auto-pong*: the painter
+Leaving the first slot unbound makes the layer _auto-pong_: the painter
 ping-pongs it against a scratch target so it can read the previous result and
 write the next. Consequence: **an MRT panel (multiple `formats`) cannot host an
 auto-pong layer** — ping-pong is single-target by design, so it can't
 post-process multiple render targets. The panel throws at construction; compose
 a chain of single-format panels instead (each panel does one thing, the next
 reads the previous panel's output). A layer that manually binds its first slot
-is *not* auto-pong and is fine on an MRT panel.
+is _not_ auto-pong and is fine on an MRT panel.
 
 ### Panel-level bindings fill a shape's _unbound_ slots — reuse a shape across panels
 

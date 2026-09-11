@@ -4,8 +4,10 @@ Status: **milestone 1 implemented in trivalibs and rendering**, with
 `examples/uniform_array_gradient/` as the reference implementation and
 demonstration. Two design points changed under implementation — see _Result_.
 
-**Milestone 2 — loop primitives in the DSL — is planned, not built**; it has its
-own section below, with open decisions still to settle.
+**Milestone 2 — loop primitives in the DSL — is implemented**; see _Result:
+milestone 2_ at the end of its section for what changed under implementation.
+**Milestone 3 — local arrays — is deferred**, to be decided now that loops
+exist.
 
 ## Where this was planned before
 
@@ -415,8 +417,8 @@ Conventions to copy rather than re-decide (they were settled in
   statement-oriented everywhere else; a loop should not be the one construct
   that returns a value.
 - **Function-local arrays** (`var tmp: array<vec4<f32>, 3>`) — the one real hole
-  the loop API leaves. Designed below under _Local arrays_ and deferred to a
-  **milestone 3**, to be decided once loops have been used in anger.
+  the loop API leaves. Designed as **milestone 3** below, to be decided once
+  loops have been used in anger.
 - **Storage buffers** — see the section after this one.
 
 ### Proposed API
@@ -794,8 +796,8 @@ It is also blocked outright: a real loop over the three lines needs them in a
 **function-local array** (`var lines: array<vec4<f32>, 3>`) so `lines[i]` is
 indexable — today they are three separate `VarVec4("l0v")`, `…("l1v")`,
 `…("l2v")` locals, and the DSL has no local-array declaration at all
-(`UniformArray` is a uniform binding, not a `var`). That hole is designed in
-_Local arrays_ above, together with whether it ships here.
+(`UniformArray` is a uniform binding, not a `var`). That hole is milestone 3,
+below.
 
 So the split is: **`loop` earns its place when the count is runtime or when the
 unrolled source gets big** (a 64-tap blur emits 64 copies of its body; three
@@ -835,82 +837,6 @@ through that conversion, because shader math is floating-point. In `64.loop`,
 applies and the count stays an integer count. Worth a line in the guide — it
 reads as an inconsistency until someone points out that a loop bound is not
 shader math.
-
-### Local arrays — the remaining hole (milestone 3)
-
-With uniform arrays (milestone 1) and loops (this one), the array story has
-exactly one gap left: **there is no way to declare an indexable `var` inside a
-shader body.** `UniformArray` is a binding — CPU-written, read-only in the
-shader — and a local is a single scalar/vector/matrix. So anything that needs
-_indexed mutable scratch_ is unreachable: sorting a small set, gather-then-scan,
-a running history of the last N taps, any loop whose accumulator is per-slot
-rather than a single value. It is also, concretely, what stops
-`sketches/textures/lines/` from being loop-shaped at all: its three lines are
-three separate `VarVec4` locals because `lines[i]` does not exist.
-
-#### Shape
-
-WGSL wants `var lines: array<vec4<f32>, 3>;` at function scope (zero-initialised
-by default). The DSL pieces line up:
-
-```scala
-val lines = VarArray[Vec4, 3]("lines")   // ad-hoc, like LetVec4("cur")
-
-Block(
-  lines.decl,                            // var lines: array<vec4<f32>, 3>;
-  lines.set(0, vec4(…)),                 // element write
-  …,
-  loop(0, 3): i =>
-    col := col.mix(lines(i).xyz, …),
-)
-```
-
-- **Reads reuse `ArrayExpr[E]`** — the indexing surface milestone 1 already
-  shipped, constant and `IntExpr` forms both. Keeping that type
-  address-space-agnostic is the one thing milestone 2 must not break.
-- **Writes are new.** `a(i)` returns the element expression `E`, which carries
-  no `:=`. Either a method (`a.set(i, value): Stmt`) or an assignable accessor
-  (`a.at(i) := value`, returning an `AssignTarget`). The second matches how
-  `ctx.out.color := …` already reads; the first is one fewer concept.
-- **`Var` only, not `Let`/`Const`.** Whether WGSL permits a runtime index into a
-  _value_ (non-reference) array is exactly the sort of thing to verify with
-  `naga` rather than assume; restricting local arrays to `var` sidesteps it.
-
-#### What it costs, honestly
-
-**An explicit declaration statement**, which no other local needs. Every local
-today declares itself on first `:=` (`expr.scala:64-68`); an array has no single
-first assignment, so `var lines: array<vec4<f32>, 3>;` has to be emitted on its
-own. In the ad-hoc style that is one extra statement in the `Block` (`lines.decl`
-above) and nothing else — the same shape as declaring any other local, one line
-longer — and it is the only local that needs one, which is worth a line in the
-docs.
-
-Plus one thing to say in the docs rather than discover: **dynamically indexing a
-function-local array is a known performance cliff** — it can push the array out
-of registers into scratch memory on some GPUs. Constant indices are free; a
-loop-variable index is not always.
-
-#### Status: milestone 3, decided later
-
-**Not built in milestone 2, and not committed to.** Nothing in milestone 2's
-surface depends on local arrays existing, and whether they are actually missing
-is a question that writing real loops answers better than reasoning does — so the
-decision waits until `loop` / `loopIf` / `unroll` are implemented, tested and
-used. This repo's rule is that a capability waits for a real consumer; the two
-`sketches/textures/` bodies are not it (they should stay unrolled).
-
-The one thing milestone 2 owes this section is to **keep `ArrayExpr[E]` the
-shared read surface for any array**, not a uniform-binding-specific type. That
-costs nothing and is the only choice that would be expensive to reverse. The
-local marker's name (`LocalArray[T, N]` above) and whether it is a second marker
-or one array type with an address-space parameter can be settled when it is
-built.
-
-If milestone 3 is not picked up soon after, this section lifts out cleanly —
-into `documents/independent-todos.md`, whose entries have exactly this shape
-(gap, required changes, priority), or into its own plan. It should not linger
-here as an appendix to a shipped feature.
 
 ### The induction variable's name
 
@@ -956,7 +882,6 @@ below).
    handle; it may live anywhere Scala scoping allows. Checked against the real
    emitter and against `naga`, this plays out differently for the two
    constructs:
-
    - **In `unroll` it is already correct.** All iterations share one scope, so a
      `Var` first assigned inside the body emits `var acc = …` in iteration 0 and
      `acc = …` in the rest — valid WGSL, accumulation intact. (This is the
@@ -974,7 +899,6 @@ identifier: 'acc'`), and an initializer that reads the var itself fails the
    used afterwards, the failure is loud.
 
    Two corollaries of the same mechanism, each worth a documented line:
-
    - **"First" means first _built_, not first _placed_.** The declaration is
      baked into the `Stmt` string at `:=` time, so statements pre-built into vals
      or an `Arr[Stmt]` carry it with them: `Block(second, first)` emits
@@ -1049,24 +973,27 @@ Settled ones are struck through with the outcome; two are still open (5 and 6).
    Recommended: **wait.** It is a two-line addition whenever someone actually
    shadows something, and every escape hatch shipped unused is API surface to
    document.
-6. **What the example is.** (open) Recommended: **one new example, two halves** — the
-   `count`-driven gradient from _The gradient, rewritten_ (not merely `loop`
-   swapped in for `unroll`: the masking and the clamped denominator disappear,
-   which is the point) and a second pass that is not about arrays at all.
+6. ~~What the example is.~~ **Settled: update one, add one.**
+   `examples/uniform_array_gradient/` is **rewritten onto `loop`** — it is the
+   example whose subject this changes, and _The gradient, rewritten_ below is
+   exactly that diff: the `active(i)` masking and the clamped denominator go
+   away, and a 2-stop band stops paying for 8 mixes. A **new
+   `examples/sdf_trace/`** covers what the gradient cannot: `loopIf` + `break`,
+   a per-fragment step count, and a loop that is not driven by an array at all.
 
-   **Not a variable-radius blur**, which was the earlier suggestion:
+   **Not a variable-radius blur**, which was the earlier suggestion for the
+   second example:
    `shader/lib/blur.scala:17` already provides a separable Gaussian with a
    runtime-controlled diameter. An example that re-rolls a library util teaches
    the opposite of what examples are for — if anything, the blur belongs in an
    example as a **call**, not as a loop to imitate.
 
-   My pick instead: a **2D SDF sphere-trace** — march a ray until it hits or
-   runs out of steps. It is the canonical `loopIf` + `break` shape, nothing in
-   the library does it, and it is genuinely unreachable without runtime loops
-   (the step count varies per fragment). The uniform-control-flow rule then gets
-   verified where it belongs — in the `naga` step of the test plan, on a shader
-   that samples inside a uniform-bounded loop — rather than by an example whose
-   only job would be to demonstrate a rule.
+   The sphere-trace took its place: nothing in the library does it, and it is
+   genuinely unreachable without runtime loops since the step count varies per
+   fragment. The uniform-control-flow rule then gets verified where it belongs —
+   in the `naga` step of the test plan, on a shader that samples inside a
+   uniform-bounded loop — rather than by an example whose only job would be to
+   demonstrate a rule.
 
 7. ~~Do local arrays ship in this milestone?~~ **Settled: no — they are
    milestone 3**, and the decision on whether to build them at all waits until
@@ -1123,7 +1050,11 @@ trap 2 is settled rather than assumed.
 4. The value-iterating `unroll` overload, plus a scaladoc line on `unroll` about
    interpolating the index into any name declared inside its body.
 5. `test/shader/Loops.test.scala`.
-6. The example, with the `naga` validation of its generated WGSL.
+6. Rewrite `examples/uniform_array_gradient/` onto `loop` (the milestone's own
+   before/after), and add `examples/sdf_trace/` for `loopIf` + `break`. Validate
+   both generated shaders with `naga`, plus one shader that samples a texture
+   inside a uniform-bounded loop — the check that trap 2 is settled rather than
+   assumed.
 7. In the sketch repo, after the library side is published: rewrite
    `sketches/textures/lines/Lines.scala:144-187` and
    `sketches/textures/moving-plates/MovingPlates.scala:171-331` onto `Block` +
@@ -1151,6 +1082,135 @@ trap 2 is settled rather than assumed.
   remain deferred. Point it here.
 - **`docs/skills/write-sketch/SKILL.md`** — check whether it enumerates the
   control-flow helpers; if it does, `loop` belongs in the list.
+
+---
+
+### Result: milestone 2
+
+Shipped as planned — `loop` (six bound overloads), `loopIf`, `break` /
+`continue` / `breakIf` / `continueIf`, the extension twins (`IntExpr.loop`,
+`Int.loop`, `Int.unroll`, `Arr.unroll`, `thenDo`, `thenLoop`, `thenBreak`,
+`thenContinue`), the by-name-body conversion, `ifChain` folded into `when`, and
+`ifElse` / `thenElse` deleted. All of it in `math/gpu/expr.scala`; no new file,
+no prelude change. `test/shader/Loops.test.scala` covers it in 23 cases, and
+`ControlFlow.test.scala` was migrated rather than rewritten.
+
+Four things worth recording:
+
+**1. `unroll` over values takes an `Arr[T]`, not a `Seq[T]`.** The plan wrote
+`Seq`, which would have dragged the Scala collection machinery into every
+downstream bundle — the library's own rule. `Arr` is the native equivalent and
+`Arr((0, 1), (1, 2))` reads the same at the call site.
+
+**2. `IntExpr` needed Int-literal arithmetic and comparison overloads.** `i - 1`
+did not compile: a bare `Int` cannot reach the `IntExpr` overloads, because
+`Conversion[Int, FloatExpr]` would make it `f32`. Rather than write `i - 1.i` in
+the first body that wanted it, `+ - * /` and `< <= > >= === !==` gained `Int`
+forms in the same overload sets (`int_expr.scala`, `expr.scala`) — the
+library-side fix the shader-DSL convention asks for.
+
+**3. The colon-block form strands the comma inside an argument list.** It parses
+and compiles, but `Block(a, loop(n): i => …, b)` leaves the separating comma on
+its own line after the dedent. Inside an argument list the paren form
+(`loop(n)(i => …)`) reads better, or hoist the loop to a named `val`. The colon
+form is for statement position and last arguments. Documented in the guide.
+
+**4. The uniform-control-flow question is settled, not assumed.** Three shaders
+went through `naga` 30.0.1: the rewritten gradient (`for` over `i32(count)`), the
+sphere trace (`while` with a compound condition and a `break`), and a
+`textureSample` inside a loop bounded by a uniform — `Validation successful` for
+all three. So a uniform bound does keep the body in uniform control flow; only a
+per-fragment bound or break forces `.sampleLevel` / `.load`.
+
+The examples: `examples/uniform_array_gradient/` is rewritten onto `loop` — its
+`active(i)` masking and clamped denominator are gone, exactly as _The gradient,
+rewritten_ predicted — and `examples/sdf_trace/` is new, marching per-fragment
+with `loopIf` + `break` and reading the closest approach back as a soft shadow.
+Both are registered in `examples/index.html`.
+
+Still open from this milestone: `loopNamed` (deliberately not added — no
+collision has happened yet), and in the sketch repo the `Arr[Stmt]` rewrites of
+`sketches/textures/lines/` and `sketches/textures/moving-plates/`, which the
+value-iterating `unroll` now makes possible.
+
+---
+
+## Milestone 3 — local arrays
+
+Status: **deferred, and not committed to.** The decision waits until milestone
+2's loop primitives have been implemented, tested and used — writing real loops
+is what will show whether indexed mutable scratch is actually missing.
+
+With uniform arrays (milestone 1) and loops (this one), the array story has
+exactly one gap left: **there is no way to declare an indexable `var` inside a
+shader body.** `UniformArray` is a binding — CPU-written, read-only in the
+shader — and a local is a single scalar/vector/matrix. So anything that needs
+_indexed mutable scratch_ is unreachable: sorting a small set, gather-then-scan,
+a running history of the last N taps, any loop whose accumulator is per-slot
+rather than a single value. It is also, concretely, what stops
+`sketches/textures/lines/` from being loop-shaped at all: its three lines are
+three separate `VarVec4` locals because `lines[i]` does not exist.
+
+### Shape
+
+WGSL wants `var lines: array<vec4<f32>, 3>;` at function scope (zero-initialised
+by default). The DSL pieces line up:
+
+```scala
+val lines = VarArray[Vec4, 3]("lines")   // ad-hoc, like LetVec4("cur")
+
+Block(
+  lines.decl,                            // var lines: array<vec4<f32>, 3>;
+  lines.set(0, vec4(…)),                 // element write
+  …,
+  loop(0, 3): i =>
+    col := col.mix(lines(i).xyz, …),
+)
+```
+
+- **Reads reuse `ArrayExpr[E]`** — the indexing surface milestone 1 already
+  shipped, constant and `IntExpr` forms both. Keeping that type
+  address-space-agnostic is the one thing milestone 2 must not break.
+- **Writes are new.** `a(i)` returns the element expression `E`, which carries
+  no `:=`. Either a method (`a.set(i, value): Stmt`) or an assignable accessor
+  (`a.at(i) := value`, returning an `AssignTarget`). The second matches how
+  `ctx.out.color := …` already reads; the first is one fewer concept.
+- **`Var` only, not `Let`/`Const`.** Whether WGSL permits a runtime index into a
+  _value_ (non-reference) array is exactly the sort of thing to verify with
+  `naga` rather than assume; restricting local arrays to `var` sidesteps it.
+
+### What it costs, honestly
+
+**An explicit declaration statement**, which no other local needs. Every local
+today declares itself on first `:=` (`expr.scala:64-68`); an array has no single
+first assignment, so `var lines: array<vec4<f32>, 3>;` has to be emitted on its
+own. In the ad-hoc style that is one extra statement in the `Block` (`lines.decl`
+above) and nothing else — the same shape as declaring any other local, one line
+longer — and it is the only local that needs one, which is worth a line in the
+docs.
+
+Plus one thing to say in the docs rather than discover: **dynamically indexing a
+function-local array is a known performance cliff** — it can push the array out
+of registers into scratch memory on some GPUs. Constant indices are free; a
+loop-variable index is not always.
+
+### Why it waits
+
+Nothing in milestone 2's surface depends on local arrays existing, and this
+repo's rule is that a capability waits for a real consumer — the two
+`sketches/textures/` bodies are not it (they should stay unrolled).
+
+The one thing milestone 2 owes this section is to **keep `ArrayExpr[E]` the
+shared read surface for any array**, not a uniform-binding-specific type. That
+costs nothing and is the only choice that would be expensive to reverse. The
+local marker's name (`LocalArray[T, N]` above) and whether it is a second marker
+or one array type with an address-space parameter can be settled when it is
+built.
+
+If milestone 3 is not picked up soon after, this section lifts out cleanly —
+into `documents/independent-todos.md`, whose entries have exactly this shape
+(gap, required changes, priority), or into its own plan. It should not linger
+here as an appendix to a shipped feature.
 
 ---
 

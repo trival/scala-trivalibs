@@ -69,8 +69,9 @@ def main(): Unit =
         val x = ctx.in.uv.x
         val col = ctx.locals.col
 
-        // Unrolled over the capacity — `MaxStops` is a compile-time literal, so
-        // this is a Scala loop emitting WGSL, not a loop in the shader.
+        // A loop over the LIVE stop count, not over the capacity. The band with
+        // 2 stops runs one iteration; only the array's length is fixed at
+        // `MaxStops`.
         //
         // Each step mixes the whole color so far toward the next stop by the
         // segment's own eased parameter. The mix factor saturates at 1 before
@@ -78,15 +79,16 @@ def main(): Unit =
         // gradient exactly and holds the final color past the last stop.
         Block(
           col := stops(0).rgb,
-          unroll(1, MaxStops)(i =>
-            val prev = stops(i - 1)
-            val cur = stops(i)
-            // The denominator is clamped because unused stops sit on top of
-            // each other; `live` zeroes their contribution anyway.
-            val t = ((x - prev.w) / (cur.w - prev.w).max(0.00001)).clamp01
-            val eased = t.pow(curves(i - 1).x)
-            val live = count.gte(i + 1)
-            col := col.mix(cur.rgb, eased * live),
+          loop(1, count.toI32)(i =>
+            val prev = LetVec4("prev")
+            val cur = LetVec4("cur")
+            val t = LetFloat("t")
+            Block(
+              prev := stops(i - 1),
+              cur := stops(i),
+              t := ((x - prev.w) / (cur.w - prev.w)).clamp01,
+              col := col.mix(cur.rgb, t.pow(curves(i - 1).x)),
+            ),
           ),
           ctx.out.color := vec4(col, 1.0),
         )

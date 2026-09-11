@@ -480,8 +480,10 @@ object Stmt:
 
   def ifBlock(cond: BoolExpr, body: Block): Stmt =
     s"  if (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
-  def ifElseBlock(cond: BoolExpr, thenBody: Block, elseBody: Block): Stmt =
-    s"  if (${cond.wgsl}) {\n${indentBlock(thenBody)}\n  } else {\n${indentBlock(elseBody)}\n  }"
+  def whileBlock(cond: BoolExpr, body: Block): Stmt =
+    s"  while (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
+  def forBlock(from: String, until: String, name: String, body: Block): Stmt =
+    s"  for (var $name: i32 = $from; $name < $until; $name++) {\n${indentBlock(body)}\n  }"
 
 given Conversion[Stmt, Block] = s => s
 
@@ -524,12 +526,122 @@ def select[T <: Expr](onFalse: T, onTrue: T, cond: BoolExpr): T =
     .raw(s"select(${onFalse.wgsl}, ${onTrue.wgsl}, ${cond.wgsl})")
     .asInstanceOf[T]
 
-/** Single-branch `if (cond) { ... }`. */
-def when(cond: BoolExpr, body: Block): Stmt = Stmt.ifBlock(cond, body)
+/** `if (cond) { ... }`, and the start of any `if` chain.
+  *
+  * The body is by-name and sits in its own parameter list, so it can be written
+  * as an indented block that is also a Scala scope — the place to declare the
+  * locals that belong to it:
+  *
+  * {{{
+  * when(uv.x < 0.5):
+  *   val tint = LetVec3("tint")
+  *   Block(tint := …, col := col * tint)
+  * .elseDo:
+  *   col := col * 0.5
+  * }}}
+  *
+  * The result is an [[IfChain]]: continue it with `.elseIf` / `.elseDo`, or use
+  * it directly where a `Stmt` or `Block` is expected.
+  */
+def when(cond: BoolExpr)(body: => Block): IfChain = Stmt.ifBlock(cond, body)
 
-/** Two-branch `if (cond) { ... } else { ... }`. */
-def ifElse(cond: BoolExpr, thenBody: Block, elseBody: Block): Stmt =
-  Stmt.ifElseBlock(cond, thenBody, elseBody)
+/** `while (cond) { ... }` — the condition-driven loop.
+  *
+  * Named for the DSL's own vocabulary rather than WGSL's: [[loop]] is the
+  * looping primitive (it emits a `for`), and `loopIf` is the same primitive
+  * driven by a condition instead of a count. The body is by-name, so it is a
+  * Scala scope like every other control-flow body.
+  *
+  * Use [[break]] / [[breakIf]] to leave it early.
+  */
+def loopIf(cond: BoolExpr)(body: => Block): Stmt = Stmt.whileBlock(cond, body)
+
+// ---------------------------------------------------------------------------
+// Counted loop — emits a WGSL `for`. The induction variable is the one
+// identifier the DSL invents, so it is derived from lexical nesting depth
+// (`i`, `j`, `k`, …): deterministic output, and it reads like hand-written
+// shader code. Siblings at the same depth share a name legally — each `for`
+// body is its own WGSL scope.
+// ---------------------------------------------------------------------------
+
+private val LoopVarNames = Arr("i", "j", "k", "l", "m", "n")
+private var loopDepth = 0
+
+private def forLoop(from: String, until: String)(
+    body: IntExpr => Block,
+): Stmt =
+  val name =
+    if loopDepth < LoopVarNames.length then LoopVarNames(loopDepth)
+    else s"i$loopDepth"
+  loopDepth += 1
+  val b = body(IntExpr(name))
+  loopDepth -= 1
+  Stmt.forBlock(from, until, name, b)
+
+/** Repeat a statement group at RUNTIME — emits a WGSL `for` loop over
+  * `0 until count`, with the index available to the body as an `IntExpr`.
+  *
+  * The counterpart of [[unroll]], and deliberately the same shape: the only
+  * difference at the call site is whether the bound is a build-time `Int` or a
+  * runtime `IntExpr`.
+  *
+  * {{{
+  * Block(
+  *   col := stops(0).rgb,
+  *   loop(1, ctx.bindings.count.toI32): i =>
+  *     val cur = LetVec4("cur")
+  *     Block(cur := stops(i), col := col.mix(cur.rgb, w(i))),
+  *   ctx.out.color := vec4(col, 1.0),
+  * )
+  * }}}
+  *
+  * A constant bound is allowed and is not the same as unrolling: `loop(64)`
+  * keeps the body once in the shader source, `unroll(64)` emits 64 copies and
+  * constant-folds the index into each. Pick by which of those you want.
+  *
+  * An accumulator `var` belongs OUTSIDE the loop — assign it before the loop so
+  * its declaration lands in the enclosing scope. A `var` first assigned inside
+  * the body is declared inside the loop's braces: re-initialised every
+  * iteration, and out of scope afterwards.
+  */
+def loop(count: IntExpr)(body: IntExpr => Block): Stmt =
+  forLoop("0", count.wgsl)(body)
+
+/** [[loop]] with a build-time constant bound — `loop(64)`. */
+def loop(count: Int)(body: IntExpr => Block): Stmt =
+  forLoop("0", count.toString)(body)
+
+/** [[loop]] over `from until until`. */
+def loop(from: IntExpr, until: IntExpr)(body: IntExpr => Block): Stmt =
+  forLoop(from.wgsl, until.wgsl)(body)
+
+/** [[loop]] over `from until until`, literal start. */
+def loop(from: Int, until: IntExpr)(body: IntExpr => Block): Stmt =
+  forLoop(from.toString, until.wgsl)(body)
+
+/** [[loop]] over `from until until`, literal end. */
+def loop(from: IntExpr, until: Int)(body: IntExpr => Block): Stmt =
+  forLoop(from.wgsl, until.toString)(body)
+
+/** [[loop]] over `from until until`, both literal. */
+def loop(from: Int, until: Int)(body: IntExpr => Block): Stmt =
+  forLoop(from.toString, until.toString)(body)
+
+// ---------------------------------------------------------------------------
+// Jumps
+// ---------------------------------------------------------------------------
+
+/** `break;` — leave the innermost enclosing loop. */
+val break: Stmt = "  break;"
+
+/** `continue;` — skip to the next iteration of the innermost loop. */
+val continue: Stmt = "  continue;"
+
+/** `if (cond) { break; }` — the `…If` twin of [[loopIf]]. */
+def breakIf(cond: BoolExpr): Stmt = Stmt.ifBlock(cond, break)
+
+/** `if (cond) { continue; }`. */
+def continueIf(cond: BoolExpr): Stmt = Stmt.ifBlock(cond, continue)
 
 /** Repeat a statement group once per index, at BUILD TIME — the index is a
   * Scala `Int`, so every use of it constant-folds and the emitted WGSL is
@@ -550,9 +662,11 @@ def ifElse(cond: BoolExpr, thenBody: Block, elseBody: Block): Stmt =
   * )
   * }}}
   *
-  * A `var` accumulated across the iterations must be declared before the
-  * unroll, as `col` is above — the first `:=` on a `Var` emits its declaration,
-  * and inside the body that would re-declare it every iteration.
+  * All iterations are emitted into the ENCLOSING scope, so any local declared
+  * inside the body needs the index in its name — `LetVec4(s"cur$i")` — or the
+  * second iteration re-declares it. (A `var` accumulated across iterations is
+  * fine either way: the first `:=` declares it and the rest assign, all in the
+  * one scope.)
   */
 def unroll(from: Int, until: Int)(body: Int => Block): Stmt =
   val parts = Arr[String]()
@@ -565,24 +679,74 @@ def unroll(from: Int, until: Int)(body: Int => Block): Stmt =
 /** [[unroll]] over `0 until count`. */
 def unroll(count: Int)(body: Int => Block): Stmt = unroll(0, count)(body)
 
-/** Multi-branch `if / else if / ... [/ else]` chain. Start with `ifChain`,
-  * append `.elseIf(...)` for each additional branch, terminate with
-  * `.orElse(...)` for a final else, or use the chain directly as a `Stmt` for
-  * an open-ended chain.
+/** [[unroll]] over the values of `xs`, with the index alongside — for the
+  * common case where the iteration is driven by build-time data rather than a
+  * range (a set of offsets, a fixed list of index pairs, a tap kernel).
+  *
+  * {{{
+  * unroll(Arr((0, 1), (1, 2), (0, 1))): (pair, i) =>
+  *   val a = LetVec4(s"a$i")
+  *   Block(a := …)
+  * }}}
+  */
+def unroll[T](xs: Arr[T])(body: (T, Int) => Block): Stmt =
+  val parts = Arr[String]()
+  var i = 0
+  while i < xs.length do
+    parts.push(Block.unwrap(body(xs(i), i)))
+    i += 1
+  parts.join("\n")
+
+/** An `if` chain in progress, as returned by [[when]] and `BoolExpr.thenDo`.
+  * Append `.elseIf(...)` for each additional branch and `.elseDo(...)` for a
+  * final else, or use it directly where a `Stmt` / `Block` is expected — it is
+  * a complete `if` statement at every step, not a builder awaiting a
+  * terminator.
   */
 opaque type IfChain = String
 
-def ifChain(cond: BoolExpr, body: Block): IfChain =
-  s"  if (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
-
 extension (chain: IfChain)
-  def elseIf(cond: BoolExpr, body: Block): IfChain =
+  def elseIf(cond: BoolExpr)(body: => Block): IfChain =
     s"$chain else if (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
-  def elseDo(body: Block): Stmt =
+  def elseDo(body: => Block): Stmt =
     s"$chain else {\n${indentBlock(body)}\n  }"
 
 given Conversion[IfChain, Stmt] = c => c
 given Conversion[IfChain, Block] = c => c
+
+// ---------------------------------------------------------------------------
+// Receiver forms of the loop constructs. Every control-flow construct has both
+// a function and an extension spelling; these are the non-BoolExpr receivers.
+// A bare `Int` here is a COUNT, not shader math — the `Conversion[Int,
+// FloatExpr]` that turns a literal into `f32(n)` applies to operands, never to
+// a receiver.
+// ---------------------------------------------------------------------------
+
+extension (count: IntExpr)
+  /** `count.loop(i => body)` — the receiver form of [[loop]]. */
+  @annotation.targetName("intExprLoop")
+  def loop(body: IntExpr => Block): Stmt = forLoop("0", count.wgsl)(body)
+
+extension (count: Int)
+  /** `64.loop(i => body)` — the receiver form of [[loop]] with a constant
+    * bound. Emits a `for` over a literal range; see [[unroll]] for the
+    * straight-line alternative.
+    */
+  @annotation.targetName("intLoop")
+  def loop(body: IntExpr => Block): Stmt = forLoop("0", count.toString)(body)
+
+  /** `64.unroll(i => body)` — the receiver form of [[unroll]]. */
+  @annotation.targetName("intUnroll")
+  def unroll(body: Int => Block): Stmt =
+    trivalibs.graphics.math.gpu.unroll(0, count)(body)
+
+extension [T](xs: Arr[T])
+  /** `xs.unroll((v, i) => body)` — the receiver form of [[unroll]] over
+    * values. Reads better than the function form: the data comes first.
+    */
+  @annotation.targetName("arrUnroll")
+  def unroll(body: (T, Int) => Block): Stmt =
+    trivalibs.graphics.math.gpu.unroll(xs)(body)
 
 extension (cond: BoolExpr)
   /** Branchless conditional: `cond.select(onTrue, onFalse)`. */
@@ -592,12 +756,19 @@ extension (cond: BoolExpr)
       .raw(s"select(${onFalse.wgsl}, ${onTrue.wgsl}, ${cond.wgsl})")
       .asInstanceOf[T]
 
-  /** `cond.thenDo(body)` — single-branch `if`. */
-  def thenDo(body: Block): Stmt = Stmt.ifBlock(cond, body)
+  /** `cond.thenDo(body)` — the receiver form of [[when]]. Continue it with
+    * `.elseIf` / `.elseDo`, or use it as a statement.
+    */
+  def thenDo(body: => Block): IfChain = Stmt.ifBlock(cond, body)
 
-  /** `cond.thenElse(thenBody, elseBody)` — `if`/`else` chain. */
-  def thenElse(thenBody: Block, elseBody: Block): Stmt =
-    Stmt.ifElseBlock(cond, thenBody, elseBody)
+  /** `cond.thenLoop(body)` — the receiver form of [[loopIf]]. */
+  def thenLoop(body: => Block): Stmt = Stmt.whileBlock(cond, body)
+
+  /** `cond.thenBreak` — the receiver form of [[breakIf]]. */
+  def thenBreak: Stmt = Stmt.ifBlock(cond, break)
+
+  /** `cond.thenContinue` — the receiver form of [[continueIf]]. */
+  def thenContinue: Stmt = Stmt.ifBlock(cond, continue)
 
   @annotation.targetName("boolAnd")
   def &&(other: BoolExpr): BoolExpr =
@@ -642,6 +813,22 @@ extension (a: IntExpr)
   def ===(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} == ${b.wgsl})")
   @annotation.targetName("intNe")
   def !==(b: IntExpr): BoolExpr = BoolExpr(s"(${a.wgsl} != ${b.wgsl})")
+
+  // Int-literal forms — loop conditions are where literals actually show up,
+  // and a bare `Int` cannot reach the overloads above (it would convert to
+  // FloatExpr).
+  @annotation.targetName("intLtLit")
+  def <(b: Int): BoolExpr = BoolExpr(s"(${a.wgsl} < $b)")
+  @annotation.targetName("intLteLit")
+  def <=(b: Int): BoolExpr = BoolExpr(s"(${a.wgsl} <= $b)")
+  @annotation.targetName("intGtLit")
+  def >(b: Int): BoolExpr = BoolExpr(s"(${a.wgsl} > $b)")
+  @annotation.targetName("intGteLit")
+  def >=(b: Int): BoolExpr = BoolExpr(s"(${a.wgsl} >= $b)")
+  @annotation.targetName("intEqLit")
+  def ===(b: Int): BoolExpr = BoolExpr(s"(${a.wgsl} == $b)")
+  @annotation.targetName("intNeLit")
+  def !==(b: Int): BoolExpr = BoolExpr(s"(${a.wgsl} != $b)")
 
 extension (a: UIntExpr)
   @annotation.targetName("uintLt")

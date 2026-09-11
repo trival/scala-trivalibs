@@ -256,7 +256,7 @@ program.frag: ctx =>
 `given Conversion[Vec3, Vec3Expr]` (it would make every GPU extension apply to
 CPU values, so `v.xy` becomes an ambiguous extension between the CPU and GPU
 swizzles in any file importing both — i.e. the standard sketch preamble). So a
-CPU value as the *left* operand does not compile — the compiler tries the CPU
+CPU value as the _left_ operand does not compile — the compiler tries the CPU
 extensions, fails, and does not fall back:
 
 ```scala
@@ -308,15 +308,70 @@ that path isn't wrapped in the DSL yet.)
 
 ## Control flow
 
+Every construct has a **function form and an extension form** — pick whichever
+reads better at the call site; they emit identical WGSL.
+
 ```scala
 // branchless select (WGSL select(onFalse, onTrue, cond)):
 ctx.out.color := select(blackVec4, color, brightness > threshold)
 // or:  (brightness > threshold).select(color, blackVec4)
 
-when(cond, Block(...))                       // if
-ifElse(cond, thenBlock, elseBlock)           // if / else
-ifChain(c1, b1).elseIf(c2, b2).elseDo(b3)    // if / else if / else
+when(cond)(body)                                  // if        · cond.thenDo(body)
+when(c1)(b1).elseIf(c2)(b2).elseDo(b3)            // if / else if / else
+loopIf(cond)(body)                                // while     · cond.thenLoop(body)
+loop(count)(i => body)                            // for       · count.loop(i => body)
+unroll(count)(i => body)                          // no loop   · count.unroll(i => body)
+unroll(values)((v, i) => body)                    //           · values.unroll((v, i) => body)
+break                                             // break;
+continue                                          // continue;
+breakIf(cond)                                     // if (c) { break; }    · cond.thenBreak
+continueIf(cond)                                  // if (c) { continue; } · cond.thenContinue
 ```
+
+Bodies are **by-name and in their own parameter list**, so an indented block is
+also a Scala scope — the place to declare the locals that belong to it:
+
+```scala
+when(uv.x < 0.5):
+  val tint = LetVec3("tint")
+  Block(tint := vec3(0.9, 0.4, 0.2), col := col * tint)
+.elseDo:
+  col := col * 0.5
+```
+
+(That reads best in statement position or as the last argument. Inside an
+argument list — `Block(a, when(c)(b), d)` — use the paren form, or the comma
+after the indented block ends up stranded on its own line.)
+
+### `loop` vs `unroll`: runtime or build time
+
+The two are the same shape, and the bound's type is the whole difference:
+
+```scala
+unroll(1, MaxStops)(i => col := col.mix(stops(i).rgb, w(i)))  // Int     → straight-line WGSL
+loop  (1, count)   (i => col := col.mix(stops(i).rgb, w(i)))  // IntExpr → a for-loop in WGSL
+```
+
+`unroll` runs at **build time**: the index is a Scala `Int`, every use of it
+constant-folds, and the emitted WGSL has no loop in it. `loop` emits a real
+`for`. A constant bound is allowed on both and is not the same choice —
+`unroll(64)` puts 64 copies of the body in the shader source, `loop(64)` keeps
+one.
+
+Two things follow from how `unroll` emits:
+
+- all iterations share the **enclosing** scope, so a local declared inside the
+  body needs the index in its name — `LetVec4(s"cur$i")`;
+- a `var` accumulated across iterations is fine — the first `:=` declares it and
+  the rest assign, all in one scope.
+
+A `loop` body is its own WGSL scope, so neither applies: plain `LetVec4("cur")`
+inside the callback is correct. What does apply there is the accumulator rule —
+see [gotchas](gotchas.md#a-var-declares-where-its-first-assignment-lands).
+
+A bare `Int` as a **receiver** (`64.loop`, `64.unroll`, `4.i`) is a count, not
+shader math — the conversion that makes a literal `f32(n)` applies to operands
+only.
 
 ## Helper functions (WgslFn)
 
