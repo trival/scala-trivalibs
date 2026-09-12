@@ -337,10 +337,6 @@ when(uv.x < 0.5):
   col := col * 0.5
 ```
 
-(That reads best in statement position or as the last argument. Inside an
-argument list — `Block(a, when(c)(b), d)` — use the paren form, or the comma
-after the indented block ends up stranded on its own line.)
-
 ### `loop` vs `unroll`: runtime or build time
 
 The two are the same shape, and the bound's type is the whole difference:
