@@ -1,13 +1,15 @@
 # Uniform Arrays — `UniformArray[T, N]`
 
-Status: **milestone 1 implemented in trivalibs and rendering**, with
-`examples/uniform_array_gradient/` as the reference implementation and
-demonstration. Two design points changed under implementation — see _Result_.
+Status: **done.** Milestone 1 (`UniformArray[T, N]`) is implemented in trivalibs
+and rendering, with `examples/uniform_array_gradient/` as the reference
+implementation and demonstration; two design points changed under implementation
+— see _Result_. **Milestone 2 — loop primitives in the DSL — is implemented**;
+see _Result: milestone 2_ at the end of its section for what changed under
+implementation.
 
-**Milestone 2 — loop primitives in the DSL — is implemented**; see _Result:
-milestone 2_ at the end of its section for what changed under implementation.
-**Milestone 3 — local arrays — is deferred**, to be decided now that loops
-exist.
+**Milestone 3 — local arrays — is deferred and lifted out of this plan**, to
+[independent-todos.md](../independent-todos.md) § _Shader DSL_, where its gap,
+API shape and cost are recorded. It is not committed to.
 
 ## Where this was planned before
 
@@ -1135,82 +1137,18 @@ value-iterating `unroll` now makes possible.
 
 ---
 
-## Milestone 3 — local arrays
+## Milestone 3 — local arrays: deferred, lifted out
 
-Status: **deferred, and not committed to.** The decision waits until milestone
-2's loop primitives have been implemented, tested and used — writing real loops
-is what will show whether indexed mutable scratch is actually missing.
+An indexable `var` inside a shader body (`var lines: array<vec4<f32>, 3>;`) was
+planned here as milestone 3 and is **not** part of this feature. It waited on
+milestone 2 to show whether indexed mutable scratch is actually missing; loops
+shipped, nothing needs it yet, so the section moved to
+[independent-todos.md](../independent-todos.md) § _Shader DSL_ with its gap, API
+shape, cost and priority intact.
 
-With uniform arrays (milestone 1) and loops (this one), the array story has
-exactly one gap left: **there is no way to declare an indexable `var` inside a
-shader body.** `UniformArray` is a binding — CPU-written, read-only in the
-shader — and a local is a single scalar/vector/matrix. So anything that needs
-_indexed mutable scratch_ is unreachable: sorting a small set, gather-then-scan,
-a running history of the last N taps, any loop whose accumulator is per-slot
-rather than a single value. It is also, concretely, what stops
-`sketches/textures/lines/` from being loop-shaped at all: its three lines are
-three separate `VarVec4` locals because `lines[i]` does not exist.
-
-### Shape
-
-WGSL wants `var lines: array<vec4<f32>, 3>;` at function scope (zero-initialised
-by default). The DSL pieces line up:
-
-```scala
-val lines = VarArray[Vec4, 3]("lines")   // ad-hoc, like LetVec4("cur")
-
-Block(
-  lines.decl,                            // var lines: array<vec4<f32>, 3>;
-  lines.set(0, vec4(…)),                 // element write
-  …,
-  loop(0, 3): i =>
-    col := col.mix(lines(i).xyz, …),
-)
-```
-
-- **Reads reuse `ArrayExpr[E]`** — the indexing surface milestone 1 already
-  shipped, constant and `IntExpr` forms both. Keeping that type
-  address-space-agnostic is the one thing milestone 2 must not break.
-- **Writes are new.** `a(i)` returns the element expression `E`, which carries
-  no `:=`. Either a method (`a.set(i, value): Stmt`) or an assignable accessor
-  (`a.at(i) := value`, returning an `AssignTarget`). The second matches how
-  `ctx.out.color := …` already reads; the first is one fewer concept.
-- **`Var` only, not `Let`/`Const`.** Whether WGSL permits a runtime index into a
-  _value_ (non-reference) array is exactly the sort of thing to verify with
-  `naga` rather than assume; restricting local arrays to `var` sidesteps it.
-
-### What it costs, honestly
-
-**An explicit declaration statement**, which no other local needs. Every local
-today declares itself on first `:=` (`expr.scala:64-68`); an array has no single
-first assignment, so `var lines: array<vec4<f32>, 3>;` has to be emitted on its
-own. In the ad-hoc style that is one extra statement in the `Block` (`lines.decl`
-above) and nothing else — the same shape as declaring any other local, one line
-longer — and it is the only local that needs one, which is worth a line in the
-docs.
-
-Plus one thing to say in the docs rather than discover: **dynamically indexing a
-function-local array is a known performance cliff** — it can push the array out
-of registers into scratch memory on some GPUs. Constant indices are free; a
-loop-variable index is not always.
-
-### Why it waits
-
-Nothing in milestone 2's surface depends on local arrays existing, and this
-repo's rule is that a capability waits for a real consumer — the two
-`sketches/textures/` bodies are not it (they should stay unrolled).
-
-The one thing milestone 2 owes this section is to **keep `ArrayExpr[E]` the
-shared read surface for any array**, not a uniform-binding-specific type. That
-costs nothing and is the only choice that would be expensive to reverse. The
-local marker's name (`LocalArray[T, N]` above) and whether it is a second marker
-or one array type with an address-space parameter can be settled when it is
-built.
-
-If milestone 3 is not picked up soon after, this section lifts out cleanly —
-into `documents/independent-todos.md`, whose entries have exactly this shape
-(gap, required changes, priority), or into its own plan. It should not linger
-here as an appendix to a shipped feature.
+The one thing milestone 2 owed it — keeping `ArrayExpr[E]` the shared read
+surface for any array rather than a uniform-binding-specific type — is honored in
+what shipped.
 
 ---
 

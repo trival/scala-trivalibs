@@ -156,6 +156,72 @@ loop.
 
 ---
 
+## Shader DSL
+
+### 🔄 Local arrays — indexable `var` inside a shader body
+
+Lifted out of
+[uniform-arrays-plan.md](done/uniform-arrays-plan.md) as its milestone 3 when
+milestones 1 (`UniformArray[T, N]`) and 2 (loop primitives) shipped. **Deferred,
+and not committed to** — the API shape below is decided, the decision to build it
+is not.
+
+**Gap:** there is no way to declare an indexable `var` inside a shader body.
+`UniformArray` is a binding — CPU-written, read-only in the shader — and a local
+is a single scalar/vector/matrix. So anything needing _indexed mutable scratch_
+is unreachable: sorting a small set, gather-then-scan, a running history of the
+last N taps, any loop whose accumulator is per-slot rather than a single value.
+It is also what stops `sketches/textures/lines/` from being loop-shaped at all:
+its three lines are three separate `VarVec4` locals because `lines[i]` does not
+exist.
+
+**Shape.** WGSL wants `var lines: array<vec4<f32>, 3>;` at function scope
+(zero-initialised by default). The DSL pieces line up:
+
+```scala
+val lines = VarArray[Vec4, 3]("lines")   // ad-hoc, like LetVec4("cur")
+
+Block(
+  lines.decl,                            // var lines: array<vec4<f32>, 3>;
+  lines.set(0, vec4(…)),                 // element write
+  …,
+  loop(0, 3): i =>
+    col := col.mix(lines(i).xyz, …),
+)
+```
+
+**Required changes:**
+
+- **Reads reuse `ArrayExpr[E]`** — the indexing surface milestone 1 shipped,
+  constant and `IntExpr` forms both. That type is already address-space-agnostic,
+  which was the one thing milestone 2 had to preserve; it did.
+- **Writes are new.** `a(i)` returns the element expression `E`, which carries no
+  `:=`. Either a method (`a.set(i, value): Stmt`) or an assignable accessor
+  (`a.at(i) := value`, returning an `AssignTarget`). The second matches how
+  `ctx.out.color := …` already reads; the first is one fewer concept.
+- **`Var` only, not `Let`/`Const`.** Whether WGSL permits a runtime index into a
+  _value_ (non-reference) array is to be verified with `naga` rather than
+  assumed; restricting local arrays to `var` sidesteps it.
+- The local marker's name (`VarArray` / `LocalArray[T, N]`) and whether it is a
+  second marker or one array type with an address-space parameter can be settled
+  when it is built.
+
+**What it costs, honestly:** an **explicit declaration statement**, which no
+other local needs. Every local today declares itself on first `:=`
+(`expr.scala:64-68`); an array has no single first assignment, so
+`var lines: array<vec4<f32>, 3>;` has to be emitted on its own — one extra
+statement in the `Block` and nothing else, and the only local that needs one,
+worth a line in the docs. Plus one thing to document rather than discover:
+**dynamically indexing a function-local array is a known performance cliff** — it
+can push the array out of registers into scratch memory on some GPUs. Constant
+indices are free; a loop-variable index is not always.
+
+**Priority:** Low — nothing depends on it, and a capability waits for a real
+consumer here. The two `sketches/textures/` bodies are not it (they should stay
+unrolled). Revisit when a shader genuinely needs indexed mutable scratch.
+
+---
+
 ## ✅ Completed
 
 ---

@@ -37,7 +37,7 @@ Shipped:
   chain without a final else can be used directly as a statement.
 
 **Loops shipped later**, in milestone 2 of
-[uniform-arrays-plan.md](../uniform-arrays-plan.md) — `loop` / `loopIf` /
+[uniform-arrays-plan.md](uniform-arrays-plan.md) — `loop` / `loopIf` /
 `break` / `continue`, plus the by-name-body conversion that folded `ifChain`
 into `when` and removed `ifElse` / `thenElse`. The remaining deferred items from
 "Out of Scope" stay deferred (numeric `&&`/`||`/`!`, numeric `eq`/`ne`, vector
