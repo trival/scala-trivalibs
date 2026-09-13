@@ -42,8 +42,21 @@ WGSL rejects the redefinition.
 
 `unroll` is the exception that needs no care here: its iterations share one
 scope, so a `var` first assigned in the body declares once and assigns after.
-What _unroll_ needs instead is unique names for locals declared per iteration —
-`LetVec4(s"cur$i")`.
+What _unroll_ needs instead is a plan for locals declared per iteration, since
+they land in the shared scope and the second iteration would redeclare them.
+Either give each a name carrying the index — `LetVec4(s"cur$i")` — or wrap the
+body in `scope`, which gives every iteration its own WGSL block so plain
+`LetVec4("cur")` is correct in all of them:
+
+```scala
+unroll(3): i =>
+  scope:
+    val cur = LetVec4("cur")   // a separate `cur` per iteration
+    Block(cur := stops(i), col := col.mix(cur.rgb, w(i)))
+```
+
+The accumulator rule applies to `scope` exactly as to `loop`: `col` above is
+seeded outside, so only its assignment is inside the braces.
 
 ### Sampling inside a loop
 

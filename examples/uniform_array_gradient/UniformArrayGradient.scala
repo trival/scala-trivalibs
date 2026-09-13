@@ -25,8 +25,8 @@ import scala.scalajs.js.annotation.*
 // set.
 // ---------------------------------------------------------------------------
 
-/** Capacity of the uniform arrays — the WGSL `array<vec4<f32>, N>` length.
-  * A band uses between 2 and this many stops; `count` says how many are live.
+/** Capacity of the uniform arrays — the WGSL `array<vec4<f32>, N>` length. A
+  * band uses between 2 and this many stops; `count` says how many are live.
   */
 type MaxStops = 8
 val MaxStops: Int = valueOf[MaxStops]
@@ -108,7 +108,8 @@ def main(): Unit =
     // -----------------------------------------------------------------------
 
     /** Stop positions: evenly spaced, then jittered by less than half a spacing
-      * so they stay strictly increasing. First and last stay pinned to the ends.
+      * so they stay strictly increasing. First and last stay pinned to the
+      * ends.
       */
     def stopPositions(count: Int): Arr[Double] =
       val spacing = 1.0 / (count - 1)
@@ -125,7 +126,8 @@ def main(): Unit =
       val positions = stopPositions(count)
       val out = Arr[Vec4]()
       for i <- 0 until count do
-        val c = Vec3(rand(), randInRange(0.45, 0.95), randInRange(0.35, 1.0)).hsv2rgb
+        val c =
+          Vec3(rand(), randInRange(0.45, 0.95), randInRange(0.35, 1.0)).hsv2rgb
         out.push(Vec4(c.x, c.y, c.z, positions(i)))
       out
 

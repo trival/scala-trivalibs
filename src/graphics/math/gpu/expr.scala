@@ -532,15 +532,19 @@ export Expr.{
 // Stmt and Block opaque types
 // ---------------------------------------------------------------------------
 
-/** A single WGSL statement (an assignment, declaration, or `if`). Produced by
-  * `:=`, the control-flow helpers, or `Stmt.raw`.
-  */
-opaque type Stmt = String
-
-/** A sequence of [[Stmt]]s — the body returned by a `vert`/`frag` block. Build
-  * with `Block(stmt1, stmt2, …)`; a single `Stmt` also converts to a `Block`.
+/** A group of WGSL statements — the body returned by a `vert`/`frag` block.
+  * Build with `Block(part1, part2, …)`, where each part is itself a `Block`, so
+  * groups nest to any depth and flatten into one statement list. Every
+  * statement-producing construct in the DSL is a `Block`: `:=`, `when`, `loop`,
+  * `unroll`, `scope`, and any helper that returns a group.
   */
 opaque type Block = String
+
+/** A single WGSL statement (an assignment, declaration, or `if`). Produced by
+  * `:=`, the control-flow helpers, or `Stmt.raw`. A `Stmt` IS a [[Block]] — the
+  * narrower type only documents that exactly one statement comes out.
+  */
+opaque type Stmt <: Block = String
 
 object Stmt:
   inline def assign(target: String, value: Expr): Stmt =
@@ -565,18 +569,40 @@ object Stmt:
     s"  while (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
   def forBlock(from: String, until: String, name: String, body: Block): Stmt =
     s"  for (var $name: i32 = $from; $name < $until; $name++) {\n${indentBlock(body)}\n  }"
-
-given Conversion[Stmt, Block] = s => s
+  def scopeBlock(body: Block): Stmt =
+    s"  {\n${indentBlock(body)}\n  }"
 
 object Block:
-  /** Combine statements into a shader body: `Block(out.color := …, …)`. */
-  def apply(stmts: Stmt*): Block = stmts.mkString("\n")
-
-  /** Combine a dynamically-built array of statements into a shader body — the
-    * js-native counterpart to the varargs `apply`, for statements accumulated
-    * in an `Arr` (e.g. build-time-unrolled loops). Compiles to `Array.join`.
+  /** Combine parts into a shader body: `Block(out.color := …, …)`. Each part is
+    * a `Block` itself, so a nested group — an `unroll`, a `when`, a helper that
+    * returns several statements — is a legal argument and flattens into the
+    * enclosing list. [[empty]] parts contribute no line.
     */
-  def apply(stmts: Arr[Stmt]): Block = stmts.join("\n")
+  def apply(parts: Block*): Block =
+    val out = Arr[String]()
+    var i = 0
+    while i < parts.length do
+      val p = parts(i)
+      if p.length > 0 then out.push(p)
+      i += 1
+    out.join("\n")
+
+  /** Combine a dynamically-built array of parts into a shader body — the
+    * js-native counterpart to the varargs `apply`, for parts accumulated in an
+    * `Arr`. Compiles to a `while` + `Array.join`.
+    */
+  def apply(parts: Arr[Block]): Block =
+    val out = Arr[String]()
+    var i = 0
+    while i < parts.length do
+      val p = parts(i)
+      if p.length > 0 then out.push(p)
+      i += 1
+    out.join("\n")
+
+  /** The empty group — emits nothing, and contributes no line to an enclosing
+    * `Block`. The "nothing to emit" branch of a build-time conditional.
+    */
   def empty: Block = ""
   def unwrap(b: Block): String = b.asInstanceOf[String]
 
@@ -636,6 +662,27 @@ def when(cond: BoolExpr)(body: => Block): IfChain = Stmt.ifBlock(cond, body)
   * Use [[break]] / [[breakIf]] to leave it early.
   */
 def loopIf(cond: BoolExpr)(body: => Block): Stmt = Stmt.whileBlock(cond, body)
+
+/** `{ ... }` — a bare WGSL scope, with no condition and no loop attached.
+  *
+  * The body is by-name and in its own parameter list, so it is a Scala scope
+  * too, and the locals that belong to it are declared inside it. Use it to give
+  * repeated code its own WGSL scope: sibling scopes may declare the same names,
+  * so an [[unroll]]ed body no longer needs the index in its local names.
+  *
+  * {{{
+  * unroll(sortPairs): (pair, _) =>
+  *   scope:
+  *     val hi = LetVec4("hi")
+  *     Block(hi := …, lines(pair._1) := hi)
+  * }}}
+  *
+  * The accumulator rule is the same as for [[loop]] and [[when]]: a `var` read
+  * after the scope must be first assigned OUTSIDE it, or its declaration lands
+  * inside the braces and is gone at the closing one. Assigning an outer `var`
+  * from within is fine.
+  */
+def scope(body: => Block): Stmt = Stmt.scopeBlock(body)
 
 // ---------------------------------------------------------------------------
 // Counted loop — emits a WGSL `for`. The induction variable is the one
@@ -749,16 +796,17 @@ def continueIf(cond: BoolExpr): Stmt = Stmt.ifBlock(cond, continue)
   * fine either way: the first `:=` declares it and the rest assign, all in the
   * one scope.)
   */
-def unroll(from: Int, until: Int)(body: Int => Block): Stmt =
+def unroll(from: Int, until: Int)(body: Int => Block): Block =
   val parts = Arr[String]()
   var i = from
   while i < until do
-    parts.push(Block.unwrap(body(i)))
+    val p = Block.unwrap(body(i))
+    if p.length > 0 then parts.push(p)
     i += 1
   parts.join("\n")
 
 /** [[unroll]] over `0 until count`. */
-def unroll(count: Int)(body: Int => Block): Stmt = unroll(0, count)(body)
+def unroll(count: Int)(body: Int => Block): Block = unroll(0, count)(body)
 
 /** [[unroll]] over the values of `xs`, with the index alongside — for the
   * common case where the iteration is driven by build-time data rather than a
@@ -770,11 +818,12 @@ def unroll(count: Int)(body: Int => Block): Stmt = unroll(0, count)(body)
   *   Block(a := …)
   * }}}
   */
-def unroll[T](xs: Arr[T])(body: (T, Int) => Block): Stmt =
+def unroll[T](xs: Arr[T])(body: (T, Int) => Block): Block =
   val parts = Arr[String]()
   var i = 0
   while i < xs.length do
-    parts.push(Block.unwrap(body(xs(i), i)))
+    val p = Block.unwrap(body(xs(i), i))
+    if p.length > 0 then parts.push(p)
     i += 1
   parts.join("\n")
 
@@ -784,16 +833,13 @@ def unroll[T](xs: Arr[T])(body: (T, Int) => Block): Stmt =
   * a complete `if` statement at every step, not a builder awaiting a
   * terminator.
   */
-opaque type IfChain = String
+opaque type IfChain <: Stmt = String
 
 extension (chain: IfChain)
   def elseIf(cond: BoolExpr)(body: => Block): IfChain =
     s"$chain else if (${cond.wgsl}) {\n${indentBlock(body)}\n  }"
   def elseDo(body: => Block): Stmt =
     s"$chain else {\n${indentBlock(body)}\n  }"
-
-given Conversion[IfChain, Stmt] = c => c
-given Conversion[IfChain, Block] = c => c
 
 // ---------------------------------------------------------------------------
 // Receiver forms of the loop constructs. Every control-flow construct has both
@@ -818,16 +864,23 @@ extension (count: Int)
 
   /** `64.unroll(i => body)` — the receiver form of [[unroll]]. */
   @annotation.targetName("intUnroll")
-  def unroll(body: Int => Block): Stmt =
+  def unroll(body: Int => Block): Block =
     trivalibs.graphics.math.gpu.unroll(0, count)(body)
 
 extension [T](xs: Arr[T])
-  /** `xs.unroll((v, i) => body)` — the receiver form of [[unroll]] over
-    * values. Reads better than the function form: the data comes first.
+  /** `xs.unroll((v, i) => body)` — the receiver form of [[unroll]] over values.
+    * Reads better than the function form: the data comes first.
     */
   @annotation.targetName("arrUnroll")
-  def unroll(body: (T, Int) => Block): Stmt =
+  def unroll(body: (T, Int) => Block): Block =
     trivalibs.graphics.math.gpu.unroll(xs)(body)
+
+  /** `xs.unroll(v => body)` — [[unroll]] over values when the index is not
+    * needed.
+    */
+  @annotation.targetName("arrUnrollNoIdx")
+  def unroll(body: T => Block): Block =
+    trivalibs.graphics.math.gpu.unroll(xs)((v, _) => body(v))
 
 extension (cond: BoolExpr)
   /** Branchless conditional: `cond.select(onTrue, onFalse)`. */

@@ -304,6 +304,23 @@ val world = wh.xyz / wh.w
 (For shadow-map PCF you'd want a comparison sampler + `textureSampleCompare`;
 that path isn't wrapped in the DSL yet.)
 
+## Naming: uppercase is a type, lowercase is an operation
+
+The DSL follows Scala's own convention, with one deliberate exception, and
+knowing which is which tells you what you can write in a type position:
+
+- **Uppercase** names are **types** (and namespace objects): `Block`, `Stmt`,
+  `FloatExpr`, `Vec3Expr`, `LetVec2`, `VarVec3`, `WgslFn`, and the shader-lib
+  namespaces `Color`, `Hash`, `Simplex`. `LetVec2("p")` looks like a call
+  because the companion constructs one — the name is still the type.
+- **Lowercase** names are **operations**: `when`, `loop`, `loopIf`, `unroll`,
+  `scope`, `select`, `break`, `continue`, `ret`, `mix`, and every extension
+  method. None of them names a type.
+- **The exception**: `vec2` / `vec3` / `vec4` and `ivec*` / `uvec*` are
+  lowercase because WGSL spells them that way. Their CPU counterparts `Vec2` /
+  `Vec3` are types, so the pair reads CPU-vs-GPU — but that is a consequence,
+  not the rule. Plenty of GPU-side names are uppercase, because they are types.
+
 ## Control flow
 
 Every construct has a **function form and an extension form** — pick whichever
@@ -320,6 +337,7 @@ loopIf(cond)(body)                                // while     · cond.thenLoop(
 loop(count)(i => body)                            // for       · count.loop(i => body)
 unroll(count)(i => body)                          // no loop   · count.unroll(i => body)
 unroll(values)((v, i) => body)                    //           · values.unroll((v, i) => body)
+scope(body)                                       // { ... }   — a bare WGSL scope
 break                                             // break;
 continue                                          // continue;
 breakIf(cond)                                     // if (c) { break; }    · cond.thenBreak
@@ -336,6 +354,36 @@ when(uv.x < 0.5):
 .elseDo:
   col := col * 0.5
 ```
+
+`scope` is the same thing with no condition attached — a plain WGSL `{ ... }`.
+Its use is giving repeated code its own scope, so sibling copies may declare the
+same local names; see
+[gotchas](gotchas.md#a-var-declares-where-its-first-assignment-lands).
+
+### Blocks nest
+
+A `Block` part is itself a `Block`, so a group composes wherever a statement
+does — no accumulator array, and a helper may return several statements:
+
+```scala
+def plate(i: Int): Block =
+  Block(uvs(i) := …, heights(i) := …)
+
+Block(
+  uv := …,                       // a single statement
+  unroll(4)(plate),              // a group
+  when(hit)(col := tint),        // a branch
+  Block.empty,                   // nothing at all — contributes no line
+  ctx.out.color := vec4(col, 1.0),
+)
+```
+
+Everything statement-shaped in the DSL is a `Block`: `:=`, `when`, `loop`,
+`loopIf`, `unroll`, `scope`, `break`. `Stmt` is the narrower type that says
+"exactly one statement" — every `Stmt` is a `Block`, not the other way round.
+`Block.empty` is the "emit nothing" part, for the dead branch of a build-time
+`if`. To read the emitted WGSL out of a `Block` (in a test, say), use
+`Block.unwrap` — the type is opaque.
 
 ### `loop` vs `unroll`: runtime or build time
 
