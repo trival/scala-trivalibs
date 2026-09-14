@@ -1,7 +1,10 @@
 package trivalibs.graphics.shader
 
 import trivalibs.graphics.buffers.BufferBinding
+import trivalibs.graphics.buffers.UniformArray
+import trivalibs.graphics.buffers.UniformValue
 import trivalibs.graphics.math.gpu.Expr.Sampler
+import trivalibs.graphics.painter.GPUDevice
 import trivalibs.utils.js.Arr
 
 import scala.NamedTuple.AnyNamedTuple
@@ -270,6 +273,95 @@ object derive:
     case SharedUniform[?]   => T
     case _                  => FragmentUniform[T]
 
+  /** Make (or update) the uniform binding for field `Name` of schema `U` from a
+    * raw value.
+    *
+    * The schema is consulted for one reason: a value may not be able to carry
+    * its own uniform type. The only such case today is a `UniformArray` field
+    * bound from a plain `Arr` — the capacity `N` is not inferable from the
+    * values, but it is right here in the field's declared type. Everything else
+    * is stored as the value's own type, including an `Arr` whose element type
+    * does not match; [[checkUniformFieldType]] rejects that one first.
+    *
+    * A `transparent inline` walk rather than a match type because `U` is
+    * usually a named-tuple *alias*, which match types will not reduce. The
+    * binding is built here, at the field, rather than returned as an adapted
+    * value: an inline method body is typed against its abstract parameters, so
+    * a refined result type would be lost on the way out.
+    */
+  inline def bindUniformFieldValue[Name <: String, V, U](
+      device: GPUDevice,
+      existing: BufferBinding[?, ?] | Null,
+      value: V,
+  ): BufferBinding[?, ?] =
+    inline erasedValue[U] match
+      case _: AnyNamedTuple =>
+        bindFieldValueImpl[
+          Name,
+          V,
+          NamedTuple.Names[U & AnyNamedTuple],
+          NamedTuple.DropNames[U & AnyNamedTuple],
+        ](device, existing, value)
+
+  private inline def bindFieldValueImpl[
+      Name <: String,
+      V,
+      Names <: Tuple,
+      Types <: Tuple,
+  ](
+      device: GPUDevice,
+      existing: BufferBinding[?, ?] | Null,
+      value: V,
+  ): BufferBinding[?, ?] =
+    inline (erasedValue[Names], erasedValue[Types]) match
+      case (_: EmptyTuple, _) =>
+        error("Binding name not found in Uniforms type")
+      case (_: (name *: namesRest), _: (head *: typesRest)) =>
+        inline constValue[name] match
+          case _: Name =>
+            bindAsField[UnwrapUniform[head], V](device, existing, value)
+          case _ =>
+            bindFieldValueImpl[Name, V, namesRest, typesRest](
+              device,
+              existing,
+              value,
+            )
+
+  /** `Arr[E]` is stored as the field's `UniformArray[E, N]`; everything else as
+    * its own type. Both branches name the stored type explicitly — it must not
+    * be inferred, or it widens to `Any` inside the enclosing inline body.
+    */
+  private inline def bindAsField[Expected, V](
+      device: GPUDevice,
+      existing: BufferBinding[?, ?] | Null,
+      value: V,
+  ): BufferBinding[?, ?] =
+    inline erasedValue[Expected] match
+      case _: UniformArray[t, n] =>
+        summonFrom:
+          case _: (V <:< Arr[`t`]) =>
+            storeUniformValue[UniformArray[t, n]](
+              device,
+              existing,
+              new UniformArray[t, n](value.asInstanceOf[Arr[t]]),
+            )
+          case _ => storeUniformValue[V](device, existing, value)
+      case _ => storeUniformValue[V](device, existing, value)
+
+  /** Write into the binding already in the slot, or allocate one for it. */
+  private inline def storeUniformValue[A](
+      device: GPUDevice,
+      existing: BufferBinding[?, ?] | Null,
+      value: A,
+  ): BufferBinding[?, ?] =
+    if existing != null then
+      existing.asInstanceOf[BufferBinding[A, ?]].set(value)
+      existing
+    else
+      summonFrom:
+        case uv: UniformValue[A, f] =>
+          BufferBinding[A, f](device, value)(using uv)
+
   /** Compile-time check that V matches the expected type for field Name in U. V
     * can be the raw type T or a BufferBinding[T, ?] — both are accepted.
     */
@@ -299,31 +391,47 @@ object derive:
             summonFrom:
               case _: (V =:= Expected)                   => ()
               case _: (V <:< BufferBinding[Expected, ?]) => ()
-              // Float ↔ Double interchange — both map to WGSL f32.
-              case _ =>
-                summonFrom:
-                  case _: (Expected =:= Float) =>
-                    summonFrom:
-                      case _: (V =:= Double)                   => ()
-                      case _: (V <:< BufferBinding[Double, ?]) => ()
-                      case _                                   =>
-                        error(
-                          "Binding type mismatch: value type does not match uniform field type",
-                        )
-                  case _: (Expected =:= Double) =>
-                    summonFrom:
-                      case _: (V =:= Float)                   => ()
-                      case _: (V <:< BufferBinding[Float, ?]) => ()
-                      case _                                  =>
-                        error(
-                          "Binding type mismatch: value type does not match uniform field type",
-                        )
-                  case _ =>
-                    error(
-                      "Binding type mismatch: value type does not match uniform field type",
-                    )
+              case _                                     =>
+                checkAdaptableFieldType[Expected, V]
           case _ =>
             checkFieldTypeImpl[Name, V, namesRest, typesRest]
+
+  /** The value types a field accepts beyond its own: a plain `Arr` of the
+    * element type for a `UniformArray` field (the capacity comes from the
+    * schema, see [[adaptUniformFieldValue]]), and `Float` ↔ `Double` either way
+    * since both map to WGSL f32.
+    */
+  private inline def checkAdaptableFieldType[Expected, V]: Unit =
+    inline erasedValue[Expected] match
+      case _: UniformArray[t, n] =>
+        summonFrom:
+          case _: (V <:< Arr[`t`]) => ()
+          case _                   =>
+            error(
+              "Binding type mismatch: a UniformArray field takes a UniformArray, a BufferBinding, or an Arr of its element type",
+            )
+      case _ =>
+        summonFrom:
+          case _: (Expected =:= Float) =>
+            summonFrom:
+              case _: (V =:= Double)                   => ()
+              case _: (V <:< BufferBinding[Double, ?]) => ()
+              case _                                   =>
+                error(
+                  "Binding type mismatch: value type does not match uniform field type",
+                )
+          case _: (Expected =:= Double) =>
+            summonFrom:
+              case _: (V =:= Float)                   => ()
+              case _: (V <:< BufferBinding[Float, ?]) => ()
+              case _                                  =>
+                error(
+                  "Binding type mismatch: value type does not match uniform field type",
+                )
+          case _ =>
+            error(
+              "Binding type mismatch: value type does not match uniform field type",
+            )
 
   // ===========================================================================
   // Uniform Group List Generation

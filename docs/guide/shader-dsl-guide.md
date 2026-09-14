@@ -385,6 +385,33 @@ Everything statement-shaped in the DSL is a `Block`: `:=`, `when`, `loop`,
 `if`. To read the emitted WGSL out of a `Block` (in a test, say), use
 `Block.unwrap` — the type is opaque.
 
+### Reading a uniform array
+
+A `UniformArray[T, N]` field arrives as an indexable binding — `stops(0)` for a
+constant index, `stops(i)` for one computed in the shader:
+
+```scala
+val stops = ctx.bindings.stops     // UniformArray[Vec4, 8]  → Vec4Expr elements
+val curves = ctx.bindings.curves   // UniformArray[Double, 8] → FloatExpr elements
+
+Block(
+  col := stops(0).rgb,
+  loop(1, count.toI32): i =>
+    col := col.mix(stops(i).rgb, t.pow(curves(i - 1))),
+)
+```
+
+Indices are **element** indices, `0` to `N-1`. Scalar and `Vec2` arrays are
+packed into `vec4` rows on the GPU (see the
+[sketch guide](sketch-authoring-guide.md#uniform-arrays)), and the DSL emits the
+row/lane arithmetic for you — `curves(i)` becomes `curves[i / 4][i % 4]`. The
+one thing worth knowing: a **computed** index into a `Vec2` array repeats the
+index expression three times in the emitted WGSL, so bind a complicated index to
+a local first.
+
+Arrays are read-only — they are uniforms. For indexed mutable scratch inside a
+shader body, there is nothing yet.
+
 ### `loop` vs `unroll`: runtime or build time
 
 The two are the same shape, and the bound's type is the whole difference:

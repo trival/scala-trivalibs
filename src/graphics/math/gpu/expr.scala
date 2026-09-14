@@ -137,22 +137,65 @@ object Expr:
   opaque type BoolExpr <: Expr = Expr
   object BoolExpr { def apply(s: String): BoolExpr = new Expr(s) }
 
+  /** How an element is reached inside a uniform array, given the element's
+    * expression type. Scalars and `Vec2`s are lane-packed into `vec4` rows on
+    * the GPU (four and two per row), so reaching element `i` means addressing a
+    * row and then a part of it; everything else is one element per row and
+    * indexes directly.
+    *
+    * Resolved on the element expression type because that determines the packing
+    * uniquely — a `FloatExpr` element is always a 4-lane array, a `Vec2Expr`
+    * element always a 2-lane one.
+    */
+  opaque type ArrayAccess[E] = Int
+
+  trait ArrayAccessLow:
+    /** One element per row — the unpacked case. */
+    given [E] => ArrayAccess[E] = 1
+
+  object ArrayAccess extends ArrayAccessLow:
+    /** Four scalars per `vec4` row. */
+    given ArrayAccess[FloatExpr] = 4
+
+    /** Two `Vec2`s per `vec4` row — `.xy` then `.zw`. */
+    given ArrayAccess[Vec2Expr] = 2
+
+    extension [E](lanes: ArrayAccess[E])
+      def const(base: String, i: Int): String =
+        if lanes == 1 then s"$base[$i]"
+        else if lanes == 2 then
+          s"$base[${i / 2}]${if i % 2 == 0 then ".xy" else ".zw"}"
+        else s"$base[${i / 4}][${i % 4}]"
+
+      // The 2-lane form repeats the index expression to pick a half. WGSL
+      // expressions are pure, so this is a shader-source size cost only.
+      def dyn(base: String, i: String): String =
+        if lanes == 1 then s"$base[$i]"
+        else if lanes == 2 then
+          s"select($base[$i / 2].xy, $base[$i / 2].zw, ($i % 2) == 1)"
+        else s"$base[$i / 4][$i % 4]"
+
   /** A WGSL array binding, obtained from `ctx.bindings.<name>` for a
     * `UniformArray[T, N]` uniform. Index it with a constant or an `IntExpr` —
     * `stops(0)`, `stops(i)` — to get the element expression `E`.
+    *
+    * Indices are always element indices, `0` to `N-1`, whether or not the
+    * elements are lane-packed on the GPU ([[ArrayAccess]]).
     */
   opaque type ArrayExpr[E] <: Expr = Expr
   object ArrayExpr:
     def apply[E](s: String): ArrayExpr[E] = new Expr(s)
 
+    import ArrayAccess.{const, dyn}
+
     extension [E](a: ArrayExpr[E])
       /** Element at a build-time constant index. */
-      inline def apply(i: Int): E =
-        new Expr(s"${a.wgsl}[$i]").asInstanceOf[E]
+      inline def apply(i: Int)(using acc: ArrayAccess[E]): E =
+        new Expr(acc.const(a.wgsl, i)).asInstanceOf[E]
 
       /** Element at an index computed in the shader. */
-      inline def apply(i: IntExpr): E =
-        new Expr(s"${a.wgsl}[${i.wgsl}]").asInstanceOf[E]
+      inline def apply(i: IntExpr)(using acc: ArrayAccess[E]): E =
+        new Expr(acc.dyn(a.wgsl, i.wgsl)).asInstanceOf[E]
 
   // GPU resource expression types — opaque wrappers used in shader DSL
   // for texture and sampler bindings. No CPU-side representation.

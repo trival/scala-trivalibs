@@ -107,6 +107,11 @@ given WGSLType[Mat4]:
 /** `UniformBuffer` stays the ELEMENT layout; the row count travels with the
   * value's `UniformValue.rows`. Never a vertex attribute, hence the empty
   * `AttribBuffer` and format.
+  *
+  * `N` is a count of elements. An element whose stride is already a multiple of
+  * 16 gets a row each and the array is declared over the element's own type; a
+  * lane-packed element (scalar, `Vec2`) is declared over `vec4<f32>` rows, of
+  * which there are ⌈N/lanes⌉.
   */
 given [T, N <: Int]
   => (
@@ -114,10 +119,15 @@ given [T, N <: Int]
       n: ValueOf[N],
       e: UniformArrayElem[T],
 ) => WGSLType[UniformArray[T, N]]:
-  def wgslName = s"array<${inner.wgslName}, ${n.value}>"
-  // A uniform array pads every element up to a 16-byte stride — which is also
-  // the constraint UniformArrayElem enforces on T.
-  def byteSize = ((inner.byteSize + 15) / 16) * 16 * n.value
+  private def rowCount = (n.value + e.lanes - 1) / e.lanes
+  def wgslName =
+    if e.lanes == 1 then s"array<${inner.wgslName}, ${n.value}>"
+    else s"array<vec4<f32>, $rowCount>"
+  // A uniform array pads every element up to a 16-byte stride; a packed one
+  // fills those 16 bytes with `lanes` elements instead of one.
+  def byteSize =
+    if e.lanes == 1 then ((inner.byteSize + 15) / 16) * 16 * n.value
+    else rowCount * 16
   def alignment = 16
   def vertexFormat = ""
   type AttribBuffer = EmptyTuple

@@ -1,6 +1,8 @@
 package trivalibs.graphics.painter
 
 import trivalibs.graphics.buffers.BufferBinding
+import trivalibs.graphics.buffers.UniformArray
+import trivalibs.graphics.buffers.UniformArrayElem
 import trivalibs.graphics.buffers.UniformValue
 import trivalibs.graphics.math.cpu.Vec4
 import trivalibs.graphics.painter.*
@@ -289,6 +291,29 @@ class Panel private[painter] (val painter: Painter):
         runtimeBindings.set(pair.name, pb)
       case p: Panel =>
         runtimeBindings.set(pair.name, p)
+      // A uniform array bound as bare values. Unlike shape/layer bindings there
+      // is no schema here to read a capacity from, so the buffer is sized from
+      // the values: the array must be the full length the consuming shades
+      // declare. Bind `values.asUniform[N]` instead to fill fewer than N.
+      case values: Arr[t] =>
+        summonFrom:
+          case elem: UniformValue[`t`, f] =>
+            summonFrom:
+              case e: UniformArrayElem[`t`] =>
+                val uv = UniformArray.valuesOnly[t, f](
+                  elem,
+                  UniformArray.rowsFor(values.length, e.lanes),
+                )
+                val existing = runtimeBindings.at(pair.name)
+                // `:=`, not `set` — with T an Arr itself, the Arr overload of
+                // `set` would win and then fail its UniformArray evidence.
+                if runtimeBindings.has(pair.name)
+                  && existing.isInstanceOf[BufferBinding[?, ?]]
+                then existing.asInstanceOf[BufferBinding[Arr[t], ?]] := values
+                else
+                  val bb = BufferBinding[Arr[t], f](painter.device)(using uv)
+                  bb := values
+                  runtimeBindings.set(pair.name, bb)
       case rawValue =>
         if runtimeBindings.has(pair.name)
           && runtimeBindings.at(pair.name).isInstanceOf[BufferBinding[?, ?]]

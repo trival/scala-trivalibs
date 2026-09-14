@@ -270,6 +270,7 @@ object painter:
   // ── trivalibs.graphics.buffers ─────────────────────────────────────────────
   export trivalibs.graphics.buffers.`attributes$package`.{*, given}
   export trivalibs.graphics.buffers.`binding$package`.{*, given}
+  export trivalibs.graphics.buffers.`uniform_array$package`.{*, given}
   export trivalibs.graphics.buffers.{
     BufferBinding,
     UniformValue,

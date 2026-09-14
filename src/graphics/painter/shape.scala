@@ -243,14 +243,20 @@ trait Bindable[U, P]:
         case rawValue =>
           derive.checkUniformFieldType[N, V, U]
           val idx = shade.uniformIndices.at(pair.name)
-          if idx < bindings.length && bindings(idx) != null then
-            bindings(idx).asInstanceOf[BufferBinding[V, ?]].set(rawValue)
-          else
-            summonFrom:
-              case uv: UniformValue[V, f] =>
-                val bb = BufferBinding[V, f](device, rawValue)(using uv)
-                while bindings.length <= idx do bindings.push(null)
-                bindings(idx) = bb
+          // The schema supplies what the value cannot carry itself — a plain
+          // `Arr` bound to a UniformArray field gets its capacity from the
+          // field's type. Everything else binds as its own type, as before.
+          val existing =
+            if idx < bindings.length then
+              bindings(idx).asInstanceOf[BufferBinding[?, ?] | Null]
+            else null
+          val bb = derive.bindUniformFieldValue[N, V, U](
+            device,
+            existing,
+            rawValue,
+          )
+          while bindings.length <= idx do bindings.push(null)
+          bindings(idx) = bb
     else inline if derive.containsName[N, P] then
       inline pair.value match
         case pb: PanelBinding =>

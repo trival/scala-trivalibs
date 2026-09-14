@@ -156,6 +156,29 @@ loop.
 
 ---
 
+## Uniforms
+
+### 🔄 Integer uniforms — `Int` / `UInt` / `IVec*` / `UVec*` cannot be bound
+
+**Note only, no plan.** All eight integer types have a `WGSLType`
+([shader/types.scala:260-323](../src/graphics/shader/types.scala#L260-L323)), so
+they can be written in a uniform schema — but none has a `UniformValue`
+([buffers/binding.scala:46-104](../src/graphics/buffers/binding.scala#L46-L104)
+covers `Float`, `Double`, `Vec2-4`, `Mat2-4` only), so nothing can actually bind
+one. Counts and indices therefore travel as `Double`/f32 and get `.toI32`'d in
+the shader, which is what every consumer does today.
+
+If a sketch ever needs a genuine integer uniform, **add all forms at once** —
+scalar and vector, signed and unsigned — rather than the one shape that
+happened to be needed; a half-covered set is worse than none. `UniformArray` of
+them then follows from one `UniformArrayElem` instance each, under the lane rule
+in [done/uniform-scalar-arrays-plan.md](done/uniform-scalar-arrays-plan.md)
+(4 lanes for the scalars, 2 for `IVec2`/`UVec2`, 1 for the rest).
+
+**Priority:** Low — no consumer, and the f32 route works.
+
+---
+
 ## Shader DSL
 
 ### 🔄 Local arrays — indexable `var` inside a shader body

@@ -144,6 +144,30 @@ to F32 automatically. **WGSL has no f64 type** (render _or_ compute), so
 anything bound to a shader is F32 — the `…dBuffer` (F64) variants are CPU-side
 only (double-precision packed storage), never uploaded to the GPU.
 
+### A `panel.bind` array is sized by the values you pass
+
+`shape.bind` / `layer.bind` read the shade's schema, so a bare `Arr` takes the
+declared capacity and may be **shorter** than it — bind 3 stops into an
+`array<vec4, 8>` and the rest stay zero, masked by a `count` uniform.
+
+`panel.bind` has no schema: it binds by name for whatever shades use the panel,
+which is what lets one view matrix serve many pipelines. A bare `Arr` is legal
+there too, but the buffer is sized **from the array itself**, so it has to be
+the full length every consuming shade declares:
+
+```scala
+panel.bind("stops" := colors)                 // colors.length must equal the shades' N
+panel.bind("stops" := colors.asUniform[8])    // …or name the capacity to fill fewer
+```
+
+Pass a short array and the buffer is too small for the shader's declared type —
+a WebGPU validation error at draw time, not at the bind call. That is the same
+trade `panel.bind` already makes for types: it accepts a `Vec3` where the shade
+wants a `Mat4`, and fails at runtime too.
+
+`p.binding(...)` with initial values has no field either, so it wants
+`asUniform[N]`.
+
 ### No quaternion on the GPU
 
 WGSL has no quaternion type. Do quaternion math on the CPU (`Quat`) and upload a

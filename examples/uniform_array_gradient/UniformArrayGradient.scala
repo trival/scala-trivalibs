@@ -18,15 +18,18 @@ import scala.scalajs.js.annotation.*
 // ---------------------------------------------------------------------------
 // Multi-step gradients from uniform arrays.
 //
-// One shade draws every band. Each band binds its own `array<vec4, MaxStops>`
-// of color stops and its own array of per-segment exponents, so the number of
-// steps and the interpolation between them vary per draw with nothing
-// recompiled. Everything is randomised once per page load — reload for a new
-// set.
+// One shade draws every band. Each band binds its own array of color stops and
+// its own array of per-segment exponents, so the number of steps and the
+// interpolation between them vary per draw with nothing recompiled. Everything
+// is randomised once per page load — reload for a new set.
+//
+// The two arrays also show both element shapes: `Vec4` takes a 16-byte row
+// each, while the `Double` exponents are packed four to a row. Both are bound
+// as plain `Arr`s and indexed 0..N-1 — the packing never surfaces.
 // ---------------------------------------------------------------------------
 
-/** Capacity of the uniform arrays — the WGSL `array<vec4<f32>, N>` length. A
-  * band uses between 2 and this many stops; `count` says how many are live.
+/** Capacity of the uniform arrays, counted in elements. A band uses between 2
+  * and this many stops; `count` says how many are live.
   */
 type MaxStops = 8
 val MaxStops: Int = valueOf[MaxStops]
@@ -47,8 +50,8 @@ def main(): Unit =
         rect: VertexUniform[Vec4],
         // xyz = color, w = position along the band in [0,1]
         stops: FragmentUniform[UniformArray[Vec4, MaxStops]],
-        // x = exponent for the segment starting at the stop of the same index
-        curves: FragmentUniform[UniformArray[Vec4, MaxStops]],
+        // exponent for the segment starting at the stop of the same index
+        curves: FragmentUniform[UniformArray[Double, MaxStops]],
         count: FragmentUniform[Double],
     )
 
@@ -87,7 +90,7 @@ def main(): Unit =
               prev := stops(i - 1),
               cur := stops(i),
               t := ((x - prev.w) / (cur.w - prev.w)).clamp01,
-              col := col.mix(cur.rgb, t.pow(curves(i - 1).x)),
+              col := col.mix(cur.rgb, t.pow(curves(i - 1))),
             ),
           ),
           ctx.out.color := vec4(col, 1.0),
@@ -134,10 +137,10 @@ def main(): Unit =
     /** One exponent per segment, log-uniform in [1/8, 8] so ease-in and
       * ease-out are equally likely and 1.0 (linear) sits in the middle.
       */
-    def randomCurves(count: Int): Arr[Vec4] =
-      val out = Arr[Vec4]()
+    def randomCurves(count: Int): Arr[Double] =
+      val out = Arr[Double]()
       for _ <- 0 until count do
-        out.push(Vec4(2.0.pow(randInRange(-3.0, 3.0)), 0.0, 0.0, 0.0))
+        out.push(2.0.pow(randInRange(-3.0, 3.0)))
       out
 
     val bandHeight = (2.0 - Gap * (BandCount + 1)) / BandCount
@@ -155,8 +158,8 @@ def main(): Unit =
               2.0 - 2.0 * Gap,
               bandHeight,
             ),
-            "stops" := UniformArray[Vec4, MaxStops](randomStops(count)),
-            "curves" := UniformArray[Vec4, MaxStops](randomCurves(count)),
+            "stops" := randomStops(count),
+            "curves" := randomCurves(count),
             "count" := count.toDouble,
           ),
       )

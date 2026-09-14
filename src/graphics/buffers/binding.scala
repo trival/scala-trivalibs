@@ -8,6 +8,7 @@ import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.painter.GPUBuffer
 import trivalibs.graphics.painter.GPUBufferUsage
 import trivalibs.graphics.painter.GPUDevice
+import trivalibs.utils.js.Arr
 import trivalibs.utils.js.Obj
 import trivalibs.utils.numbers.given
 
@@ -152,8 +153,21 @@ final class BufferBinding[T, F <: Tuple](
     uv.write(buffer, value)
     upload()
 
+  /** Write the values of a [[UniformArray]] binding straight from an `Arr`,
+    * without naming the capacity again — it is already part of this binding's
+    * type. Only compiles when `T` really is a `UniformArray[E, N]`.
+    */
+  inline def set[E, N <: Int](values: Arr[E])(using
+      ev: T =:= UniformArray[E, N],
+  ): Unit = set(ev.flip(new UniformArray[E, N](values)))
+
   /** Alias for [[set]]: `binding := value`. */
   inline def :=(value: T): Unit = set(value)
+
+  /** Alias for [[set]]: `binding := values`. */
+  inline def :=[E, N <: Int](values: Arr[E])(using
+      ev: T =:= UniformArray[E, N],
+  ): Unit = set(values)
 
   /** Mutate the CPU buffer via a lambda, then upload to GPU. Use this to
     * leverage the full generic set/assign ops on the buffer: binding.update(_

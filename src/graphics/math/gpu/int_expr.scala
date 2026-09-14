@@ -53,6 +53,7 @@ given NumOps[IntExpr]:
     def -(b: IntExpr): IntExpr = IntExpr(s"(${a.wgsl} - ${b.wgsl})")
     def *(b: IntExpr): IntExpr = IntExpr(s"(${a.wgsl} * ${b.wgsl})")
     def /(b: IntExpr): IntExpr = IntExpr(s"(${a.wgsl} / ${b.wgsl})")
+    def %(b: IntExpr): IntExpr = IntExpr(s"(${a.wgsl} % ${b.wgsl})")
     def unary_- : IntExpr = IntExpr(s"(-${a.wgsl})")
 
     // Int-literal forms. An `Int` operand cannot reach the `IntExpr` overloads
@@ -63,6 +64,7 @@ given NumOps[IntExpr]:
     def -(b: Int): IntExpr = IntExpr(s"(${a.wgsl} - $b)")
     def *(b: Int): IntExpr = IntExpr(s"(${a.wgsl} * $b)")
     def /(b: Int): IntExpr = IntExpr(s"(${a.wgsl} / $b)")
+    def %(b: Int): IntExpr = IntExpr(s"(${a.wgsl} % $b)")
   def zero: IntExpr = IntExpr("0")
   def one: IntExpr = IntExpr("1")
 
@@ -76,6 +78,7 @@ given NumOps[UIntExpr]:
     def -(b: UIntExpr): UIntExpr = UIntExpr(s"(${a.wgsl} - ${b.wgsl})")
     def *(b: UIntExpr): UIntExpr = UIntExpr(s"(${a.wgsl} * ${b.wgsl})")
     def /(b: UIntExpr): UIntExpr = UIntExpr(s"(${a.wgsl} / ${b.wgsl})")
+    def %(b: UIntExpr): UIntExpr = UIntExpr(s"(${a.wgsl} % ${b.wgsl})")
     def unary_- : UIntExpr = UIntExpr(s"(0u - ${a.wgsl})")
   def zero: UIntExpr = UIntExpr("0u")
   def one: UIntExpr = UIntExpr("1u")

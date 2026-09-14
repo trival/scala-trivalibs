@@ -35,7 +35,7 @@ Two pieces of advice, both easy to follow and awkward to retrofit:
 
 - **Let the host call in, rather than running on import.** A
   `@JSExportTopLevel` function the page invokes gives the host control over
-  *when* the sketch starts; a `@main` def runs as a side effect of loading the
+  _when_ the sketch starts; a `@main` def runs as a side effect of loading the
   module, which is harder to sequence and to reuse.
 - **Take the canvas as a parameter.** Looking it up with
   `document.getElementById` ties the bundle to a browser DOM. Passing it in lets
@@ -270,6 +270,64 @@ val shade = p.layerShade[U, P]: program =>
 
 **Instances** (one draw per entry, sharing the form/shade) via
 `shape.instances.add("model" := m, …)`.
+
+### Uniform arrays
+
+`UniformArray[T, N]` is a fixed-capacity array uniform — `N` is part of the
+type, so a shade's declaration and its binding cannot disagree. Element types:
+`Float`/`Double`, `Vec2`, `Vec3`, `Vec4`, `Mat2`/`Mat3`/`Mat4`.
+
+```scala
+type MaxStops = 8
+type U = (stops: FragmentUniform[UniformArray[Vec4, MaxStops]], count: FragmentUniform[Double])
+
+val colors = Arr(Vec4(…), Vec4(…), Vec4(…))   // 3 values, capacity 8
+shape.bind("stops" := colors, "count" := colors.length.toDouble)
+```
+
+The values travel as a plain `Arr` — the capacity comes from the schema field,
+so it is never restated.
+
+**A shorter `Arr` than `N` is explicitly supported**, and it is easy to miss:
+normally you would expect the array to have exactly `N` elements, and binding 3
+values into an `array<vec4, 8>` looks like a mistake. It is not. This is how one
+shade serves a varying number of steps — the capacity is the maximum, a `count`
+uniform says how many are live, and the shader loops to `count`:
+
+```scala
+loop(1, count.toI32)(i => col := col.mix(stops(i).rgb, …))
+```
+
+Elements past the ones written read as zero on a fresh binding. One caveat:
+**a later, shorter `set` does not clear the tail** — bind 8 values, then 3, and
+elements 3..7 still hold the old ones. That is exactly what `count` masks off, so
+the pattern is safe as long as the shader honours it.
+
+A held binding takes its capacity from its own type, so updates stay bare too:
+
+```scala
+val stops = p.binding[UniformArray[Vec4, MaxStops]]   // held, updated per frame
+stops.set(colors)
+```
+
+Where there is no capacity anywhere — no schema field, no binding type — name it
+with `asUniform`:
+
+```scala
+p.binding(colors.asUniform[MaxStops])              // created with initial values
+panel.bind("stops" := colors.asUniform[MaxStops])  // to fill fewer than MaxStops
+```
+
+`panel.bind` also takes a bare `Arr`, but sizes the buffer from the values — so
+there it must be the full length the shades declare. See
+[gotchas](gotchas.md#a-panelbind-array-is-sized-by-the-values-you-pass).
+
+**`N` counts elements, not GPU rows.** WGSL requires a uniform array's element
+stride to be a multiple of 16 bytes, so scalars and `Vec2`s are packed four and
+two to a `vec4` row — `UniformArray[Double, 8]` declares `array<vec4<f32>, 2>`.
+That is invisible from both sides: you bind 8 doubles and index `0..7`. `N` need
+not be a multiple of the lane count; `UniformArray[Double, 7]` just leaves the
+last lane dead, and still rejects an eighth value.
 
 ## 4. The render model (important)
 
