@@ -204,6 +204,41 @@ given NumExt[FloatExpr]:
     def smoothstep01: FloatExpr =
       FloatExpr(s"smoothstep(0.0, 1.0, ${a.wgsl})")
 
+/** Reverse-argument [[lerp]] on `FloatExpr` — the receiver is the interpolation
+  * parameter `t`, the bounds are the arguments: `hash.lerpIn(0.6, 1.0)`,
+  * `t.lerpIn(vec3(0), tint)`. The generic form is pure type-class dispatch: any
+  * type with a [[trivalibs.graphics.math.LerpBy]] instance for a `FloatExpr`
+  * parameter works as the bounds — `FloatExpr` itself and every `Vec*Expr`
+  * width, each of which has a concrete instance in its `Expr` companion. A CPU
+  * `Vec*` bound is lifted at the call site (`t.lerpIn(vec3(SkyTint),
+  * vec3(1))`), like any other domain crossing.
+  *
+  * There are deliberately **no CPU-vector overloads here**. `Double` converts
+  * to `FloatExpr`, so a `lerpIn(lo: Vec3, hi: Vec3)` in this block is also
+  * applicable to a CPU receiver: `0.5.lerpIn(Vec3(0), Vec3(1))` then resolves
+  * into this GPU set and returns a `Vec3Expr` where the caller wrote CPU math
+  * and expected a `Vec3` (measured — it is silent, not an error). Each
+  * receiver keeps its bounds in its own domain for that reason, and the CPU
+  * `lerpIn` lives in `graphics/math/interpolation.scala`.
+  *
+  * The two literal overloads are the only non-generic additions, and they are
+  * not equals. Measured, by deleting each and rebuilding clean:
+  *
+  *   - **`Double` is required.** Without it `t.lerpIn(0.81, 1.0)` selects the
+  *     generic form, infers `T = Double`, and fails on a missing
+  *     `LerpBy[Double, FloatExpr]` — Scala will not apply
+  *     `Conversion[Double, FloatExpr]` through an overloaded method set.
+  *   - **`Int` is redundant for compilation** — `t.lerpIn(0, 1)` resolves
+  *     through the `Double` overload by numeric widening. It is kept for emit
+  *     consistency: every other op in the DSL lowers an `Int` literal to
+  *     `f32(n)`, and without this overload `lerpIn` alone would emit `0.0`.
+  */
+extension (t: FloatExpr)
+  inline def lerpIn[T](lo: T, hi: T)(using inline l: LerpBy[T, FloatExpr]): T =
+    l.lerp(lo)(hi, t)
+  def lerpIn(lo: Double, hi: Double): FloatExpr = (lo: FloatExpr).mix(hi, t)
+  def lerpIn(lo: Int, hi: Int): FloatExpr = (lo: FloatExpr).mix(hi, t)
+
 // ---------------------------------------------------------------------------
 // Vec2 — LocalVec2 <: Vec2Expr, so only one Base + one ImmutableOps needed
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 package trivalibs.graphics.math.gpu
 
+import trivalibs.graphics.math.LerpBy
 import trivalibs.utils.js.Arr
 
 import scala.scalajs.js
@@ -114,16 +115,75 @@ object Expr:
   def apply(s: String): Expr = new Expr(s)
 
   opaque type FloatExpr <: Expr = Expr
-  object FloatExpr { def apply(s: String): FloatExpr = new Expr(s) }
+  object FloatExpr:
+    def apply(s: String): FloatExpr = new Expr(s)
+
+    /** Lets generic `[T: LerpBy[_, FloatExpr]]` code — `t.lerpIn(lo, hi)` with
+      * scalar bounds — interpolate a shader scalar. It lives here rather than
+      * in `LerpBy`'s companion so `graphics.math` keeps knowing nothing about
+      * `graphics.math.gpu`; the implicit scope of `LerpBy[FloatExpr,
+      * FloatExpr]` includes this companion either way.
+      */
+    given floatExprLerp: LerpBy[FloatExpr, FloatExpr]:
+      extension (a: FloatExpr)
+        inline def lerp(b: FloatExpr, t: FloatExpr): FloatExpr = a.mix(b, t)
 
   opaque type Vec2Expr <: Expr = Expr
-  object Vec2Expr { def apply(s: String): Vec2Expr = new Expr(s) }
+  object Vec2Expr:
+    def apply(s: String): Vec2Expr = new Expr(s)
+
+    /** Concrete instance in the companion, so generic `[T: LerpBy[_,
+      * FloatExpr]]` code resolves to a module rather than a parameterized given
+      * that materialises a class per call site. See
+      * `documents/lerp-typeclass-refactor.md`.
+      *
+      * The WGSL is built here rather than delegating to `.mix`: inside `object
+      * Expr` the opaque types are transparent, so `Vec2Expr` and `FloatExpr`
+      * are the same type and the `mix` overloads are ambiguous. Emits exactly
+      * what `Vec2ImmutableOpsG.mix` emits — keep the two in step.
+      */
+    given lerpInstance: LerpBy[Vec2Expr, FloatExpr]:
+      extension (a: Vec2Expr)
+        def lerp(b: Vec2Expr, t: FloatExpr): Vec2Expr =
+          Vec2Expr(s"mix(${a.wgsl}, ${b.wgsl}, ${t.wgsl})")
 
   opaque type Vec3Expr <: Expr = Expr
-  object Vec3Expr { def apply(s: String): Vec3Expr = new Expr(s) }
+  object Vec3Expr:
+    def apply(s: String): Vec3Expr = new Expr(s)
+
+    /** Concrete instance in the companion, so generic `[T: LerpBy[_,
+      * FloatExpr]]` code resolves to a module rather than a parameterized given
+      * that materialises a class per call site. See
+      * `documents/lerp-typeclass-refactor.md`.
+      *
+      * The WGSL is built here rather than delegating to `.mix`: inside `object
+      * Expr` the opaque types are transparent, so `Vec3Expr` and `FloatExpr`
+      * are the same type and the `mix` overloads are ambiguous. Emits exactly
+      * what `Vec3ImmutableOpsG.mix` emits — keep the two in step.
+      */
+    given lerpInstance: LerpBy[Vec3Expr, FloatExpr]:
+      extension (a: Vec3Expr)
+        def lerp(b: Vec3Expr, t: FloatExpr): Vec3Expr =
+          Vec3Expr(s"mix(${a.wgsl}, ${b.wgsl}, ${t.wgsl})")
 
   opaque type Vec4Expr <: Expr = Expr
-  object Vec4Expr { def apply(s: String): Vec4Expr = new Expr(s) }
+  object Vec4Expr:
+    def apply(s: String): Vec4Expr = new Expr(s)
+
+    /** Concrete instance in the companion, so generic `[T: LerpBy[_,
+      * FloatExpr]]` code resolves to a module rather than a parameterized given
+      * that materialises a class per call site. See
+      * `documents/lerp-typeclass-refactor.md`.
+      *
+      * The WGSL is built here rather than delegating to `.mix`: inside `object
+      * Expr` the opaque types are transparent, so `Vec4Expr` and `FloatExpr`
+      * are the same type and the `mix` overloads are ambiguous. Emits exactly
+      * what `Vec4ImmutableOpsG.mix` emits — keep the two in step.
+      */
+    given lerpInstance: LerpBy[Vec4Expr, FloatExpr]:
+      extension (a: Vec4Expr)
+        def lerp(b: Vec4Expr, t: FloatExpr): Vec4Expr =
+          Vec4Expr(s"mix(${a.wgsl}, ${b.wgsl}, ${t.wgsl})")
 
   opaque type Mat2Expr <: Expr = Expr
   object Mat2Expr { def apply(s: String): Mat2Expr = new Expr(s) }

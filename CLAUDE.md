@@ -11,7 +11,7 @@ of truth for lib + tests + examples.
 ## Build & Dev Commands
 
 ```bash
-bun run check            # Type-check the library in isolation (scala-cli compile src)
+bun run check            # Type-check the library in isolation, from a clean build
 bun run test             # Run all tests
 bun run examples:build   # Build all examples → examples/out/
 bun run examples:watch   # Incremental examples build with file watching
@@ -20,6 +20,14 @@ bun run examples:dist    # Assemble the deployable examples site → dist/
 bun run deploy           # examples:dist + wrangler deploy → trivalibs-examples.trivialspace.net
 bun run publish:local    # Publish a Scala artifact to ~/.ivy2/local
 ```
+
+`check` deletes the build state before compiling, on purpose. scala-cli's
+incremental cache reports stale results often enough to matter: a green check
+over genuinely broken code, and failures that no longer exist. `check` is the
+correctness gate, so it buys certainty for ~6s; fast iteration is what
+`sketch` / `sketch:watch` in the consuming repo are for. **Any comparative
+measurement — emitted JS, does-this-still-compile — must clear
+`.scala-build` too, or the answer cannot be trusted.**
 
 Examples are deployed manually (`bun run deploy`), not by CI — unlike the
 consuming sketch repo, building them needs the Scala toolchain, and library

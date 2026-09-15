@@ -62,6 +62,17 @@ object Vec2 extends Vec2ImmutableOps[Vec2]:
   inline def create(x: Double, y: Double) = new Vec2(x, y)
   given Vec2ImmutableOps[Vec2] = Vec2
 
+  /** Concrete, so generic `[T: Lerp]` callers get a module here instead of the
+    * parameterized `LerpBy.vec2Lerp`, which materialises one anonymous class
+    * per call site and allocates on every call. Other `Vec2` representations
+    * (tuple, buffer) still resolve through that generic instance — their
+    * companions are not in the implicit scope of `Lerp[…]`. See
+    * `documents/lerp-typeclass-refactor.md`.
+    */
+  given lerpInstance: LerpBy[Vec2, Double]:
+    extension (a: Vec2)
+      inline def lerp(b: Vec2, t: Double): Vec2 = a.mix(b, t)
+
   def apply(x: Double, y: Double): Vec2 = new Vec2(x, y)
   def apply(scalar: Double): Vec2 = new Vec2(scalar, scalar)
 

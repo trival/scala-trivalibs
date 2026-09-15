@@ -28,6 +28,15 @@ package trivalibs.prelude
   */
 object painter:
 
+  // ── trivalibs.graphics.math ────────────────────────────────────────────────
+  // The CPU/GPU-shared interpolation layer: the `LerpBy` type class, its `Lerp`
+  // alias, and the `t.lerpIn(lo, hi)` extension that reads any `Lerp` bounds.
+  // Note the absence of `LerpBy.given` — exporting those would put them in
+  // identifier scope, where they would hide the vector ops' own `lerp`. They
+  // are found through implicit scope instead; see interpolation.scala.
+  export trivalibs.graphics.math.`interpolation$package`.{*, given}
+  export trivalibs.graphics.math.LerpBy
+
   // ── trivalibs.graphics.math.cpu ────────────────────────────────────────────
   export trivalibs.graphics.math.cpu.`color$package`.{*, given}
   export trivalibs.graphics.math.cpu.`coords$package`.{*, given}

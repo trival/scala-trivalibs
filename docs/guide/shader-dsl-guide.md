@@ -177,6 +177,18 @@ GPU expressions mirror the CPU math surface, so shader code reads like CPU code:
   `0.8.mix(1.0, expr)` does not compile (a CPU `Double` receiver takes `Double`
   arguments), whereas `lerp(0.8, 1.0, expr)` does. With an expression receiver
   the method form reads better — `noise.lerpIn(0.8, 1.0)`.
+- **`t.lerpIn(lo, hi)`** — reverse-argument `lerp`, receiver is `t`. The bounds
+  may be scalar literals or any GPU value with a `LerpBy[_, FloatExpr]`
+  instance, which is every `Vec*Expr` width and `FloatExpr` itself:
+  `t.lerpIn(vec3(0), tint)`. A CPU `Vec*` bound is lifted at the call site —
+  `t.lerpIn(vec3(SkyTint), vec3(1))`.
+  **`lerpIn` deliberately has no CPU-vector overloads**, and that is worth
+  understanding rather than working around: `Double` converts to `FloatExpr`,
+  so a `FloatExpr` overload taking CPU `Vec3` bounds is also applicable to a
+  CPU call — `0.5.lerpIn(Vec3(0), Vec3(1))` would then quietly resolve into the
+  GPU set and hand back a `Vec3Expr` instead of a `Vec3`. Keeping each
+  receiver's bounds in its own domain is what stops CPU math from turning into
+  shader expressions behind your back.
 - **comparisons** → `BoolExpr`: `<  <=  >  >=  ===  !==`, combine with
   `&& || !`.
 - **matrices**: `Mat*Expr` `*` (matrix or vector), `.determinant`.

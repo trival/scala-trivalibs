@@ -50,7 +50,7 @@ object NumOps:
 
 /** Scalar math extensions on `Double`/`Float` (given instances in [[NumExt]]'s
   * companion): `.sqrt .pow .sin .cos .tan .abs .floor .ceil .fract .exp .log
-  * .min .max .clamp .clamp01 .mix .lerp .lerpIn .step .smoothstep
+  * .min .max .clamp .clamp01 .mix .lerp .step .smoothstep
   * .smoothstep01 .fit0111 .fit1101`,
   * etc. Prefer these over `math.*` (`x.sin`, not `math.sin(x)`) — the same
   * names exist on the GPU `Expr` types, so CPU and shader math read alike.
@@ -99,15 +99,14 @@ trait NumExt[P]:
     def fit0111: P
     def fit1101: P
     def mix(b: P, t: P): P
-    inline def lerp(b: P, t: P): P = mix(b, t)
-
-    /** Reverse-argument [[lerp]] — the receiver is the interpolation parameter
-      * `t`, the bounds are the arguments: `t.lerpIn(lo, hi) == lo.lerp(hi, t)`.
-      * Reads better when `t` is the varying value and the bounds are constants,
-      * e.g. `hash.lerpIn(0.6, 1.0)` in a shader. Not an overload of `lerp` —
-      * both would erase to the same signature.
+    /** Linear interpolation from the receiver to `b`. Bounds first, parameter
+      * last — for the reverse spelling (`t.lerpIn(lo, hi)`, which reads better
+      * when `t` is the varying value) see `graphics/math/interpolation.scala`.
+      * That one is a single definition per receiver type on purpose, and it is
+      * why no `lerpIn` lives here: an extension method resolves by name from a
+      * single source, so two of them hide rather than overload each other.
       */
-    inline def lerpIn(lo: P, hi: P): P = lo.mix(hi, p)
+    inline def lerp(b: P, t: P): P = mix(b, t)
 
     def gte(edge: P): P // 1 if self >= edge, else 0
     def gt(edge: P): P // 1 if self >  edge, else 0
