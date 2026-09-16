@@ -58,7 +58,7 @@ def effect(fn: js.Function0[Unit]): PreactEffectHandle = js.native
 
 @js.native
 @JSImport("@preact/signals", "batch")
-def batch$js(fn: js.Function0[Unit]): Unit = js.native
+def batchJs(fn: js.Function0[Unit]): Unit = js.native
 
 // Hook variants (must be called during component render)
 @js.native

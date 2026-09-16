@@ -31,7 +31,7 @@ object Var:
 
   /** Batch multiple updates into one commit */
   inline def batch(updates: => Unit): Unit =
-    batch$js(() => updates)
+    batchJs(() => updates)
 
 /** Read-only reactive variable (covariant) */
 sealed trait ReadVar[+A]:

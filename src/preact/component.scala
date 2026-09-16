@@ -89,7 +89,7 @@ private def componentImpl[P: Type](
 
   val tpe = TypeRepr.of[P]
   val typeSymbol = tpe.typeSymbol
-  val fields = typeSymbol.memberFields
+  val fields = typeSymbol.fieldMembers
 
   if fields.isEmpty then
     report.errorAndAbort(s"Type ${typeSymbol.name} has no fields")
