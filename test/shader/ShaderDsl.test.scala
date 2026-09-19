@@ -112,7 +112,7 @@ class ShaderDslTest extends FunSuite:
   // =========================================================================
 
   test("AssignTarget := produces assignment Stmt"):
-    val target = AssignTarget("out.position")
+    val target = AssignTarget[Vec4Expr]("out.position")
     val stmt = target := Vec4Expr("v")
     assertEquals(stmt.toString, "  out.position = v;")
 
@@ -121,7 +121,7 @@ class ShaderDslTest extends FunSuite:
   // =========================================================================
 
   test("LetExpr := produces let Stmt"):
-    val local = LetExpr("rotated")
+    val local = LetExpr[Vec2Expr]("rotated")
     val stmt = local := Vec2Expr("expr")
     assertEquals(stmt.toString, "  let rotated = expr;")
 
@@ -171,14 +171,14 @@ class ShaderDslTest extends FunSuite:
   // =========================================================================
 
   test("TypedAssignAccessor := produces assignment statements"):
-    type Fields = (position: AssignTarget, color: AssignTarget)
+    type Fields = (position: AssignTarget[Vec4Expr], color: AssignTarget[Vec4Expr])
     val accessor = TypedAssignAccessor[Fields]("out")
 
     val stmt = accessor.position := Vec4Expr("v")
     assertEquals(stmt.toString, "  out.position = v;")
 
   test("TypedAssignAccessor color assignment"):
-    type Fields = (color: AssignTarget)
+    type Fields = (color: AssignTarget[Vec4Expr])
     val accessor = TypedAssignAccessor[Fields]("out")
 
     val stmt = accessor.color := vec4(
@@ -395,20 +395,20 @@ class ShaderDslTest extends FunSuite:
   // =========================================================================
 
   test("VarExpr first := generates var decl"):
-    val v = new VarExpr("acc")
+    val v = new VarExpr[Vec2Expr]("acc")
     assertEquals(
       (v := Vec2Expr("vec2<f32>(0.0, 0.0)")).toString,
       "  var acc = vec2<f32>(0.0, 0.0);",
     )
 
   test("VarExpr subsequent := generates reassignment"):
-    val v = new VarExpr("acc")
+    val v = new VarExpr[Vec2Expr]("acc")
     v := Vec2Expr("init") // first
     val reassign = v := Vec2Expr("next")
     assertEquals(reassign.toString, "  acc = next;")
 
   test("ConstExpr := generates const decl"):
-    val c = new ConstExpr("scale")
+    val c = new ConstExpr[FloatExpr]("scale")
     assertEquals(
       (c := FloatExpr("2.0")).toString,
       "  const scale = 2.0;",

@@ -62,7 +62,7 @@ class BlocksTest extends FunSuite:
   test("Block.empty works as a build-time conditional branch"):
     val col = VarVec3("col")
     def tap(on: Boolean): Block =
-      if on then col := Expr.raw("vec3<f32>(1.0)") else Block.empty
+      if on then col := Vec3Expr("vec3<f32>(1.0)") else Block.empty
     val s = Block(tap(true), tap(false), tap(true))
     assertEquals(
       s: String,
@@ -135,7 +135,7 @@ class BlocksTest extends FunSuite:
     val s = unroll(2): i =>
       scope:
         val av = LetVec4("av")
-        Block(av := Expr.raw(s"lines[$i]"))
+        Block(av := Vec4Expr(s"lines[$i]"))
     assertEquals(
       s: String,
       """  {
@@ -160,8 +160,8 @@ class BlocksTest extends FunSuite:
   test("an outer var is assignable from inside a scope"):
     val col = VarVec3("col")
     val s = Block(
-      col := Expr.raw("vec3<f32>(0.0)"),
-      scope(col := Expr.raw("vec3<f32>(1.0)")),
+      col := Vec3Expr("vec3<f32>(0.0)"),
+      scope(col := Vec3Expr("vec3<f32>(1.0)")),
     )
     assertEquals(
       s: String,

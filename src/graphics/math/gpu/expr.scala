@@ -3,6 +3,7 @@ package trivalibs.graphics.math.gpu
 import trivalibs.graphics.math.LerpBy
 import trivalibs.utils.js.Arr
 
+import scala.annotation.implicitNotFound
 import scala.scalajs.js
 
 // ---------------------------------------------------------------------------
@@ -31,38 +32,48 @@ class Expr(val wgsl: String):
 // Extends Expr so runtime values created by selectDynamic are compatible.
 // ---------------------------------------------------------------------------
 
-/** A named local backed by a WGSL `let` (immutable). `name := expr` emits the
-  * declaration. Declared in a `vert`/`frag` body via the `[L]` locals schema,
-  * or ad-hoc with `LetFloat("n")`, `LetVec2("p")`, etc.
+/** Lifts a CPU value into the shader expression type a slot expects. Resolved
+  * by the *target* type `E`, so the same literal lands correctly on either
+  * side: `varInt := 0` emits `0`, `varFloat := 0` emits `f32(0)`.
+  *
+  * This is what carries CPU values across in an assignment. A `Conversion`
+  * cannot do the job — `cpu_interop.scala` deliberately refuses
+  * `Conversion[Vec3, Vec3Expr]` (it would make every GPU extension applicable
+  * to CPU values), and an overload set blocks conversions anyway.
+  *
+  * Instances live in the *element type's* companion (`object FloatExpr`,
+  * `object IntExpr`, …), not here: inside `object Expr` the opaque types are
+  * transparent, so instances sharing one owner would collide.
   */
-class LetExpr(val name: String) extends Expr(name):
-  def :=(value: Expr): Stmt = Stmt.let(name, value)
+@implicitNotFound(
+  "Cannot assign a ${C} to a shader local of type ${E}.",
+)
+trait Lift[C, E]:
+  def lift(value: C): E
 
-  // CPU-value assignment — `col := WallTint`. Each delegates to the `Expr`
-  // form above, so the `VarExpr` / `ConstExpr` overrides still apply.
-  //
-  // The `Double`/`Int` forms are not a convenience: `n := 0.5` used to reach
-  // `:=(Expr)` through `Conversion[Double, FloatExpr]` (which conforms to
-  // `Conversion[Double, Expr]` since `Conversion` is covariant in its result).
-  // Turning `:=` into an overload set kills that path, so they are required to
-  // keep existing shader code compiling.
-  def :=(value: Double): Stmt = this := FloatExpr(floatToWgsl(value))
-  def :=(value: Int): Stmt = this := FloatExpr(s"f32($value)")
-  def :=(value: Vec2): Stmt = this := value.toExpr
-  def :=(value: Vec3): Stmt = this := value.toExpr
-  def :=(value: Vec4): Stmt = this := value.toExpr
-  def :=(value: Mat2): Stmt = this := value.toExpr
-  def :=(value: Mat3): Stmt = this := value.toExpr
-  def :=(value: Mat4): Stmt = this := value.toExpr
+/** A named local backed by a WGSL `let` (immutable). `name := expr` emits the
+  * declaration. Declared ad-hoc in a `vert`/`frag` body with `LetFloat("n")`,
+  * `LetVec2("p")`, etc.
+  *
+  * `T` is the element type the local holds, so assignment is type-checked:
+  * `LetVec3("col") := someFloatExpr` does not compile.
+  */
+class LetExpr[T <: Expr](val name: String) extends Expr(name):
+  def :=(value: T): Stmt = Stmt.let(name, value)
+
+  /** CPU-value assignment — `col := WallTint`, `n := 0.5`. Delegates to the
+    * `T` form above, so the `VarExpr` / `ConstExpr` overrides still apply.
+    */
+  def :=[C](value: C)(using l: Lift[C, T]): Stmt = this := l.lift(value)
 
 /** A mutable WGSL `var` local: the first `:=` declares it, later `:=` reassign.
   * Use for accumulation (e.g. `VarVec3("col")`). The compound forms `+= -= *=
   * /=` emit WGSL compound assignment (`col += …;`) and require the `var` to be
   * already declared (i.e. used after the initial `:=`).
   */
-class VarExpr(name: String) extends LetExpr(name):
+class VarExpr[T <: Expr](name: String) extends LetExpr[T](name):
   private var declared = false
-  override def :=(value: Expr): Stmt =
+  override def :=(value: T): Stmt =
     if !declared then
       declared = true
       Stmt.varDecl(name, value)
@@ -71,6 +82,13 @@ class VarExpr(name: String) extends LetExpr(name):
   // Compound assignment. Each operator carries the same overload set as `:=`
   // above: the `Expr` form, CPU `Vec*` operands, and the `Double`/`Int` forms
   // needed to keep `col *= 0.5` working once these become overload sets.
+  //
+  // These stay untyped, unlike `:=`. A compound op cannot *declare* a local, so
+  // it can never fix a wrong element type behind a correctly-typed name the way
+  // `:=` could — a mismatch here fails in WGSL at the line as written. They are
+  // also legitimately mixed-type (`vec3 *= f32` broadcasts, `mat3 *= f32` too
+  // but `mat3 += f32` does not), so typing them needs its own operand rules.
+  // See documents/typed-shader-assignment.md.
   def +=(value: Expr): Stmt = Stmt.compound(name, "+", value)
   def +=(value: Double): Stmt = this += FloatExpr(floatToWgsl(value))
   def +=(value: Int): Stmt = this += FloatExpr(s"f32($value)")
@@ -100,8 +118,8 @@ class VarExpr(name: String) extends LetExpr(name):
   def /=(value: Vec4): Stmt = this /= value.toExpr
 
 /** A WGSL `const` local (compile-time constant). */
-class ConstExpr(name: String) extends LetExpr(name):
-  override def :=(value: Expr): Stmt = Stmt.constDecl(name, value)
+class ConstExpr[T <: Expr](name: String) extends LetExpr[T](name):
+  override def :=(value: T): Stmt = Stmt.constDecl(name, value)
 
 // ---------------------------------------------------------------------------
 // All opaque types in one object so the compiler sees through them and can
@@ -128,6 +146,15 @@ object Expr:
       extension (a: FloatExpr)
         inline def lerp(b: FloatExpr, t: FloatExpr): FloatExpr = a.mix(b, t)
 
+    /** `n := 0.5` — a CPU scalar into a float slot. */
+    given liftDouble: Lift[Double, FloatExpr] = v => FloatExpr(floatToWgsl(v))
+
+    /** `n := 1` — a bare `Int` is an f32 literal, matching
+      * `Conversion[Int, FloatExpr]`. The int-typed slots lift it as an `i32`
+      * instead; the target decides.
+      */
+    given liftInt: Lift[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
+
   opaque type Vec2Expr <: Expr = Expr
   object Vec2Expr:
     def apply(s: String): Vec2Expr = new Expr(s)
@@ -146,6 +173,9 @@ object Expr:
       extension (a: Vec2Expr)
         def lerp(b: Vec2Expr, t: FloatExpr): Vec2Expr =
           Vec2Expr(s"mix(${a.wgsl}, ${b.wgsl}, ${t.wgsl})")
+
+    /** `p := SomeVec2` — a CPU vector into a vec2 slot. */
+    given liftCpu: Lift[Vec2, Vec2Expr] = _.toExpr
 
   opaque type Vec3Expr <: Expr = Expr
   object Vec3Expr:
@@ -166,6 +196,9 @@ object Expr:
         def lerp(b: Vec3Expr, t: FloatExpr): Vec3Expr =
           Vec3Expr(s"mix(${a.wgsl}, ${b.wgsl}, ${t.wgsl})")
 
+    /** `p := SomeVec3` — a CPU vector into a vec3 slot. */
+    given liftCpu: Lift[Vec3, Vec3Expr] = _.toExpr
+
   opaque type Vec4Expr <: Expr = Expr
   object Vec4Expr:
     def apply(s: String): Vec4Expr = new Expr(s)
@@ -185,17 +218,36 @@ object Expr:
         def lerp(b: Vec4Expr, t: FloatExpr): Vec4Expr =
           Vec4Expr(s"mix(${a.wgsl}, ${b.wgsl}, ${t.wgsl})")
 
+    /** `p := SomeVec4` — a CPU vector into a vec4 slot. */
+    given liftCpu: Lift[Vec4, Vec4Expr] = _.toExpr
+
   opaque type Mat2Expr <: Expr = Expr
-  object Mat2Expr { def apply(s: String): Mat2Expr = new Expr(s) }
+  object Mat2Expr:
+    def apply(s: String): Mat2Expr = new Expr(s)
+
+    /** `m := SomeMat2` — a CPU matrix into a mat2x2 slot. */
+    given liftCpu: Lift[Mat2, Mat2Expr] = _.toExpr
 
   opaque type Mat3Expr <: Expr = Expr
-  object Mat3Expr { def apply(s: String): Mat3Expr = new Expr(s) }
+  object Mat3Expr:
+    def apply(s: String): Mat3Expr = new Expr(s)
+
+    /** `m := SomeMat3` — a CPU matrix into a mat3x3 slot. */
+    given liftCpu: Lift[Mat3, Mat3Expr] = _.toExpr
 
   opaque type Mat4Expr <: Expr = Expr
-  object Mat4Expr { def apply(s: String): Mat4Expr = new Expr(s) }
+  object Mat4Expr:
+    def apply(s: String): Mat4Expr = new Expr(s)
+
+    /** `m := SomeMat4` — a CPU matrix into a mat4x4 slot. */
+    given liftCpu: Lift[Mat4, Mat4Expr] = _.toExpr
 
   opaque type BoolExpr <: Expr = Expr
-  object BoolExpr { def apply(s: String): BoolExpr = new Expr(s) }
+  object BoolExpr:
+    def apply(s: String): BoolExpr = new Expr(s)
+
+    /** `flag := true` — a CPU boolean into a bool slot. */
+    given liftCpu: Lift[Boolean, BoolExpr] = v => BoolExpr(v.toString)
 
   /** How an element is reached inside a uniform array, given the element's
     * expression type. Scalars and `Vec2`s are lane-packed into `vec4` rows on
@@ -288,79 +340,79 @@ object Expr:
   // At runtime all are LetExpr instances, so selectDynamic returning
   // LetExpr(name) + asInstanceOf cast works safely.
 
-  opaque type LetFloat <: FloatExpr & LetExpr = LetExpr
-  object LetFloat { def apply(s: String): LetFloat = new LetExpr(s) }
+  opaque type LetFloat <: FloatExpr & LetExpr[FloatExpr] = LetExpr[FloatExpr]
+  object LetFloat { def apply(s: String): LetFloat = new LetExpr[FloatExpr](s) }
 
-  opaque type LetVec2 <: Vec2Expr & LetExpr = LetExpr
-  object LetVec2 { def apply(s: String): LetVec2 = new LetExpr(s) }
+  opaque type LetVec2 <: Vec2Expr & LetExpr[Vec2Expr] = LetExpr[Vec2Expr]
+  object LetVec2 { def apply(s: String): LetVec2 = new LetExpr[Vec2Expr](s) }
 
-  opaque type LetVec3 <: Vec3Expr & LetExpr = LetExpr
-  object LetVec3 { def apply(s: String): LetVec3 = new LetExpr(s) }
+  opaque type LetVec3 <: Vec3Expr & LetExpr[Vec3Expr] = LetExpr[Vec3Expr]
+  object LetVec3 { def apply(s: String): LetVec3 = new LetExpr[Vec3Expr](s) }
 
-  opaque type LetVec4 <: Vec4Expr & LetExpr = LetExpr
-  object LetVec4 { def apply(s: String): LetVec4 = new LetExpr(s) }
+  opaque type LetVec4 <: Vec4Expr & LetExpr[Vec4Expr] = LetExpr[Vec4Expr]
+  object LetVec4 { def apply(s: String): LetVec4 = new LetExpr[Vec4Expr](s) }
 
-  opaque type LetMat2 <: Mat2Expr & LetExpr = LetExpr
-  object LetMat2 { def apply(s: String): LetMat2 = new LetExpr(s) }
+  opaque type LetMat2 <: Mat2Expr & LetExpr[Mat2Expr] = LetExpr[Mat2Expr]
+  object LetMat2 { def apply(s: String): LetMat2 = new LetExpr[Mat2Expr](s) }
 
-  opaque type LetMat3 <: Mat3Expr & LetExpr = LetExpr
-  object LetMat3 { def apply(s: String): LetMat3 = new LetExpr(s) }
+  opaque type LetMat3 <: Mat3Expr & LetExpr[Mat3Expr] = LetExpr[Mat3Expr]
+  object LetMat3 { def apply(s: String): LetMat3 = new LetExpr[Mat3Expr](s) }
 
-  opaque type LetMat4 <: Mat4Expr & LetExpr = LetExpr
-  object LetMat4 { def apply(s: String): LetMat4 = new LetExpr(s) }
+  opaque type LetMat4 <: Mat4Expr & LetExpr[Mat4Expr] = LetExpr[Mat4Expr]
+  object LetMat4 { def apply(s: String): LetMat4 = new LetExpr[Mat4Expr](s) }
 
-  opaque type LetBool <: BoolExpr & LetExpr = LetExpr
-  object LetBool { def apply(s: String): LetBool = new LetExpr(s) }
+  opaque type LetBool <: BoolExpr & LetExpr[BoolExpr] = LetExpr[BoolExpr]
+  object LetBool { def apply(s: String): LetBool = new LetExpr[BoolExpr](s) }
 
   // Var types — mutable locals (var on first :=, reassignment after)
-  opaque type VarFloat <: FloatExpr & VarExpr = VarExpr
-  object VarFloat { def apply(s: String): VarFloat = new VarExpr(s) }
+  opaque type VarFloat <: FloatExpr & VarExpr[FloatExpr] = VarExpr[FloatExpr]
+  object VarFloat { def apply(s: String): VarFloat = new VarExpr[FloatExpr](s) }
 
-  opaque type VarVec2 <: Vec2Expr & VarExpr = VarExpr
-  object VarVec2 { def apply(s: String): VarVec2 = new VarExpr(s) }
+  opaque type VarVec2 <: Vec2Expr & VarExpr[Vec2Expr] = VarExpr[Vec2Expr]
+  object VarVec2 { def apply(s: String): VarVec2 = new VarExpr[Vec2Expr](s) }
 
-  opaque type VarVec3 <: Vec3Expr & VarExpr = VarExpr
-  object VarVec3 { def apply(s: String): VarVec3 = new VarExpr(s) }
+  opaque type VarVec3 <: Vec3Expr & VarExpr[Vec3Expr] = VarExpr[Vec3Expr]
+  object VarVec3 { def apply(s: String): VarVec3 = new VarExpr[Vec3Expr](s) }
 
-  opaque type VarVec4 <: Vec4Expr & VarExpr = VarExpr
-  object VarVec4 { def apply(s: String): VarVec4 = new VarExpr(s) }
+  opaque type VarVec4 <: Vec4Expr & VarExpr[Vec4Expr] = VarExpr[Vec4Expr]
+  object VarVec4 { def apply(s: String): VarVec4 = new VarExpr[Vec4Expr](s) }
 
-  opaque type VarMat2 <: Mat2Expr & VarExpr = VarExpr
-  object VarMat2 { def apply(s: String): VarMat2 = new VarExpr(s) }
+  opaque type VarMat2 <: Mat2Expr & VarExpr[Mat2Expr] = VarExpr[Mat2Expr]
+  object VarMat2 { def apply(s: String): VarMat2 = new VarExpr[Mat2Expr](s) }
 
-  opaque type VarMat3 <: Mat3Expr & VarExpr = VarExpr
-  object VarMat3 { def apply(s: String): VarMat3 = new VarExpr(s) }
+  opaque type VarMat3 <: Mat3Expr & VarExpr[Mat3Expr] = VarExpr[Mat3Expr]
+  object VarMat3 { def apply(s: String): VarMat3 = new VarExpr[Mat3Expr](s) }
 
-  opaque type VarMat4 <: Mat4Expr & VarExpr = VarExpr
-  object VarMat4 { def apply(s: String): VarMat4 = new VarExpr(s) }
+  opaque type VarMat4 <: Mat4Expr & VarExpr[Mat4Expr] = VarExpr[Mat4Expr]
+  object VarMat4 { def apply(s: String): VarMat4 = new VarExpr[Mat4Expr](s) }
 
-  opaque type VarBool <: BoolExpr & VarExpr = VarExpr
-  object VarBool { def apply(s: String): VarBool = new VarExpr(s) }
+  opaque type VarBool <: BoolExpr & VarExpr[BoolExpr] = VarExpr[BoolExpr]
+  object VarBool { def apply(s: String): VarBool = new VarExpr[BoolExpr](s) }
 
   // Const types — WGSL compile-time constants
-  opaque type ConstFloat <: FloatExpr & ConstExpr = ConstExpr
-  object ConstFloat { def apply(s: String): ConstFloat = new ConstExpr(s) }
+  opaque type ConstFloat <: FloatExpr & ConstExpr[FloatExpr] = ConstExpr[FloatExpr]
+  object ConstFloat { def apply(s: String): ConstFloat = new ConstExpr[FloatExpr](s) }
 
-  opaque type ConstVec2 <: Vec2Expr & ConstExpr = ConstExpr
-  object ConstVec2 { def apply(s: String): ConstVec2 = new ConstExpr(s) }
+  opaque type ConstVec2 <: Vec2Expr & ConstExpr[Vec2Expr] = ConstExpr[Vec2Expr]
+  object ConstVec2 { def apply(s: String): ConstVec2 = new ConstExpr[Vec2Expr](s) }
 
-  opaque type ConstVec3 <: Vec3Expr & ConstExpr = ConstExpr
-  object ConstVec3 { def apply(s: String): ConstVec3 = new ConstExpr(s) }
+  opaque type ConstVec3 <: Vec3Expr & ConstExpr[Vec3Expr] = ConstExpr[Vec3Expr]
+  object ConstVec3 { def apply(s: String): ConstVec3 = new ConstExpr[Vec3Expr](s) }
 
-  opaque type ConstVec4 <: Vec4Expr & ConstExpr = ConstExpr
-  object ConstVec4 { def apply(s: String): ConstVec4 = new ConstExpr(s) }
+  opaque type ConstVec4 <: Vec4Expr & ConstExpr[Vec4Expr] = ConstExpr[Vec4Expr]
+  object ConstVec4 { def apply(s: String): ConstVec4 = new ConstExpr[Vec4Expr](s) }
 
-  opaque type ConstMat2 <: Mat2Expr & ConstExpr = ConstExpr
-  object ConstMat2 { def apply(s: String): ConstMat2 = new ConstExpr(s) }
+  opaque type ConstMat2 <: Mat2Expr & ConstExpr[Mat2Expr] = ConstExpr[Mat2Expr]
+  object ConstMat2 { def apply(s: String): ConstMat2 = new ConstExpr[Mat2Expr](s) }
 
-  opaque type ConstMat3 <: Mat3Expr & ConstExpr = ConstExpr
-  object ConstMat3 { def apply(s: String): ConstMat3 = new ConstExpr(s) }
+  opaque type ConstMat3 <: Mat3Expr & ConstExpr[Mat3Expr] = ConstExpr[Mat3Expr]
+  object ConstMat3 { def apply(s: String): ConstMat3 = new ConstExpr[Mat3Expr](s) }
 
-  opaque type ConstMat4 <: Mat4Expr & ConstExpr = ConstExpr
-  object ConstMat4 { def apply(s: String): ConstMat4 = new ConstExpr(s) }
+  opaque type ConstMat4 <: Mat4Expr & ConstExpr[Mat4Expr] = ConstExpr[Mat4Expr]
+  object ConstMat4 { def apply(s: String): ConstMat4 = new ConstExpr[Mat4Expr](s) }
 
-  opaque type ConstBool <: BoolExpr & ConstExpr = ConstExpr
-  object ConstBool { def apply(s: String): ConstBool = new ConstExpr(s) }
+  opaque type ConstBool <: BoolExpr & ConstExpr[BoolExpr] = ConstExpr[BoolExpr]
+  object ConstBool { def apply(s: String): ConstBool = new ConstExpr[BoolExpr](s) }
 
   // ---------------------------------------------------------------------------
   // Integer scalar expression types
@@ -371,10 +423,23 @@ object Expr:
     def apply(s: String): IntExpr = new Expr(s)
     def apply(v: Int): IntExpr = new Expr(v.toString)
 
+    /** `i := 0` — an `Int` into an int slot stays an `i32`. Everywhere a float
+      * is expected a bare `Int` still means `f32` (`Conversion[Int,
+      * FloatExpr]`); assignment resolves on the target, so `.i` is not needed
+      * to declare an int local.
+      */
+    given liftInt: Lift[Int, IntExpr] = IntExpr(_)
+
   opaque type UIntExpr <: Expr = Expr
   object UIntExpr:
     def apply(s: String): UIntExpr = new Expr(s)
     def apply(v: Int): UIntExpr = new Expr(s"${v}u")
+
+    /** `n := 0` — an `Int` into a uint slot, emitted as `0u`. */
+    given liftInt: Lift[Int, UIntExpr] = UIntExpr(_)
+
+    /** `n := 3.u` — an already-`UInt` CPU value. */
+    given liftUInt: Lift[UInt, UIntExpr] = v => UIntExpr(v.toInt)
 
   // ---------------------------------------------------------------------------
   // Integer vector expression types (GPU-only phantoms)
@@ -402,82 +467,82 @@ object Expr:
   // Let/Var/Const variants for integer scalar types
   // ---------------------------------------------------------------------------
 
-  opaque type LetInt <: IntExpr & LetExpr = LetExpr
-  object LetInt { def apply(s: String): LetInt = new LetExpr(s) }
+  opaque type LetInt <: IntExpr & LetExpr[IntExpr] = LetExpr[IntExpr]
+  object LetInt { def apply(s: String): LetInt = new LetExpr[IntExpr](s) }
 
-  opaque type VarInt <: IntExpr & VarExpr = VarExpr
-  object VarInt { def apply(s: String): VarInt = new VarExpr(s) }
+  opaque type VarInt <: IntExpr & VarExpr[IntExpr] = VarExpr[IntExpr]
+  object VarInt { def apply(s: String): VarInt = new VarExpr[IntExpr](s) }
 
-  opaque type ConstInt <: IntExpr & ConstExpr = ConstExpr
-  object ConstInt { def apply(s: String): ConstInt = new ConstExpr(s) }
+  opaque type ConstInt <: IntExpr & ConstExpr[IntExpr] = ConstExpr[IntExpr]
+  object ConstInt { def apply(s: String): ConstInt = new ConstExpr[IntExpr](s) }
 
-  opaque type LetUInt <: UIntExpr & LetExpr = LetExpr
-  object LetUInt { def apply(s: String): LetUInt = new LetExpr(s) }
+  opaque type LetUInt <: UIntExpr & LetExpr[UIntExpr] = LetExpr[UIntExpr]
+  object LetUInt { def apply(s: String): LetUInt = new LetExpr[UIntExpr](s) }
 
-  opaque type VarUInt <: UIntExpr & VarExpr = VarExpr
-  object VarUInt { def apply(s: String): VarUInt = new VarExpr(s) }
+  opaque type VarUInt <: UIntExpr & VarExpr[UIntExpr] = VarExpr[UIntExpr]
+  object VarUInt { def apply(s: String): VarUInt = new VarExpr[UIntExpr](s) }
 
-  opaque type ConstUInt <: UIntExpr & ConstExpr = ConstExpr
-  object ConstUInt { def apply(s: String): ConstUInt = new ConstExpr(s) }
+  opaque type ConstUInt <: UIntExpr & ConstExpr[UIntExpr] = ConstExpr[UIntExpr]
+  object ConstUInt { def apply(s: String): ConstUInt = new ConstExpr[UIntExpr](s) }
 
   // ---------------------------------------------------------------------------
   // Let variants for integer vector types (Var/Const added as needed)
   // ---------------------------------------------------------------------------
 
-  opaque type LetIVec2 <: IVec2Expr & LetExpr = LetExpr
-  object LetIVec2 { def apply(s: String): LetIVec2 = new LetExpr(s) }
+  opaque type LetIVec2 <: IVec2Expr & LetExpr[IVec2Expr] = LetExpr[IVec2Expr]
+  object LetIVec2 { def apply(s: String): LetIVec2 = new LetExpr[IVec2Expr](s) }
 
-  opaque type LetIVec3 <: IVec3Expr & LetExpr = LetExpr
-  object LetIVec3 { def apply(s: String): LetIVec3 = new LetExpr(s) }
+  opaque type LetIVec3 <: IVec3Expr & LetExpr[IVec3Expr] = LetExpr[IVec3Expr]
+  object LetIVec3 { def apply(s: String): LetIVec3 = new LetExpr[IVec3Expr](s) }
 
-  opaque type LetIVec4 <: IVec4Expr & LetExpr = LetExpr
-  object LetIVec4 { def apply(s: String): LetIVec4 = new LetExpr(s) }
+  opaque type LetIVec4 <: IVec4Expr & LetExpr[IVec4Expr] = LetExpr[IVec4Expr]
+  object LetIVec4 { def apply(s: String): LetIVec4 = new LetExpr[IVec4Expr](s) }
 
-  opaque type LetUVec2 <: UVec2Expr & LetExpr = LetExpr
-  object LetUVec2 { def apply(s: String): LetUVec2 = new LetExpr(s) }
+  opaque type LetUVec2 <: UVec2Expr & LetExpr[UVec2Expr] = LetExpr[UVec2Expr]
+  object LetUVec2 { def apply(s: String): LetUVec2 = new LetExpr[UVec2Expr](s) }
 
-  opaque type LetUVec3 <: UVec3Expr & LetExpr = LetExpr
-  object LetUVec3 { def apply(s: String): LetUVec3 = new LetExpr(s) }
+  opaque type LetUVec3 <: UVec3Expr & LetExpr[UVec3Expr] = LetExpr[UVec3Expr]
+  object LetUVec3 { def apply(s: String): LetUVec3 = new LetExpr[UVec3Expr](s) }
 
-  opaque type LetUVec4 <: UVec4Expr & LetExpr = LetExpr
-  object LetUVec4 { def apply(s: String): LetUVec4 = new LetExpr(s) }
+  opaque type LetUVec4 <: UVec4Expr & LetExpr[UVec4Expr] = LetExpr[UVec4Expr]
+  object LetUVec4 { def apply(s: String): LetUVec4 = new LetExpr[UVec4Expr](s) }
 
   // Var / Const variants for the integer vector types
-  opaque type VarIVec2 <: IVec2Expr & VarExpr = VarExpr
-  object VarIVec2 { def apply(s: String): VarIVec2 = new VarExpr(s) }
+  opaque type VarIVec2 <: IVec2Expr & VarExpr[IVec2Expr] = VarExpr[IVec2Expr]
+  object VarIVec2 { def apply(s: String): VarIVec2 = new VarExpr[IVec2Expr](s) }
 
-  opaque type VarIVec3 <: IVec3Expr & VarExpr = VarExpr
-  object VarIVec3 { def apply(s: String): VarIVec3 = new VarExpr(s) }
+  opaque type VarIVec3 <: IVec3Expr & VarExpr[IVec3Expr] = VarExpr[IVec3Expr]
+  object VarIVec3 { def apply(s: String): VarIVec3 = new VarExpr[IVec3Expr](s) }
 
-  opaque type VarIVec4 <: IVec4Expr & VarExpr = VarExpr
-  object VarIVec4 { def apply(s: String): VarIVec4 = new VarExpr(s) }
+  opaque type VarIVec4 <: IVec4Expr & VarExpr[IVec4Expr] = VarExpr[IVec4Expr]
+  object VarIVec4 { def apply(s: String): VarIVec4 = new VarExpr[IVec4Expr](s) }
 
-  opaque type VarUVec2 <: UVec2Expr & VarExpr = VarExpr
-  object VarUVec2 { def apply(s: String): VarUVec2 = new VarExpr(s) }
+  opaque type VarUVec2 <: UVec2Expr & VarExpr[UVec2Expr] = VarExpr[UVec2Expr]
+  object VarUVec2 { def apply(s: String): VarUVec2 = new VarExpr[UVec2Expr](s) }
 
-  opaque type VarUVec3 <: UVec3Expr & VarExpr = VarExpr
-  object VarUVec3 { def apply(s: String): VarUVec3 = new VarExpr(s) }
+  opaque type VarUVec3 <: UVec3Expr & VarExpr[UVec3Expr] = VarExpr[UVec3Expr]
+  object VarUVec3 { def apply(s: String): VarUVec3 = new VarExpr[UVec3Expr](s) }
 
-  opaque type VarUVec4 <: UVec4Expr & VarExpr = VarExpr
-  object VarUVec4 { def apply(s: String): VarUVec4 = new VarExpr(s) }
+  opaque type VarUVec4 <: UVec4Expr & VarExpr[UVec4Expr] = VarExpr[UVec4Expr]
+  object VarUVec4 { def apply(s: String): VarUVec4 = new VarExpr[UVec4Expr](s) }
 
-  opaque type ConstIVec2 <: IVec2Expr & ConstExpr = ConstExpr
-  object ConstIVec2 { def apply(s: String): ConstIVec2 = new ConstExpr(s) }
+  opaque type ConstIVec2 <: IVec2Expr & ConstExpr[IVec2Expr] = ConstExpr[IVec2Expr]
+  object ConstIVec2 { def apply(s: String): ConstIVec2 = new ConstExpr[IVec2Expr](s) }
 
-  opaque type ConstIVec3 <: IVec3Expr & ConstExpr = ConstExpr
-  object ConstIVec3 { def apply(s: String): ConstIVec3 = new ConstExpr(s) }
+  opaque type ConstIVec3 <: IVec3Expr & ConstExpr[IVec3Expr] = ConstExpr[IVec3Expr]
+  object ConstIVec3 { def apply(s: String): ConstIVec3 = new ConstExpr[IVec3Expr](s) }
 
-  opaque type ConstIVec4 <: IVec4Expr & ConstExpr = ConstExpr
-  object ConstIVec4 { def apply(s: String): ConstIVec4 = new ConstExpr(s) }
+  opaque type ConstIVec4 <: IVec4Expr & ConstExpr[IVec4Expr] = ConstExpr[IVec4Expr]
+  object ConstIVec4 { def apply(s: String): ConstIVec4 = new ConstExpr[IVec4Expr](s) }
 
-  opaque type ConstUVec2 <: UVec2Expr & ConstExpr = ConstExpr
-  object ConstUVec2 { def apply(s: String): ConstUVec2 = new ConstExpr(s) }
+  opaque type ConstUVec2 <: UVec2Expr & ConstExpr[UVec2Expr] = ConstExpr[UVec2Expr]
+  object ConstUVec2 { def apply(s: String): ConstUVec2 = new ConstExpr[UVec2Expr](s) }
 
-  opaque type ConstUVec3 <: UVec3Expr & ConstExpr = ConstExpr
-  object ConstUVec3 { def apply(s: String): ConstUVec3 = new ConstExpr(s) }
+  opaque type ConstUVec3 <: UVec3Expr & ConstExpr[UVec3Expr] = ConstExpr[UVec3Expr]
+  object ConstUVec3 { def apply(s: String): ConstUVec3 = new ConstExpr[UVec3Expr](s) }
 
-  opaque type ConstUVec4 <: UVec4Expr & ConstExpr = ConstExpr
-  object ConstUVec4 { def apply(s: String): ConstUVec4 = new ConstExpr(s) }
+  opaque type ConstUVec4 <: UVec4Expr & ConstExpr[UVec4Expr] = ConstExpr[UVec4Expr]
+  object ConstUVec4 { def apply(s: String): ConstUVec4 = new ConstExpr[UVec4Expr](s) }
 
 /** Texture sampling ops on a panel texture (`ctx.textures.<name>`). */
 extension (tex: Expr.Texture2D)

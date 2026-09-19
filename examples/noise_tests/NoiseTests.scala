@@ -89,7 +89,7 @@ def main(): Unit =
             uv: Vec2Expr,
             t: FloatExpr,
             r: Vec2Expr,
-            out: AssignTarget,
+            out: AssignTarget[Vec4Expr],
         ) => Block,
     ): Shade[Uniforms, EmptyTuple] =
       painter.layerShade[Uniforms]: program =>

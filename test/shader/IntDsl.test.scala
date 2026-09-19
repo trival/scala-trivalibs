@@ -169,3 +169,25 @@ class IntDslTest extends FunSuite:
 
   test(".u chains to UIntExpr"):
     assertEquals((42.u: UIntExpr).toString, "42u")
+
+  // ---------------------------------------------------------------------------
+  // Target-directed literal assignment
+  // ---------------------------------------------------------------------------
+
+  test("Int literal assigned to an int local stays i32"):
+    assertEquals((VarInt("seg") := 0).toString, "  var seg = 0;")
+    assertEquals((LetInt("k") := 7).toString, "  let k = 7;")
+
+  test("Int literal assigned to a float local is f32"):
+    assertEquals((VarFloat("f") := 0).toString, "  var f = f32(0);")
+
+  test("Int literal assigned to a uint local is u32"):
+    assertEquals((VarUInt("n") := 3).toString, "  var n = 3u;")
+
+  test("Double literal assigned to a float local"):
+    assertEquals((LetFloat("t") := 0.5).toString, "  let t = 0.5;")
+
+  test("int var reassignment keeps the declared i32 type"):
+    val seg = VarInt("seg")
+    assertEquals((seg := 0).toString, "  var seg = 0;")
+    assertEquals((seg := IntExpr("i")).toString, "  seg = i;")

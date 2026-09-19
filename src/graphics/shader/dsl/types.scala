@@ -55,5 +55,8 @@ type UniformToExpr[T] = T match
   case SharedUniform[t]         => ToExpr[t]
   case _                        => ToExpr[T]
 
-/** Maps any type to AssignTarget — used for vertex varying output fields. */
-type ToAssign[T] = AssignTarget
+/** Maps a field type to its writable slot — used for vertex varying and
+  * fragment output fields. Carries the field's expression type, so writing the
+  * wrong type into an output is a compile error.
+  */
+type ToAssign[T] = AssignTarget[ToExpr[T]]

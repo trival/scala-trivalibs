@@ -202,7 +202,7 @@ class LoopsTest extends FunSuite:
 
   test("a local first assigned inside a loop declares inside the braces"):
     val cur = LetVec4("cur")
-    val s = loop(2)(i => Block(cur := Expr.raw("stops[0]")))
+    val s = loop(2)(i => Block(cur := Vec4Expr("stops[0]")))
     assertEquals(
       s: String,
       """  for (var i: i32 = 0; i < 2; i++) {
@@ -213,8 +213,8 @@ class LoopsTest extends FunSuite:
   test("a var assigned before the loop only assigns inside it"):
     val col = VarVec3("col")
     val s = Block(
-      col := Expr.raw("vec3<f32>(0.0)"),
-      loop(2)(i => col := Expr.raw("vec3<f32>(1.0)")),
+      col := Vec3Expr("vec3<f32>(0.0)"),
+      loop(2)(i => col := Vec3Expr("vec3<f32>(1.0)")),
     )
     assertEquals(
       Block.unwrap(s),
@@ -226,7 +226,7 @@ class LoopsTest extends FunSuite:
 
   test("an unrolled body shares one scope — one declaration, then assignments"):
     val acc = VarVec3("acc")
-    val s = unroll(3)(i => acc := Expr.raw(s"vec3<f32>($i.0)"))
+    val s = unroll(3)(i => acc := Vec3Expr(s"vec3<f32>($i.0)"))
     assertEquals(
       s: String,
       """  var acc = vec3<f32>(0.0);
@@ -236,8 +236,8 @@ class LoopsTest extends FunSuite:
 
   test("declaration follows build order, not placement order"):
     val a = VarVec2("a")
-    val first = a := Expr.raw("p")
-    val second = a := Expr.raw("q")
+    val first = a := Vec2Expr("p")
+    val second = a := Vec2Expr("q")
     assertEquals(
       Block.unwrap(Block(second, first)),
       """  a = q;

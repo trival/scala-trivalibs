@@ -55,24 +55,28 @@ class TypedAssignAccessor[F <: AnyNamedTuple](prefix: String)
     extends Selectable:
   type Fields = F
 
-  def selectDynamic(name: String): AssignTarget =
+  def selectDynamic(name: String): AssignTarget[Expr] =
     AssignTarget(if prefix.isEmpty then name else s"$prefix.$name")
 
-class AssignTarget(val target: String):
-  inline def :=(value: Expr): Stmt = Stmt.assign(target, value)
+/** A writable shader output slot holding a value of expression type `E`, so
+  * `ctx.out.color := someFloatExpr` does not compile. `E` comes from the
+  * field's declared type via [[ToAssign]].
+  *
+  * `E` carries no `<: Expr` bound: it arrives as `ToExpr[T]`, whose `case _ =>
+  * T` fallback the compiler cannot reduce for an abstract field type. Every
+  * value reaching `:=` is an `Expr` at runtime — the DSL has no other kind of
+  * value — hence the cast.
+  */
+class AssignTarget[E](val target: String):
+  inline def :=(value: E): Stmt =
+    Stmt.assign(target, value.asInstanceOf[Expr])
 
-  // CPU-value assignment — `ctx.out.color := WallColor`. The `Double`/`Int`
-  // forms are required, not convenience: `ctx.out.depth := 1.0` reached the
-  // `Expr` form through `Conversion[Double, FloatExpr]`, and an overload set
-  // blocks implicit conversion. See documents/cpu-gpu-vec-interop-plan.md (2).
-  inline def :=(value: Double): Stmt = this := (value: FloatExpr)
-  inline def :=(value: Int): Stmt = this := (value: FloatExpr)
-  inline def :=(value: Vec2): Stmt = this := value.toExpr
-  inline def :=(value: Vec3): Stmt = this := value.toExpr
-  inline def :=(value: Vec4): Stmt = this := value.toExpr
-  inline def :=(value: Mat2): Stmt = this := value.toExpr
-  inline def :=(value: Mat3): Stmt = this := value.toExpr
-  inline def :=(value: Mat4): Stmt = this := value.toExpr
+  /** CPU-value assignment — `ctx.out.color := WallColor`, `out.depth := 1.0`.
+    * Routed through [[Lift]] rather than per-type overloads, so the literal
+    * resolves against the field's own type.
+    */
+  inline def :=[C](value: C)(using l: Lift[C, E]): Stmt =
+    this := l.lift(value)
 
 // ---------------------------------------------------------------------------
 // Stage-Specific Context Types
@@ -86,8 +90,8 @@ class AssignTarget(val target: String):
   */
 class VertexOut[V](prefix: String) extends Selectable:
   type Fields = NamedTuple.Map[V & AnyNamedTuple, ToAssign]
-  val position: AssignTarget = AssignTarget(s"$prefix.position")
-  def selectDynamic(name: String): AssignTarget =
+  val position: AssignTarget[Vec4Expr] = AssignTarget(s"$prefix.position")
+  def selectDynamic(name: String): AssignTarget[Expr] =
     AssignTarget(s"$prefix.$name")
 
 /** Vertex shader context.

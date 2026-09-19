@@ -231,12 +231,16 @@ class CpuVecInteropTest extends FunSuite:
 
   test("AssignTarget := accepts CPU values and literals"):
     // `ctx.out.color := WallColor` — the output-slot path, which is a separate
-    // class from the local-variable `:=` above.
-    val t = trivalibs.graphics.shader.dsl.AssignTarget("out.color")
-    assertEquals((t := c4).toString.trim, s"out.color = $w4;")
-    assertEquals((t := 1.0).toString.trim, "out.color = 1.0;")
-    assertEquals((t := c3).toString.trim, s"out.color = $w3;")
-    assertEquals((t := c4).toString, (t := vec4(c4)).toString)
+    // class from the local-variable `:=` above. The slot carries its element
+    // type, so each CPU value lands in a target that accepts it.
+    val color = trivalibs.graphics.shader.dsl.AssignTarget[Vec4Expr]("out.color")
+    val depth = trivalibs.graphics.shader.dsl.AssignTarget[FloatExpr]("out.depth")
+    val normal =
+      trivalibs.graphics.shader.dsl.AssignTarget[Vec3Expr]("out.normal")
+    assertEquals((color := c4).toString.trim, s"out.color = $w4;")
+    assertEquals((depth := 1.0).toString.trim, "out.depth = 1.0;")
+    assertEquals((normal := c3).toString.trim, s"out.normal = $w3;")
+    assertEquals((color := c4).toString, (color := vec4(c4)).toString)
 
   // ---------------------------------------------------------------------------
   // Stage 5 — matrix products with CPU operands

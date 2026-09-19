@@ -99,6 +99,24 @@ redefinition.
 | `ConstFloat` / `ConstVec*` … | `const n = …;` | `const n = …;` |
 | `ctx.out.*`                  | `n = …;`       | `n = …;`       |
 
+**`:=` is type-checked against the target.** A local and an output slot each
+carry their element type, so a mismatched assignment is a Scala compile error
+rather than a WGSL one:
+
+```scala
+val col = VarVec3("col")
+col := someFloatExpr        // ✗ Cannot assign a FloatExpr to a shader local of type Vec3Expr.
+ctx.out.color := 0.5        // ✗ …of type Vec4Expr.
+```
+
+The right-hand side must therefore be a *typed* expression. `Expr.raw` yields a
+bare `Expr`, which carries no element type and so fits no slot — reach for the
+typed constructor instead (`Vec3Expr("…")`, `Vec4Expr("…")`), which emits the
+same WGSL.
+
+An output slot is an `AssignTarget[E]`, so a helper that takes one writes the
+element type: `def shadeInto(color: AssignTarget[Vec4Expr]): Block`.
+
 A `Var*` local is stateful: the **first** `:=` it sees emits the `var`
 declaration, every subsequent `:=` emits a plain reassignment. So declare-then-
 mutate just works:
@@ -124,9 +142,15 @@ immutable so they're `:=`-only. A compound op requires the `var` to be **already
 declared** — use it after the initial `:=`, never as the variable's first
 statement (WGSL has no `col += …` without a prior `var col`).
 
-Like `:=`, the compound ops are unchecked on the value's category (mirroring the
-WGSL it lowers to): `vec3Var += floatExpr` compiles in Scala but WGSL will
-reject the type mismatch — keep the operands in the same value category.
+**Unlike `:=`, the compound ops are unchecked** on the value's category: they
+take any expression and let WGSL decide. That is partly by nature — WGSL
+broadcasts a scalar across `+ - * /` for vectors, so `vec3Var += floatExpr` is
+legal and useful — but it also means a genuine mismatch like
+`mat3Var += floatExpr` compiles in Scala and fails in WGSL. Keep the operands
+in a combination WGSL accepts.
+
+A compound op never declares a local, so a mismatch here cannot hide behind a
+name the way a bad declaration can — WGSL rejects it at the line as written.
 
 ## Constants: plain Scala `val`s vs uniforms
 
@@ -215,13 +239,13 @@ uv + 1.0              // Vec2Expr  — broadcast scalar
 This covers arithmetic (`+ - * /`) on `FloatExpr` and `Vec2/3/4Expr`, and the
 scalar comparisons (`< <= > >= === !==`) on `FloatExpr`.
 
-**A bare literal is always a float.** Both `Double` and `Int` literals convert
-to `f32` (an `Int` emits `f32(n)`). This matches WGSL, where most math is `f32`.
-This holds for Scala `Int`/`Double` **values and expressions** too, not just
-literals — a plain `Int` like `(fadeMips - 1)` is accepted wherever a float
-expression is expected (e.g. `lod.min(fadeMips - 1)`), so **never write
-`.toDouble`** to feed an `Int` into the DSL; it's unnecessary noise. For an
-actual integer expression, opt in explicitly:
+**As an operand, a bare literal is always a float.** Both `Double` and `Int`
+literals convert to `f32` (an `Int` emits `f32(n)`). This matches WGSL, where
+most math is `f32`. It holds for Scala `Int`/`Double` **values and expressions**
+too, not just literals — a plain `Int` like `(fadeMips - 1)` is accepted
+wherever a float expression is expected (e.g. `lod.min(fadeMips - 1)`), so
+**never write `.toDouble`** to feed an `Int` into the DSL; it's unnecessary
+noise. For an actual integer expression, opt in explicitly:
 
 - `n.i` → `IntExpr` (WGSL `i32`)
 - `n.u` → `UInt` → `UIntExpr` (WGSL `u32`)
@@ -231,8 +255,25 @@ count.i + 1.i         // i32 arithmetic — keep both sides explicit
 idx.u * 2.u           // u32 arithmetic
 ```
 
-Integer expressions don't mix with the float-literal sugar: write `1.i`, not a
-bare `1`, when the other operand is an `IntExpr`/`UIntExpr`.
+Integer expressions don't mix with the float-literal sugar: in an **operand**
+position write `1.i`, not a bare `1`, when the other operand is an
+`IntExpr`/`UIntExpr`.
+
+**In an assignment, the target decides.** `:=` resolves the literal against the
+slot's type, so the same `0` lands correctly on either side and `.i` is not
+needed to declare an integer local:
+
+```scala
+VarInt("seg")   := 0      // var seg = 0;        — i32
+VarFloat("f")   := 0      // var f = f32(0);     — f32
+VarUInt("n")    := 3      // var n = 3u;         — u32
+LetFloat("t")   := 0.5    // let t = 0.5;
+```
+
+This is the one place the float default does not apply, because a declaration
+is what *fixes* a local's type: an f32 literal in an `IntExpr`-typed slot would
+make the Scala type and the emitted WGSL disagree for the rest of the shader,
+and every later use would still type-check.
 
 **Vector comparison is not a literal case.** `v < w` is _component-wise_ and
 returns a `Vec` mask (1.0 / 0.0 per lane, lowered to WGSL `step`) rather than a
