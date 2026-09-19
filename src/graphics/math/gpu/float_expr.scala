@@ -55,6 +55,15 @@ given NumOps[FloatExpr]:
     def /(b: FloatExpr): FloatExpr = FloatExpr(s"(${a.wgsl} / ${b.wgsl})")
     def unary_- : FloatExpr = FloatExpr(s"(-${a.wgsl})")
 
+    /** Truncated remainder — WGSL's own `%`, so the sign follows the dividend
+      * (`-1.0 % 2.0` is `-1.0`). Matches `IntExpr`'s `%` and Scala's. For the
+      * floor-based form that stays in `[0, |b|)` whatever the signs — the
+      * GLSL `mod`, and what a wrap or a checkerboard usually wants — use
+      * [[trivalibs.utils.numbers.NumExt.rem]]. That one is not an operator
+      * because it is not one WGSL instruction: it expands both operands.
+      */
+    def %(b: FloatExpr): FloatExpr = FloatExpr(s"(${a.wgsl} % ${b.wgsl})")
+
     // Numeric-literal overloads. Adding vector overloads below disables the
     // Conversion[Double|Int, FloatExpr] path for the right operand (Scala
     // won't apply implicit conversions through an overloaded method set), so
@@ -63,10 +72,12 @@ given NumOps[FloatExpr]:
     def -(b: Double): FloatExpr = a - (b: FloatExpr)
     def *(b: Double): FloatExpr = a * (b: FloatExpr)
     def /(b: Double): FloatExpr = a / (b: FloatExpr)
+    def %(b: Double): FloatExpr = a % (b: FloatExpr)
     def +(b: Int): FloatExpr = a + (b: FloatExpr)
     def -(b: Int): FloatExpr = a - (b: FloatExpr)
     def *(b: Int): FloatExpr = a * (b: FloatExpr)
     def /(b: Int): FloatExpr = a / (b: FloatExpr)
+    def %(b: Int): FloatExpr = a % (b: FloatExpr)
 
     // Left-scalar broadcast against a vector. Mirrors `Vec * FloatExpr` on
     // the right side so `floatExpr * vec3Expr` resolves without manual
@@ -236,6 +247,19 @@ given NumExt[FloatExpr]:
 extension (t: FloatExpr)
   inline def lerpIn[T](lo: T, hi: T)(using inline l: LerpBy[T, FloatExpr]): T =
     l.lerp(lo)(hi, t)
+
+  /** Bounds held in locals — `t.lerpIn(stopPrev, stopNext)`. A local is a
+    * subtype of its expression type and `LerpBy` is invariant in the bound, so
+    * the generic form above infers `T = LetFloat` and finds no instance. Taking
+    * the bounds as `LetExpr[T]` recovers the element type from the class type
+    * argument instead, and covers `Var*` / `Const*` too — both extend
+    * `LetExpr`. The casts are free: every local is an `Expr` of its element
+    * type at runtime.
+    */
+  inline def lerpIn[T <: Expr](lo: LetExpr[T], hi: LetExpr[T])(using
+      inline l: LerpBy[T, FloatExpr],
+  ): T =
+    l.lerp(lo.asInstanceOf[T])(hi.asInstanceOf[T], t)
   def lerpIn(lo: Double, hi: Double): FloatExpr = (lo: FloatExpr).mix(hi, t)
   def lerpIn(lo: Int, hi: Int): FloatExpr = (lo: FloatExpr).mix(hi, t)
 

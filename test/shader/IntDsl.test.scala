@@ -191,3 +191,28 @@ class IntDslTest extends FunSuite:
     val seg = VarInt("seg")
     assertEquals((seg := 0).toString, "  var seg = 0;")
     assertEquals((seg := IntExpr("i")).toString, "  seg = i;")
+
+  // ---------------------------------------------------------------------------
+  // Float remainder: `%` (truncated, WGSL's own) vs `rem` (floor-based)
+  // ---------------------------------------------------------------------------
+
+  test("FloatExpr % emits the WGSL operator"):
+    val x = FloatExpr("x")
+    assertEquals((x % FloatExpr("y")).toString, "(x % y)")
+
+  test("FloatExpr % takes Double and Int literals"):
+    val x = FloatExpr("x")
+    assertEquals((x % 2.0).toString, "(x % 2.0)")
+    assertEquals((x % 2).toString, "(x % f32(2))")
+
+  test("rem stays the floor-based form, distinct from %"):
+    val x = FloatExpr("x")
+    assertEquals(
+      x.rem(FloatExpr("y")).toString,
+      "(x - floor(x / abs(y)) * abs(y))",
+    )
+    assertNotEquals(x.rem(FloatExpr("y")).toString, (x % FloatExpr("y")).toString)
+
+  test("% on a local reaches the FloatExpr operator"):
+    val cell = VarVec2("cell")
+    assertEquals(((cell.x + cell.y) % 2.0).toString, "((cell.x + cell.y) % 2.0)")

@@ -49,13 +49,46 @@ class LerpInTest extends FunSuite:
     val r: FloatExpr = t.lerpIn(lo, hi)
     assertEquals(r.wgsl, "mix(lo, hi, t)")
 
+  // A local (`LetFloat`, `VarVec3`, …) is a subtype of its expression type, and
+  // `LerpBy` is invariant in the bound, so the generic `lerpIn` infers
+  // `T = LetFloat` and finds no instance. The `LetExpr[T]` overload recovers the
+  // element type from the class type argument. No ascriptions here on purpose:
+  // an expected type would supply the widening itself and hide a regression.
+  test("gpu bounds: locals, via the LetExpr overload"):
+    val t = VarFloat("t")
+    val lo = LetFloat("lo")
+    val hi = LetFloat("hi")
+    assertEquals((t.lerpIn(lo, hi) * 0.4).wgsl, "(mix(lo, hi, t) * 0.4)")
+
+    val c = LetVec3("c")
+    assertEquals(t.lerpIn(c, c).wgsl, "mix(c, c, t)")
+
+  test("gpu bounds: Var and Const locals reach the same overload"):
+    val t = VarFloat("t")
+    val v = VarFloat("v")
+    val c = ConstFloat("c")
+    assertEquals(t.lerpIn(v, v).wgsl, "mix(v, v, t)")
+    assertEquals(t.lerpIn(c, c).wgsl, "mix(c, c, t)")
+    assertEquals(t.lerpIn(v, c).wgsl, "mix(v, c, t)")
+
+  test("gpu bounds: a local mixed with a plain expr still widens by lub"):
+    val t = VarFloat("t")
+    val lo = LetFloat("lo")
+    assertEquals(t.lerpIn(lo, FloatExpr("hi")).wgsl, "mix(lo, hi, t)")
+
   // `lerp` deliberately stays on the ops traits / NumExt rather than being
   // reached through LerpBy: the type class is one signature, these are whole
   // overload sets, and an imported LerpBy given would hide them.
   test("the vector ops keep their own lerp overloads, unshadowed"):
     val t = FloatExpr("t")
-    assertEquals(vec3(0).lerp(vec3(1), t).wgsl, "mix(vec3<f32>(0.0), vec3<f32>(1.0), t)")
-    assertEquals(vec3(0).lerp(Vec3(1, 1, 1), t).wgsl, "mix(vec3<f32>(0.0), vec3<f32>(1.0, 1.0, 1.0), t)")
+    assertEquals(
+      vec3(0).lerp(vec3(1), t).wgsl,
+      "mix(vec3<f32>(0.0), vec3<f32>(1.0), t)",
+    )
+    assertEquals(
+      vec3(0).lerp(Vec3(1, 1, 1), t).wgsl,
+      "mix(vec3<f32>(0.0), vec3<f32>(1.0, 1.0, 1.0), t)",
+    )
     assertEquals(FloatExpr("n").lerp(FloatExpr("m"), t).wgsl, "mix(n, m, t)")
 
   test("Lerp[T] is what the geometry algorithms ask for"):
