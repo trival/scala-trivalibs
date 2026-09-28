@@ -531,8 +531,19 @@ val blur9 = WgslFn
 So: dependency wiring is automatic for DSL-authored helpers; for raw-WGSL
 helpers you must declare their callees yourself (`withDeps`, or `program.fn`).
 
-Reusable kernels live in `trivalibs.graphics.shader.lib.*` (blur, noise, color,
-hashing) — see the `blur` and `noise_tests` examples.
+Reusable kernels live in `trivalibs.graphics.shader.lib.*` (`noise`, `color`,
+`coords`, `random`, `blur`, `line`) — see the `blur`, `noise_tests` and
+`noise_cpu_gpu` examples. Each lib object has three layers:
+
+- **extensions** (from the painter prelude) — the everyday form, the same call
+  on a CPU vector and a shader expression: `uv.simplexFbm(octaves = 5)`,
+  `p.extendedNoise(tilingPeriod = vec3(8.0, 0.0, 8.0))`, `c.hsv2rgb`,
+  `v.hash`;
+- **object API** — `Simplex.fbm2d(pos, gain = 0.8, seed = 3.0)`: wrapper defs
+  with named, defaulted parameters that pick the matching WGSL variant;
+- **`X.wgsl`** — the raw `WgslFn` values, one per code path. This is what a
+  raw-WGSL helper passes to `withDeps` (`myFn.withDeps(Simplex.wgsl.fbm2d)`);
+  passing a wrapper def there does not compile.
 
 ## Raw WGSL bodies
 

@@ -5,30 +5,32 @@ import trivalibs.graphics.math.gpu.Vec2Expr
 import trivalibs.graphics.shader.dsl.WgslFn
 import trivalibs.graphics.shader.given
 
-/** Shader-side coordinate conversions as postfix ops — `p.polarToCart` instead
-  * of `Polar.polarToCart(p)`.
+/** Coordinate conversions on the GPU.
   *
-  * Mirrors the CPU extensions on `Vec2` in `trivalibs.graphics.math.cpu` one
-  * for one, so the same call reads the same on both sides. The [[Polar]] object
-  * below stays the definition site — use it when composing raw WGSL.
+  * The CPU mirror is `trivalibs.graphics.lib.coords.Polar`; the shared
+  * extensions (`p.polarToCart`, `p.cartToPolar`) cover both.
   */
-extension (p: Vec2Expr)
-  inline def polarToCart: Vec2Expr = Polar.polarToCart(p)
-  inline def cartToPolar: Vec2Expr = Polar.cartToPolar(p)
-
 object Polar:
 
-  /** Polar → Cartesian. `p.x` is radius, `p.y` is angle in radians.
-    *
-    * Returns `(radius·cos(angle), radius·sin(angle))`.
+  /** Polar → Cartesian. `pos.x` is the radius, `pos.y` the angle in radians;
+    * returns `(radius·cos(angle), radius·sin(angle))`.
     */
-  val polarToCart: WgslFn[(p: Vec2), Vec2] =
-    WgslFn.raw("polar_to_cart"):
-      "  return vec2<f32>(p.x * cos(p.y), p.x * sin(p.y));"
+  inline def polarToCart(pos: Vec2Expr): Vec2Expr = wgsl.polarToCart(pos)
 
-  /** Cartesian → polar. Returns `(length(v), atan2(v.y, v.x))` — i.e. radius in
-    * `.x`, angle (radians, range `(-π, π]`) in `.y`.
+  /** Cartesian → polar: `(length(pos), atan2(pos.y, pos.x))`, radius in `.x`,
+    * angle (radians, range `(-π, π]`) in `.y`.
     */
-  val cartToPolar: WgslFn[(v: Vec2), Vec2] =
-    WgslFn.raw("cart_to_polar"):
-      "  return vec2<f32>(length(v), atan2(v.y, v.x));"
+  inline def cartToPolar(pos: Vec2Expr): Vec2Expr = wgsl.cartToPolar(pos)
+
+  /** The WgslFn definitions — the layer for `.withDeps` and raw WGSL
+    * composition (`polarToCart` emits `polar_polar_to_cart`).
+    */
+  object wgsl:
+
+    lazy val polarToCart: WgslFn[(pos: Vec2), Vec2] =
+      WgslFn.raw("polar_polar_to_cart"):
+        "  return vec2<f32>(pos.x * cos(pos.y), pos.x * sin(pos.y));"
+
+    lazy val cartToPolar: WgslFn[(pos: Vec2), Vec2] =
+      WgslFn.raw("polar_cart_to_polar"):
+        "  return vec2<f32>(length(pos), atan2(pos.y, pos.x));"

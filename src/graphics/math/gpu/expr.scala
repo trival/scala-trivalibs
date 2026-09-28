@@ -147,7 +147,7 @@ object Expr:
         inline def lerp(b: FloatExpr, t: FloatExpr): FloatExpr = a.mix(b, t)
 
     /** `n := 0.5` — a CPU scalar into a float slot. */
-    given liftDouble: Lift[Double, FloatExpr] = v => FloatExpr(floatToWgsl(v))
+    given liftDouble: Lift[Double, FloatExpr] = v => v.toExpr
 
     /** `n := 1` — a bare `Int` is an f32 literal, matching
       * `Conversion[Int, FloatExpr]`. The int-typed slots lift it as an `i32`

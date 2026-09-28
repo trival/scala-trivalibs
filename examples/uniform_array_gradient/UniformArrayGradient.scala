@@ -3,6 +3,7 @@ package examples.uniform_array_gradient
 import org.scalajs.dom.HTMLCanvasElement
 import org.scalajs.dom.document
 import trivalibs.graphics.buffers.*
+import trivalibs.graphics.lib.color.*
 import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.math.gpu.{*, given}
 import trivalibs.graphics.painter.*

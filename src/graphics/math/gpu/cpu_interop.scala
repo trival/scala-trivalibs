@@ -21,6 +21,12 @@ package trivalibs.graphics.math.gpu
 // These run at shader *build* time (once, at startup) and produce a WGSL
 // string, so they are deliberately not `inline` and are not on any hot path.
 
+/** Lift a CPU `Double` into an `f32` literal — the explicit form of the
+  * implicit `Conversion[Double, FloatExpr]`, for code that already knows it
+  * needs a `FloatExpr` and should not lean on the conversion.
+  */
+extension (v: Double) def toExpr: FloatExpr = FloatExpr(floatToWgsl(v))
+
 /** Lift a CPU [[trivalibs.graphics.math.cpu.Vec2]] into a `vec2<f32>` literal.
   */
 extension (v: Vec2)

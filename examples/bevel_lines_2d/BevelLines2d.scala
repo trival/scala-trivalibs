@@ -75,7 +75,7 @@ def main(): Unit =
           // the cross coordinate is packed here and divided in the fragment
           // stage — interpolating `uv.y` directly kinks at every triangle
           // diagonal wherever the width changes. See `shader.lib.line`.
-          ctx.out.cross := lineCross(ctx.in.uv.y, ctx.in.width),
+          ctx.out.cross := LineCross.pack(ctx.in.uv.y, ctx.in.width),
           ctx.out.position := vec4(pos.x, -pos.y, 0.0, 1.0),
         )
       // uv debug color: any broken mitre or uv discontinuity shows up as a

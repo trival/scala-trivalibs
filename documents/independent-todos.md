@@ -29,37 +29,6 @@ the param row to the Panel table in §3.
 
 ---
 
-## CPU / GPU mirrored helpers
-
-### 🔄 CPU noise, mirroring `shader/lib/random/`
-
-**Now planned in [`cpu-gpu-lib-plan.md`](cpu-gpu-lib-plan.md)**, extended to the
-whole lib surface (namespaces, seeds, psrdnoise fbm, conventions). The text
-below is the original note.
-
-**Deferred, but the API shape is decided.** Color and coords now exist on both
-sides as **receiver extensions** with identical names — `c.hsv2rgb` on a CPU
-`Vec3` and on a `Vec3Expr`, `p.polarToCart` on a CPU `Vec2` and on a `Vec2Expr`.
-Dispatch is by receiver type, so a sketch imports both
-`trivalibs.graphics.math.cpu.*` and `trivalibs.graphics.shader.lib.color.*` and
-writes the same call in CPU setup code and in a shader body with no clash. The
-shader-side `Color` / `Polar` objects stay the WgslFn definition sites; the
-extensions are `inline` and erase to the identical WGSL.
-
-When CPU noise lands (simplex / psrdnoise / fbm), it follows the same rule:
-`uv.simplexNoise2d`, `uv.fbmSimplex2d(octaves, lacunarity, gain)` as extensions
-on the CPU `Vec2` and on `Vec2Expr`, mirroring
-`trivalibs/src/graphics/shader/lib/random/simplex.scala`.
-
-**Out of scope for the mirroring rule:** `shader/lib/random/hash` (shader-side
-pseudo-randomness — the CPU equivalent is `utils/random`, a different API by
-nature) and `shader/lib/blur` (GPU only).
-
-**Priority:** Low — no CPU consumer for noise yet. Do it when a sketch first
-needs to evaluate noise on the CPU.
-
----
-
 ## GPU resources
 
 ### 🔄 Explicit GPU resource freeing across the painter
@@ -249,7 +218,32 @@ unrolled). Revisit when a shader genuinely needs indexed mutable scratch.
 
 ---
 
+## JS helpers
+
+### 🔄 `Arr.++=` delegating to native `push`
+
+`Arr` has an inline `+=` that compiles to `push` (`src/utils/js.scala`), but
+no `++=`. So `arr ++= x` silently falls back to Scala.js's `Growable.++=`,
+which goes through collection machinery, and on an `Arr[String]` appends a
+string argument **character by character**. Add inline overloads on `Arr`: one
+appending another `Arr` (native `push(...other)` / a push loop), and one for a
+single element as a `+=` alias, so the natural builder spelling
+(`sb ++= "line"`) is safe and allocation-free. Noticed while writing the WGSL
+generators in `shader/lib/noise/worley.scala`, which use `push` for now.
+
+**Priority:** Low — convenience; `push` / `+=` work today.
+
+---
+
 ## ✅ Completed
+
+### ✅ CPU noise and CPU / GPU mirrored lib helpers
+
+Done in [`cpu-gpu-lib-plan.md`](cpu-gpu-lib-plan.md): simplex (2D–4D, fbm,
+torus), extended (psrdnoise, 2D / 3D, tiling / rotation / gradient, fbm) and
+worley (2D / 3D) on CPU and GPU, one hashed optional `seed`, normalized fbms,
+`graphics/lib` (CPU + shared `transparent inline` extensions) mirroring
+`graphics/shader/lib`, and the C1–C14 lib conventions.
 
 ---
 

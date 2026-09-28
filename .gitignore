@@ -11,3 +11,4 @@ examples/**/main.min.js
 *.semanticdb
 docs/api/html/
 dist/
+bench/*.out.js

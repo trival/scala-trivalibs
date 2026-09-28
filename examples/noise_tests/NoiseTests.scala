@@ -7,9 +7,8 @@ import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.graphics.math.gpu.{*, given}
 import trivalibs.graphics.painter.*
 import trivalibs.graphics.shader.dsl.{*, given}
-import trivalibs.graphics.shader.lib.random.Hash
-import trivalibs.graphics.shader.lib.random.Psrdnoise
-import trivalibs.graphics.shader.lib.random.Simplex
+import trivalibs.graphics.lib.noise.{*, given}
+import trivalibs.graphics.shader.lib.random.{*, given}
 import trivalibs.graphics.shader.{*, given}
 import trivalibs.utils.animation.animate
 import trivalibs.utils.js.*
@@ -46,25 +45,18 @@ private val hashDisplay: WgslFn[(uv: Vec2, time: Float), Vec4] =
         color := vec3(0.0),
         qa := q + vec2(p.time * 0.1, 0.0),
         when(qi.y === 0.u)(
-          when(qi.x === 0.u)(color := vec3(Hash.hash1(qa.x.bitsToU32)))
-            .elseIf(qi.x === 1.u)(color := vec3(Hash.hash1f(qa.x)))
-            .elseIf(qi.x === 2.u)(color := vec3(Hash.hash21(qa.bitsToU32)))
-            .elseDo(color := vec3(Hash.u32ToF32(Hash.hash21i(qa.bitsToU32)))),
+          when(qi.x === 0.u)(color := vec3(qa.x.bitsToU32.hash))
+            .elseIf(qi.x === 1.u)(color := vec3(qa.x.hash))
+            .elseIf(qi.x === 2.u)(color := vec3(qa.bitsToU32.hash1))
+            .elseDo(color := vec3(Hash.hash1(Hash.hash21i(qa.bitsToU32)))),
         ).elseDo(
-          when(qi.x === 0.u)(color := vec3(Hash.hash2(qa.bitsToU32), 0.0))
-            .elseIf(qi.x === 1.u)(color := vec3(Hash.hash2f(qa), 0.0))
-            .elseIf(qi.x === 2.u)(color := Hash.hash3(qa3.bitsToU32))
-            .elseDo(color := Hash.hash3f(qa3)),
+          when(qi.x === 0.u)(color := vec3(qa.bitsToU32.hash, 0.0))
+            .elseIf(qi.x === 1.u)(color := vec3(qa.hash, 0.0))
+            .elseIf(qi.x === 2.u)(color := qa3.bitsToU32.hash)
+            .elseDo(color := qa3.hash),
         ),
         ret(vec4(color, 1.0)),
       )
-    .withDeps(
-      Hash.hash1f,
-      Hash.hash21,
-      Hash.u32ToF32,
-      Hash.hash2f,
-      Hash.hash3f,
-    )
 
 @JSExportTopLevel("main", moduleID = "noise_tests")
 def main(): Unit =
@@ -105,7 +97,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * (t.sin * 5.0 + 6.0),
-        n := Simplex.simplexNoise2d(uv).fit1101,
+        n := uv.simplexNoise().fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -114,7 +106,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 5.0,
-        n := Simplex.simplexNoise3d(vec3(uv.x, uv.y, t * 0.3)).fit1101,
+        n := vec3(uv.x, uv.y, t * 0.3).simplexNoise().fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -123,7 +115,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 5.0,
-        n := Simplex.simplexNoise2dSeeded(uv, t * 0.2).fit1101,
+        n := uv.simplexNoise(seed = t.floor).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -132,12 +124,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 5.0,
-        n := Simplex
-          .simplexNoise3dSeeded(
-            vec3(uv.x, uv.y, 0.0),
-            vec3(t * 0.1, t * 0.07, 0.0),
-          )
-          .fit1101,
+        n := vec3(uv.x, uv.y, t * 0.1).simplexNoise(seed = t.floor).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -150,7 +137,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 3.0 + vec2(t * 0.2, 0.0),
-        n := Simplex.fbmSimplex2d(uv, 5.i, 2.0, 0.5).fit1101,
+        n := uv.simplexFbm(octaves = 5).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -159,7 +146,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 3.0,
-        n := Simplex.fbmSimplex2dSeeded(uv, 5.i, 2.0, 0.5, t * 0.3).fit1101,
+        n := uv.simplexFbm(octaves = 5, seed = t.floor).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -168,9 +155,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 3.0,
-        n := Simplex
-          .fbmSimplex3d(vec3(uv.x, uv.y, t * 0.2), 5.i, 2.0, 0.5)
-          .fit1101,
+        n := vec3(uv.x, uv.y, t * 0.2).simplexFbm(octaves = 5).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -179,15 +164,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 3.0,
-        n := Simplex
-          .fbmSimplex3dSeeded(
-            vec3(uv.x, uv.y, 0.0),
-            5.i,
-            2.0,
-            0.5,
-            vec3(t * 0.1, 0.0, 0.0),
-          )
-          .fit1101,
+        n := vec3(uv.x, uv.y, 0.0).simplexFbm(octaves = 5, seed = t.floor).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -200,7 +177,40 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 5.0 + vec2(t * 0.2, 0.0),
-        n := Simplex.worley2d(uv, 1.0).x,
+        n := uv.worleyNoise().x,
+        out := vec4(n, n, n, 1.0),
+      )
+
+    val worley3dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 5.0,
+        n := vec3(uv.x, uv.y, t * 0.3).worleyNoise(jitter = 0.8).x,
+        out := vec4(n, n, n, 1.0),
+      )
+
+    // -------------------------------------------------------------------------
+    // Extended fbm (tiling, animated gradient rotation) and 4D simplex fbm
+    // -------------------------------------------------------------------------
+
+    val extendedFbm2dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 2.5,
+        n := (uv.fract * 4.0)
+          .extendedFbmValue(octaves = 5, tilingPeriod = vec2(4.0, 4.0), rot = t * 0.1)
+          .fit1101,
+        out := vec4(n, n, n, 1.0),
+      )
+
+    val simplexFbm4dShade = noiseShade: (inUv, t, r, out) =>
+      val uv = LetVec2("uv")
+      val n = LetFloat("n")
+      Block(
+        uv := aspectUv(inUv, r) * 3.0,
+        n := vec4(uv.x, uv.y, t * 0.1, t * 0.07).simplexFbm(octaves = 4).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -213,9 +223,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 4.0,
-        n := Simplex
-          .simplexNoise4d(vec4(uv.x, uv.y, t * 0.2, t * 0.13))
-          .fit1101,
+        n := vec4(uv.x, uv.y, t * 0.2, t * 0.13).simplexNoise().fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -224,12 +232,7 @@ def main(): Unit =
         val n = LetFloat("n")
         val t = ctx.bindings.time
         Block(
-          n := Simplex
-            .tilingSimplexNoise2d(
-              ctx.in.uv + vec2(t * 0.05, 0.0).fract,
-              4.0,
-            )
-            .fit1101,
+          n := (ctx.in.uv + vec2(t * 0.05, 0.0)).fract.simplexTorusNoise(4.0).fit1101,
           ctx.out.color := vec4(n, n, n, 1.0),
         )
 
@@ -242,9 +245,8 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 2.5,
-        n := Psrdnoise
-          .tilingRotNoise2d(uv.fract * 4.0 + 0.5, vec2(4.0, 4.0), t * 0.1)
-          .x
+        n := (uv.fract * 4.0 + 0.5)
+          .extendedNoiseValue(tilingPeriod = vec2(4.0, 4.0), rot = t * 0.1)
           .fit1101,
         out := vec4(n, n, n, 1.0),
       )
@@ -254,10 +256,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 2.5,
-        n := Psrdnoise
-          .tilingNoise2d(uv.fract * 4.0 + 0.5, vec2(4.0, 4.0))
-          .x
-          .fit1101,
+        n := (uv.fract * 4.0 + 0.5).extendedNoiseValue(tilingPeriod = vec2(4.0, 4.0)).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -266,7 +265,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 5.0,
-        n := Psrdnoise.rotNoise2d(uv, t * 0.05).x.fit1101,
+        n := uv.extendedNoiseValue(rot = t * 0.05).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -279,13 +278,8 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 4.0,
-        n := Psrdnoise
-          .tilingRotNoise3d(
-            vec3(uv.x, uv.y, t * 0.1),
-            vec3(4.0, 4.0, 4.0),
-            t * 0.05,
-          )
-          .x
+        n := vec3(uv.x, uv.y, t * 0.1)
+          .extendedNoiseValue(tilingPeriod = vec3(4.0, 4.0, 4.0), rot = t * 0.05)
           .fit1101,
         out := vec4(n, n, n, 1.0),
       )
@@ -295,9 +289,8 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 4.0,
-        n := Psrdnoise
-          .tilingNoise3d(vec3(uv.x, uv.y, t * 0.2), vec3(4.0, 4.0, 4.0))
-          .x
+        n := vec3(uv.x, uv.y, t * 0.2)
+          .extendedNoiseValue(tilingPeriod = vec3(4.0, 4.0, 4.0))
           .fit1101,
         out := vec4(n, n, n, 1.0),
       )
@@ -307,10 +300,7 @@ def main(): Unit =
       val n = LetFloat("n")
       Block(
         uv := aspectUv(inUv, r) * 5.0,
-        n := Psrdnoise
-          .rotNoise3d(vec3(uv.x, uv.y, t * 0.15), t * 0.03)
-          .x
-          .fit1101,
+        n := vec3(uv.x, uv.y, t * 0.15).extendedNoiseValue(rot = t * 0.03).fit1101,
         out := vec4(n, n, n, 1.0),
       )
 
@@ -349,6 +339,9 @@ def main(): Unit =
       makePanel(fbm3dShade),
       makePanel(fbm3dSeededShade),
       makePanel(worley2dShade),
+      makePanel(worley3dShade),
+      makePanel(extendedFbm2dShade),
+      makePanel(simplexFbm4dShade),
       makePanel(tilingRotNoise2dShade),
       makePanel(tilingNoise2dShade),
       makePanel(rotNoise2dShade),

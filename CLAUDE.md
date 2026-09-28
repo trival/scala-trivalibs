@@ -93,14 +93,18 @@ with minimal low-level overhead.
   class, immutable tuple, buffer type). Operations via type class traits
   (`Vec3Base[Num, Vec]`, `Vec3Mutable`, `Vec3ImmutableOps`). Also
   `interpolation.scala` (the `Lerp` type class, for code generic in the value it
-  interpolates) and `math/cpu/color.scala` / `math/cpu/coords.scala` (CPU
-  mirrors of the shader-lib conversions — see the receiver-extension rule
-  below).
+  interpolates).
+- `src/graphics/lib/` — the helper library's CPU side plus the shared
+  CPU/GPU extensions: `color.scala`, `coords.scala`,
+  `noise/{simplex, extended, worley, extensions}.scala`, and `args.scala` (the
+  `FloatArg` / `IntArg` / `VecArg` parameter unions). Mirrors `shader/lib/`
+  path for path — see "Lib helpers: three layers" below.
 - `src/graphics/shader/` — `ShaderDef` with 7 type parameters. Named tuple type
   params → compile-time WGSL structs + WebGPU layouts. Key files: `types.scala`
   (WGSLType type class), `derive.scala` (WGSL generation), `layouts.scala`
   (vertex/bind group layouts), `builtins.scala`. `shader/lib/` holds reusable
-  WGSL function libraries (noise, color, blur, hashing, coords).
+  WGSL function libraries (`noise/` simplex / extended (psrdnoise) / worley,
+  `color`, `coords`, `random/hash`, `blur`, `line`).
 - `src/graphics/buffers/` — `BufferBinding[T, F]` (CPU↔GPU uniform sync),
   `AttribLayout` + `allocateAttribs` (typed vertex data).
 - `src/graphics/geometry/` — mesh / plane / grid / polygon / shape geometry.
@@ -278,24 +282,36 @@ mode.
   the method itself, or into overloads — don't carry the wrapper class over.
   E.g. Rust's `LineGeometryProps` became the default parameters of
   `Line.toBufferedGeometry`. Drop fields the Rust original never reads.
-- **Helpers that exist on both CPU and GPU are receiver extensions, named
-  identically.** CPU and shader code routinely share a file, so a helper that
-  has both a CPU and a shader form must not be reachable by the same unqualified
-  name in two namespaces. Resolve it the way `NumExt` / `Vec*ImmutableOpsG`
-  already do — **one name, dispatched by the receiver's type**:
+- **Lib helpers: three layers, mirrored CPU / GPU.** Helper domains (color,
+  coords, noise) exist on both sides with identical object, member and
+  parameter names; the package prefix picks the side
+  (`trivalibs.graphics.lib.noise.Simplex` CPU,
+  `trivalibs.graphics.shader.lib.noise.Simplex` GPU). Per domain:
+
+  | Layer | GPU (`graphics/shader/lib`) | CPU (`graphics/lib`) |
+  | --- | --- | --- |
+  | definition | `X.wgsl`: `WgslFn` values, one per code path, every arg explicit — the layer for `.withDeps` and raw WGSL | `X.kernel`: plain `def`s over scalar components |
+  | object API | ordinary wrapper defs with named, defaulted params; pick the `wgsl` fn at shader-build time | `inline def`s with `inline` params; pick the kernel at compile time, erase completely |
+  | extensions | one `transparent inline` def per name in `graphics/lib` for **both** sides, branching on the receiver type at compile time | (same def) |
 
   ```scala
-  val bg: Vec3     = Vec3(hue, 0.8, 0.5).hsv2rgb   // CPU, math.cpu
-  val c: Vec3Expr  = vec3(hue, 0.8, 0.5).hsv2rgb   // shader body, shader.lib.color
+  val bg: Vec3     = Vec3(hue, 0.8, 0.5).hsv2rgb   // CPU: inline → scalar kernel
+  val c: Vec3Expr  = vec3(hue, 0.8, 0.5).hsv2rgb   // GPU: → color_hsv2rgb(…)
+  n := uv.simplexFbm(octaves = 5, seed = 7.0)      // same call on a Vec2
   ```
 
-  The shader-side `WgslFn` objects (`Color`, `Polar`, …) stay the definition
-  sites — the extensions are `inline` wrappers that erase to the identical WGSL,
-  and raw-WGSL composition still calls the object form. Applies to color
-  (`shader/lib/color` ↔ `math/cpu/color.scala`), coords (`shader/lib/coords` ↔
-  `math/cpu/coords.scala`), and to noise when a CPU version lands. Not to
-  `shader/lib/random/hash` (its CPU counterpart is `utils/random`, a different
-  API by nature) or `shader/lib/blur` (GPU only).
+  Why one extension def for both sides: Scala forbids default arguments on
+  more than one overloaded alternative, so same-named extensions for `Vec2`
+  and `Vec2Expr` (or CPU and GPU exported into one prelude) cannot both carry
+  defaults. Their parameters take `FloatArg` / `IntArg` / `VecArg` unions
+  (`graphics/lib/args.scala`), narrowed per side at compile time with explicit
+  conversions (`d.toExpr`, `i.i`). Optional behavior is a parameter
+  defaulting to `null` (`seed`, `tilingPeriod`, `rot`), never a suffixed name.
+  The full convention set (naming, parameter order, ranges, WGSL names) is in
+  `documents/cpu-gpu-lib-plan.md` (C1–C14). GPU-only helpers (`Hash`, `Blur`,
+  `LineCross`) have the `wgsl` layer and wrappers but no CPU side; `Hash` has
+  GPU-only extensions (`x.hash`, `u.hashU`, `u.hash1`), and CPU randomness is
+  `utils/random`.
 
 - **Shader DSL: no type-ascription casts in user-facing code.** Write shader
   expressions naturally — `0.5`, `(1.0 - uv.y)`, `band * vec3(...)`,

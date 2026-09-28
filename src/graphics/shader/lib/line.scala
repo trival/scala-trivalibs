@@ -18,7 +18,7 @@ import trivalibs.graphics.math.gpu.{*, given}
   * type Varyings = (uv: Vec2, cross: Vec2)
   *
   * program.vert: ctx =>
-  *   ctx.out.cross := lineCross(ctx.in.uv.y, ctx.in.width)
+  *   ctx.out.cross := LineCross.pack(ctx.in.uv.y, ctx.in.width)
   *
   * program.frag: ctx =>
   *   val v = ctx.in.cross.lineV            // 0..1 across the stroke
@@ -35,9 +35,15 @@ import trivalibs.graphics.math.gpu.{*, given}
   * `y`, so pack once from either and pair the result with whichever along
   * coordinate is wanted. Packing `localUv.y` as well just spends a second
   * varying on the same number.
+  *
+  * GPU only: the cross coordinates are varyings, there is no CPU mirror.
   */
-inline def lineCross(uvY: FloatExpr, width: FloatExpr): Vec2Expr =
-  vec2(uvY * width, width)
+object LineCross:
+  /** Packs the cross-stroke varying from `uv.y` and the stroke `width`, in the
+    * vertex stage. Unpack with `cross.lineV` / `cross.lineOffset`.
+    */
+  inline def pack(uvY: FloatExpr, width: FloatExpr): Vec2Expr =
+    vec2(uvY * width, width)
 
 extension (cross: Vec2Expr)
   /** Normalized position across the stroke, `0` on one outline and `1` on the

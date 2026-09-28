@@ -1,7 +1,117 @@
 # CPU / GPU mirrored library helpers — plan
 
-Status: **planned**. Supersedes and extends the "CPU noise, mirroring
-`shader/lib/random/`" entry in `independent-todos.md`.
+Status: **in implementation**. Supersedes and extends the "CPU noise,
+mirroring `shader/lib/random/`" entry in `independent-todos.md`.
+
+## Implementation status
+
+Updated after each phase.
+
+| Phase                                          | State                                  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 — pattern check                              | ✅ done (by the probes recorded below) | transparent-inline extension, linked-JS check, `withDeps` rejection                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 1 — restructure + conventions                  | ✅ library done                        | `Double.toExpr`; `graphics/lib/{args, color, coords}.scala`; GPU `noise/{common, simplex, extended, worley}.scala`; `Hash` / `Color` / `Polar` / `Blur` / `Line` restructured (wrappers + `wgsl`); old `random/simplex`, `random/psrdnoise`, `math/cpu/{color, coords}` removed; prelude updated; `WgslFn` apply extended to arity 8 (the seeded extended fbms take 7 args). Simplex took over the upstream fixes our port lacked (`+10` permute, floor-based mod289, 4D `0.57` / `60.1`)                                                                                                                                                                                                                                                                                                                                       |
+| 2 — seeds                                      | ✅                                     | hashed scalar seed, integer offsets, two permute stages; seeded fbm hashes once                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 3 — extended fbm / seeded extended / Worley 3D | ✅                                     | upstream 8-variant set per dim + seeded twins + 16 fbm variants per dim; Worley 3D from `cellular3D.glsl`. Upstream constraint surfaced: in 2D the y period must be even (documented)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 4 — hash + shared extensions                   | ✅                                     | hash extensions; `graphics/lib/noise/extensions.scala`; color / coords shared extensions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 5 — CPU noise                                  | ✅                                     | `graphics/lib/noise/{common, simplex, extended, worley}.scala`. Deviation from the plan text: CPU extended follows the canonical GLSL's single kernel per dimension with runtime `period > 0` / `alpha != 0` branches (as upstream GLSL does), not the WGSL 8-variant split. Tests: `test/math/CpuNoise.test.scala` (reference = a table-free port of the upstream GLSL inside the test, since GLSL can't run here) and `test/shader/lib/NoiseFns.test.scala` (incl. the `withDeps` compile rejection). All trivalibs tests pass. Benchmark (`bun run bench:noise`, `bench/`): simplex 2D / 3D / 4D at ≈74% / 75% / 87% of simplex-noise.js after hoisting table locals, skipping the checked `Double.toInt` and composite `permGrad` tables; seeded ≈60–70% of unseeded. All 114 lib WGSL fns (with deps) validate with `naga` |
+| 6 — example                                    | ✅ built                               | `examples/noise_cpu_gpu` (GPU per pixel vs CPU per cell, same extension call, 10 comparisons); `noise_tests` migrated + Worley 3D / extended fbm / 4D fbm panels; `blur`, `bevel_lines_2d`, `uniform_array_gradient` migrated. Visual check in the browser still to do                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 7 — downstream migration                       | ✅ builds                              | all `Noise.fbm3` / `tilingFbm3`, `Simplex.*`, `Psrdnoise.*`, `Blur.*`, `lineCross`, `shader.lib.color/coords` imports migrated; `src/shaders/Noise.scala` deleted; all 21 sketches build (`bun run sketches`), graphics tests pass. Old fbm defaults kept explicit (`octaves = 3`). Normalization call sites still open (see list at the end of this section). Visual check pending                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 8 — docs                                       | ✅                                     | trivalibs `CLAUDE.md` (source layout, three-layer rule, CPU/GPU cost model), graphics `CLAUDE.md` (`sketchlib.shaders`), `docs/guide/shader-dsl-guide.md`, `independent-todos.md` (entry → completed), sketch PLAN.md mentions. Plan stays in `documents/` until the visual check and the normalization decisions are done                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+
+### Deviations from the plan (found during implementation)
+
+- **`object Line` → `LineCross.pack(uvY, width)`**: every line sketch also
+  imports the geometry `Line` class, so a GPU `object Line` was ambiguous.
+- **CPU extended noise follows the GLSL, not the WGSL split**: one kernel per
+  dimension with upstream GLSL's runtime `period > 0` / `alpha != 0` branches
+  (plus value / gradient and seeded kernels), instead of mirroring the 8 WGSL
+  variants. The GPU side does mirror them.
+- **Worley seeding** re-hashes after the _first_ permute (so every cell
+  changes), not "after the lattice hash" as for simplex / extended: two extra
+  permutes in total instead of two per cell row.
+- **`noise/common.scala`** (both sides) instead of `noise/seed.scala`: holds
+  the seed hash and the shared permute / mod289 helpers (GPU) or the hash /
+  gradient tables (CPU).
+- **`WgslFn` call syntax extended to arity 8**: the seeded extended fbms take 7
+  arguments; the DSL stopped at 6.
+- **Narrowing helpers are `transparent inline` and take a `VecArg` union**: an
+  `inline erasedValue` match body is typechecked generically, so a
+  dimension-spanning `tilingPeriod` must pass the helpers as one union type,
+  and an inner `inline match` only reduces on a refined (transparent) result.
+- **Upstream simplex fixes changed every simplex field**: the old port used the
+  `+1` permute, WGSL `%` as mod289 and older 4D constants (`0.6` / `49`); now
+  `+10`, floor-based mod289, `0.57` / `60.1`. All simplex-based sketches get a
+  different (upstream-correct) field, not just a rescaled one.
+- **2D extended tiling needs an even y period** (upstream psrdnoise rule,
+  surfaced by a failing test): documented on both `Extended` objects.
+- **Test references**: GLSL can't run here, so the CPU simplex is checked
+  against a table-free port of the upstream GLSL inside the test (with the
+  gradient derivation in f32 — the f64 version differs at hashes that are
+  multiples of 49, which is exactly the quirk the tables reproduce).
+- **Extra CPU optimizations** not in the plan, from the benchmark: table
+  locals hoisted per kernel (no module accessor per lookup), an unchecked int
+  coercion for the lattice `mod289`, and composite `permGrad*` tables
+  (simplex-noise.js idiom) saving one lookup per corner.
+- **Extended CPU fbm** takes the seed as a packed offset with `-1` for
+  unseeded and branches on it per octave (predictable), instead of separate
+  seeded / unseeded fbm kernels.
+- **CPU color no longer accepts tuple receivers** (`(0.0, 1.0, 1.0).hsv2rgb`):
+  receivers are the concrete vector classes, as planned; the one test using a
+  tuple moved to the `kernel.…Into` form.
+- **`noise_tests` seeded demos step the seed once per second** (`floor(t)`):
+  with a hashed seed, a continuously animated seed just flickers.
+- **Bundle-size check** (sketch `main.js` vs HEAD): the first build had a
+  `String.format` in the extended WGSL generator, which linked
+  `java.util.Formatter` (BigInteger, Long, List…, +146 KB in grid-ceiling);
+  replaced by concatenation. All `wgsl`-layer WgslFns are now `lazy val`s, so
+  Scala.js drops unused ones (eager objects built all members as soon as one
+  was touched — e.g. `noise_seed_offsets` pulled all of `Hash`). Result: most
+  sketches are 1–9% *smaller* than before; gradients / open-space +27 KB
+  (+3.4%), grid-ceiling +11 KB (+1.5%): shader-build code for the extended
+  option variants (8 inlined call branches per wrapper, 16 lazy variant
+  definitions), none of it in the WGSL — within the GPU cost model (C14).
+  Two library-wide follow-ups then removed most of that: `WgslFn.raw`'s
+  parameter list is now one concatenation chain the optimizer folds into a
+  single literal (no Arr / loop / join per definition), and the `WgslFn`
+  `apply` extensions delegate to non-inline `WgslFn.call` overloads (dep
+  registration + call text) instead of inlining them at every call site.
+  Also fixed: `inline` receivers / `pos` params were re-evaluated at every
+  use (e.g. `Vec3(…).simplexNoise()` built the `Vec3` three times); only the
+  `inline match`ed params stay inline now. Final: most sketches 2–11%
+  smaller than before, gradients / open-space +6.8 KB (+0.9%), grid-ceiling
+  +0.8 KB; no Scala / Java stdlib added (verified per class).
+- **CPU extended noise is tabulated** (after the benchmark showed it was
+  trig-bound): the lattice setup, period wrap and sums still follow upstream
+  GLSL, but the hash (exact integer `extPerm` / `ext2Mix`) and the gradients
+  (`ext2Cos/Sin`, `ext3P*/Q*`) are per-hash tables, and rotation costs one
+  sin / cos of α per call. Same field (checksums unchanged, table-free
+  reference ports in the tests agree to 1e-5); 3.3–4.3× faster: 2D value
+  8 → 27 Mops/s, 3D value 3.3 → 14, 3D rot 2.5 → 9.6, 3D gradient 3.2 → 10.7.
+  Worley tried branch-free +289 base offsets (with a 1024-entry periodic
+  `perm`) and composite `permCellO*` tables: no measurable change (≈18 /
+  6.4 Mops/s, its cost is the 9 / 27 distance evaluations themselves), so
+  it was reverted to the simpler `wrapLow` version. Two more f32 quirks surfaced in the
+  reference ports (upstream's `1/7` constants), both correctly reproduced by
+  the tables.
+- **WGSL validation**: every lib `wgsl` fn with its deps is validated with
+  `naga` (114 modules) — not in the plan, added because the browser check
+  isn't available from here.
+
+### fbm call sites still needing adjustment after the normalization
+
+The migrated `Noise.fbm3` / `tilingFbm3` sites were already normalized, so their
+amplitude is unchanged (their field shape changed with the upstream fixes and
+seeds). These sites used the old **unnormalized** `fbmSimplex2d`; old value =
+new value × total, decide per site:
+
+| Call site                                                         | Call now                                                                           | total  |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------ |
+| `sketches/experiments/strokes/study1/StrokeStudy1.scala` (`base`) | `.simplexFbm(octaves = 4, lacunarity = 2.2, gain = 0.8)` → `.fit1101` → `pow(0.9)` | 2.952  |
+| `sketches/strokes/base1/BaseStroke1.scala` (`color`)              | `.simplexFbm(octaves = 4, lacunarity = 3.5, gain = 0.22)` → `.fit1101`             | 1.279  |
+| `sketches/strokes/base1/BaseStroke1.scala` (`base`)               | `.simplexFbm(octaves = 4, lacunarity = 2.2, gain = 0.8)` → `.fit1101 / 4.0 + 0.08` | 2.952  |
+| `sketches/strokes/tile-strokes/TileStrokesSketch.scala` (`base`)  | same as above                                                                      | 2.952  |
+| `trivalibs/examples/noise_tests/NoiseTests.scala` (fbm panels)    | `.simplexFbm(octaves = 5)` → `.fit1101`                                            | 1.9375 |
 
 ## Goals
 
@@ -102,26 +212,26 @@ decided case by case, then the sketch is rebuilt:
 
 ✅ exists · ➖ missing · ⛔ not intended
 
-| Helper                                    | GPU                                   | CPU                                    | GPU form today                           | CPU form today              | After this plan                                                                                             |
-| ----------------------------------------- | ------------------------------------- | -------------------------------------- | ---------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Vector / matrix algebra                   | ✅                                    | ✅                                     | `a.dot(b)`, `v.normalize` on `Vec3Expr`  | same on `Vec3`              | unchanged; already shared through `Vec*BaseG`                                                               |
-| Scalar math                               | ✅                                    | ✅                                     | `x.sin`, `x.fit1101` on `FloatExpr`      | same on `Double` (`NumExt`) | unchanged                                                                                                   |
-| Interpolation                             | ✅                                    | ✅                                     | `t.lerpIn(a, b)`                         | same                        | unchanged                                                                                                   |
-| rgb ↔ hsv / hsl                           | ✅                                    | ✅                                     | `c.hsv2rgb`, `Color.hsv2rgb(c)`          | `c.hsv2rgb`                 | moves to `…lib.color` on both sides; CPU gets a `Color` object                                              |
-| polar ↔ cartesian                         | ✅                                    | ✅                                     | `p.polarToCart`, `Polar.polarToCart(p)`  | `p.polarToCart`             | moves to `…lib.coords`; CPU gets a `Polar` object                                                           |
-| Simplex 2D / 3D / 4D                      | ✅                                    | ➖                                     | `Simplex.simplexNoise2d(p)`              | —                           | both, `seed` optional                                                                                       |
-| Simplex seeded 2D / 3D                    | ✅ (inconsistent)                     | ➖                                     | `Simplex.simplexNoise3dSeeded(p, vec3)`  | —                           | folded into the above: hashed scalar `seed`                                                                 |
-| Simplex fbm 2D / 3D (+ seeded)            | ✅                                    | ➖                                     | `Simplex.fbmSimplex2d(p, 4.i, 2.0, 0.5)` | —                           | both, normalized, defaults, `seed` optional                                                                 |
-| Tiling simplex 2D (4D torus)              | ✅                                    | ➖                                     | `Simplex.tilingSimplexNoise2d(p, scale)` | —                           | both, as `Simplex.torusNoise2d`                                                                             |
-| Worley 2D                                 | ✅                                    | ➖                                     | `Simplex.worley2d(p, jitter)`            | —                           | own `Worley` object, both; **+ Worley 3D** from upstream `cellular3D.glsl`                                  |
-| psrdnoise 2D / 3D (tiling, rot, gradient) | ✅                                    | ➖                                     | `Psrdnoise.tilingNoise3d(p, period)`     | —                           | both, as `Extended.noise2d/3d`; `tilingPeriod` / `rot` / `seed` optional                                    |
-| psrdnoise fbm 2D / 3D                     | ➖ (downstream `tilingFbm3`, 3D only) | ➖                                     | —                                        | —                           | new, both: `Extended.fbm2d/3d`                                                                              |
-| psrdnoise seeded                          | ➖                                    | ➖                                     | —                                        | —                           | new, both (seed keeps tiling)                                                                               |
-| sketchlib `Noise.fbm3`                    | downstream                            | ➖                                     | `Noise.fbm3(p, seed = vec3(9))`          | —                           | **removed** → `p.simplexFbm(…)`                                                                             |
-| sketchlib `Noise.tilingFbm3`              | downstream                            | ➖                                     | `Noise.tilingFbm3(p, period)`            | —                           | **removed** → `p.extendedFbmValue(tilingPeriod = …)`                                                        |
+| Helper                                    | GPU                                   | CPU                                    | GPU form today                           | CPU form today              | After this plan                                                                                                                                                            |
+| ----------------------------------------- | ------------------------------------- | -------------------------------------- | ---------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vector / matrix algebra                   | ✅                                    | ✅                                     | `a.dot(b)`, `v.normalize` on `Vec3Expr`  | same on `Vec3`              | unchanged; already shared through `Vec*BaseG`                                                                                                                              |
+| Scalar math                               | ✅                                    | ✅                                     | `x.sin`, `x.fit1101` on `FloatExpr`      | same on `Double` (`NumExt`) | unchanged                                                                                                                                                                  |
+| Interpolation                             | ✅                                    | ✅                                     | `t.lerpIn(a, b)`                         | same                        | unchanged                                                                                                                                                                  |
+| rgb ↔ hsv / hsl                           | ✅                                    | ✅                                     | `c.hsv2rgb`, `Color.hsv2rgb(c)`          | `c.hsv2rgb`                 | moves to `…lib.color` on both sides; CPU gets a `Color` object                                                                                                             |
+| polar ↔ cartesian                         | ✅                                    | ✅                                     | `p.polarToCart`, `Polar.polarToCart(p)`  | `p.polarToCart`             | moves to `…lib.coords`; CPU gets a `Polar` object                                                                                                                          |
+| Simplex 2D / 3D / 4D                      | ✅                                    | ➖                                     | `Simplex.simplexNoise2d(p)`              | —                           | both, `seed` optional                                                                                                                                                      |
+| Simplex seeded 2D / 3D                    | ✅ (inconsistent)                     | ➖                                     | `Simplex.simplexNoise3dSeeded(p, vec3)`  | —                           | folded into the above: hashed scalar `seed`                                                                                                                                |
+| Simplex fbm 2D / 3D (+ seeded)            | ✅                                    | ➖                                     | `Simplex.fbmSimplex2d(p, 4.i, 2.0, 0.5)` | —                           | both, normalized, defaults, `seed` optional                                                                                                                                |
+| Tiling simplex 2D (4D torus)              | ✅                                    | ➖                                     | `Simplex.tilingSimplexNoise2d(p, scale)` | —                           | both, as `Simplex.torusNoise2d`                                                                                                                                            |
+| Worley 2D                                 | ✅                                    | ➖                                     | `Simplex.worley2d(p, jitter)`            | —                           | own `Worley` object, both; **+ Worley 3D** from upstream `cellular3D.glsl`                                                                                                 |
+| psrdnoise 2D / 3D (tiling, rot, gradient) | ✅                                    | ➖                                     | `Psrdnoise.tilingNoise3d(p, period)`     | —                           | both, as `Extended.noise2d/3d`; `tilingPeriod` / `rot` / `seed` optional                                                                                                   |
+| psrdnoise fbm 2D / 3D                     | ➖ (downstream `tilingFbm3`, 3D only) | ➖                                     | —                                        | —                           | new, both: `Extended.fbm2d/3d`                                                                                                                                             |
+| psrdnoise seeded                          | ➖                                    | ➖                                     | —                                        | —                           | new, both (seed keeps tiling)                                                                                                                                              |
+| sketchlib `Noise.fbm3`                    | downstream                            | ➖                                     | `Noise.fbm3(p, seed = vec3(9))`          | —                           | **removed** → `p.simplexFbm(…)`                                                                                                                                            |
+| sketchlib `Noise.tilingFbm3`              | downstream                            | ➖                                     | `Noise.tilingFbm3(p, period)`            | —                           | **removed** → `p.extendedFbmValue(tilingPeriod = …)`                                                                                                                       |
 | Integer / float hashes                    | ✅                                    | ⛔ (`utils/random` is a different API) | `Hash.hash21(p)`                         | —                           | GPU only, now with GPU-only extensions (`x.hash`, `u.hashU`, `u.hash1`); CPU port deferred (see "CPU / GPU parity"). Only the small seed hash inside noise gets a CPU form |
-| Blur kernels                              | ✅                                    | ⛔                                     | `Blur.gaussianBlur9(…)`                  | —                           | GPU only, renamed                                                                                           |
-| Line cross coords                         | ✅                                    | ⛔                                     | `ctx.in.cross.lineV`                     | —                           | GPU only, unchanged                                                                                         |
+| Blur kernels                              | ✅                                    | ⛔                                     | `Blur.gaussianBlur9(…)`                  | —                           | GPU only, renamed                                                                                                                                                          |
+| Line cross coords                         | ✅                                    | ⛔                                     | `ctx.in.cross.lineV`                     | —                           | GPU only, unchanged                                                                                                                                                        |
 
 ## Target design
 
@@ -319,19 +429,19 @@ Both trees use the same relative paths. CPU: `graphics/lib/`, package
 `trivalibs.graphics.lib.*` (CPU implementation + shared extensions). GPU:
 `graphics/shader/lib/`, package `trivalibs.graphics.shader.lib.*`.
 
-| Relative path            | Subpackage   | CPU — `graphics/lib/`                                                                                      | GPU — `graphics/shader/lib/`           |
-| ------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `args.scala`             | package root | `FloatArg` / `IntArg` / `Vec2–4Arg` CPU-GPU parameter unions, `cpuD` / `gpuF` / … narrowing helpers        | —                                      |
-| `color.scala`            | `.color`     | `object Color` (+ `Color.kernel`) + shared extensions `c.hsv2rgb` …                                        | `object Color` (+ `Color.wgsl`)        |
-| `coords.scala`           | `.coords`    | `object Polar` (+ `Polar.kernel`) + shared extensions `p.polarToCart` …                                    | `object Polar` (+ `Polar.wgsl`)        |
-| `noise/simplex.scala`    | `.noise`     | `object Simplex` (+ `Simplex.kernel`)                                                                      | `object Simplex` (+ `Simplex.wgsl`)    |
-| `noise/extended.scala`   | `.noise`     | `object Extended` (+ `Extended.kernel`)                                                                    | `object Extended` (+ `Extended.wgsl`)  |
-| `noise/worley.scala`     | `.noise`     | `object Worley` (+ `Worley.kernel`)                                                                        | `object Worley` (+ `Worley.wgsl`)      |
-| `noise/seed.scala`       | `.noise`     | seed hash (same algorithm as the GPU one)                                                                  | seed hash WgslFn, `private[lib]`       |
-| `noise/extensions.scala` | `.noise`     | shared extensions `p.simplexNoise`, `p.simplexFbm`, `p.extendedNoise`, `p.extendedFbm`, `p.worleyNoise`, … | —                                      |
+| Relative path            | Subpackage   | CPU — `graphics/lib/`                                                                                      | GPU — `graphics/shader/lib/`                                    |
+| ------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `args.scala`             | package root | `FloatArg` / `IntArg` / `Vec2–4Arg` CPU-GPU parameter unions, `cpuD` / `gpuF` / … narrowing helpers        | —                                                               |
+| `color.scala`            | `.color`     | `object Color` (+ `Color.kernel`) + shared extensions `c.hsv2rgb` …                                        | `object Color` (+ `Color.wgsl`)                                 |
+| `coords.scala`           | `.coords`    | `object Polar` (+ `Polar.kernel`) + shared extensions `p.polarToCart` …                                    | `object Polar` (+ `Polar.wgsl`)                                 |
+| `noise/simplex.scala`    | `.noise`     | `object Simplex` (+ `Simplex.kernel`)                                                                      | `object Simplex` (+ `Simplex.wgsl`)                             |
+| `noise/extended.scala`   | `.noise`     | `object Extended` (+ `Extended.kernel`)                                                                    | `object Extended` (+ `Extended.wgsl`)                           |
+| `noise/worley.scala`     | `.noise`     | `object Worley` (+ `Worley.kernel`)                                                                        | `object Worley` (+ `Worley.wgsl`)                               |
+| `noise/common.scala`     | `.noise`     | hash / gradient tables + seed hash (same algorithm as the GPU one)                                         | mod289 / permute helpers + seed hash, `private[lib]`            |
+| `noise/extensions.scala` | `.noise`     | shared extensions `p.simplexNoise`, `p.simplexFbm`, `p.extendedNoise`, `p.extendedFbm`, `p.worleyNoise`, … | —                                                               |
 | `random/hash.scala`      | `.random`    | — (deferred)                                                                                               | `object Hash` + GPU-only extensions `.hash`, `.hashU`, `.hash1` |
-| `blur.scala`             | `.blur`      | —                                                                                                          | `object Blur`                          |
-| `line.scala`             | `.line`      | —                                                                                                          | `object Line` + `lineV` / `lineOffset` |
+| `blur.scala`             | `.blur`      | —                                                                                                          | `object Blur`                                                   |
+| `line.scala`             | `.line`      | —                                                                                                          | `object LineCross` + `lineV` / `lineOffset`                     |
 
 Rules:
 
@@ -393,7 +503,7 @@ Existing modules are audited against them (table below).
 | `Color`                        | WgslFns are the API; CPU side has no object (C1 / C13); GPU WGSL names lack a prefix (`hsv2rgb`)                                                                                                                                                                   | wrapper defs + `Color.wgsl`; CPU `Color` object; WGSL names → `color_hsv2rgb`                                                                                                                                                                                             |
 | `Polar`                        | same as `Color`; GPU parameter `p` in one fn and `v` in the other                                                                                                                                                                                                  | same as `Color`; parameter → `pos`                                                                                                                                                                                                                                        |
 | `Blur`                         | WgslFns are the API; members repeat the family (`gaussianBlur9`, `boxBlur2dAuto`); `*Auto` twins exist only because the `res` argument can't be omitted                                                                                                            | wrapper defs; `Blur.gaussian5/9/13`, `Blur.gaussian`, `Blur.box`; `box2d` / `tent2d` with `res: Vec2Expr \| Null = null` absorbing the `*Auto` variants (C4)                                                                                                              |
-| `line`                         | free functions, no object (C1)                                                                                                                                                                                                                                     | `object Line` holding `cross(uvY, width)`; `lineV` / `lineOffset` extensions stay                                                                                                                                                                                         |
+| `line`                         | free functions, no object (C1)                                                                                                                                                                                                                                     | `object LineCross` holding `pack(uvY, width)` (not `Line`: clashes with the geometry class); `lineV` / `lineOffset` extensions stay                                                                                                                                       |
 | downstream `sketchlib.shaders` | `Noise` removed by this plan; `Uv` / `Shapes` are out of scope (sketch-side, not library)                                                                                                                                                                          | —                                                                                                                                                                                                                                                                         |
 
 ### Naming
@@ -477,16 +587,16 @@ zeros. So every call today pays for period wrapping and gradient rotation.
 
 Object API (both sides unless marked):
 
-| Object            | Members (wrapper defs)                                                                                                                                                                                                          |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Simplex`         | `noise2d/3d/4d(pos, seed)` → value; `fbm2d/3d/4d(pos, octaves, lacunarity, gain, seed)` → value; `torusNoise2d(pos, scale, seed)` → value                                                                                       |
-| `Extended`        | `noise2d/3d(pos, tilingPeriod, rot, seed)` → `Vec3` / `Vec4` (value, gradient); `noiseValue2d/3d(…)` → value; `fbm2d/3d(pos, octaves, lacunarity, gain, tilingPeriod, rot, seed)` → `Vec3` / `Vec4`; `fbmValue2d/3d(…)` → value |
-| `Worley`          | `noise2d(pos, jitter, seed)`, `noise3d(pos, jitter, seed)` → `Vec2` (F1, F2)                                                                                                                                                                         |
-| `Color`           | `rgb2hsv`, `rgb2hsl`, `hsv2rgb`, `hsv2rgbSmooth`, `hsv2rgbSmoother`, `hsl2rgb` (all `(c)`)                                                                                                                                      |
-| `Polar`           | `polarToCart(pos)`, `cartToPolar(pos)`                                                                                                                                                                                          |
-| `Hash` (GPU only) | `hash1`, `hash1i`, `hash21`, `hash21i`, `hash2`, `hash2i`, `hash3`, `hash3i`, `hash4`, `hash4i`, `hash1f` … `hash4f`                                                                                                            |
-| `Blur` (GPU only) | `gaussian`, `gaussian5`, `gaussian9`, `gaussian13`, `box`, `box2d(…, res = null)`, `tent2d(…, res = null)`                                                                                                                      |
-| `Line` (GPU only) | `cross(uvY, width)`; extensions `cross.lineV`, `cross.lineOffset`                                                                                                                                                               |
+| Object                 | Members (wrapper defs)                                                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Simplex`              | `noise2d/3d/4d(pos, seed)` → value; `fbm2d/3d/4d(pos, octaves, lacunarity, gain, seed)` → value; `torusNoise2d(pos, scale, seed)` → value                                                                                       |
+| `Extended`             | `noise2d/3d(pos, tilingPeriod, rot, seed)` → `Vec3` / `Vec4` (value, gradient); `noiseValue2d/3d(…)` → value; `fbm2d/3d(pos, octaves, lacunarity, gain, tilingPeriod, rot, seed)` → `Vec3` / `Vec4`; `fbmValue2d/3d(…)` → value |
+| `Worley`               | `noise2d(pos, jitter, seed)`, `noise3d(pos, jitter, seed)` → `Vec2` (F1, F2)                                                                                                                                                    |
+| `Color`                | `rgb2hsv`, `rgb2hsl`, `hsv2rgb`, `hsv2rgbSmooth`, `hsv2rgbSmoother`, `hsl2rgb` (all `(c)`)                                                                                                                                      |
+| `Polar`                | `polarToCart(pos)`, `cartToPolar(pos)`                                                                                                                                                                                          |
+| `Hash` (GPU only)      | `hash1`, `hash1i`, `hash21`, `hash21i`, `hash2`, `hash2i`, `hash3`, `hash3i`, `hash4`, `hash4i`, `hash1f` … `hash4f`                                                                                                            |
+| `Blur` (GPU only)      | `gaussian`, `gaussian5`, `gaussian9`, `gaussian13`, `box`, `box2d(…, res = null)`, `tent2d(…, res = null)`                                                                                                                      |
+| `LineCross` (GPU only) | `pack(uvY, width)`; extensions `cross.lineV`, `cross.lineOffset`                                                                                                                                                                |
 
 `X.wgsl` members (GPU only) keep one fn per code path:
 
@@ -505,6 +615,7 @@ budget). The upstream fast variants `cellular2x2.glsl` / `cellular2x2x2.glsl`
 wrong and has sharp discontinuities", which doesn't fit a lib function that
 returns F2. Cost note: 27 cells per sample makes 3D worley the most
 expensive noise here, which the benchmark shows.
+
 - `Extended.wgsl`: the upstream set per dimension (`psr`, `ps`, `sr`, `s`,
   `psrd`, `psd`, `srd`, `sd` for 2D and 3D), each also `…Seeded`, plus
   the fbm loops over them (value and gradient, tiling or not, seeded or not).
@@ -752,7 +863,7 @@ Two references, one for **what** is computed and one for **how**:
 
 | Reference                                                                                                                                                                                   | Role                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [stegu/webgl-noise](https://github.com/stegu/webgl-noise) `src/noise2D.glsl`, `noise3D.glsl`, `noise4D.glsl`, `cellular2D.glsl`, `cellular3D.glsl` (Ashima / Gustavson, MIT, maintained)                                | the upstream of our WGSL simplex / worley. Defines the field: skew constants, `mod289` permute hash, gradient derivation (2D: `fract(p / 41)` ramp; 3D: 7×7 points on an octahedron + `taylorInvSqrt`; 4D: `grad4`), kernel radius and scale |
+| [stegu/webgl-noise](https://github.com/stegu/webgl-noise) `src/noise2D.glsl`, `noise3D.glsl`, `noise4D.glsl`, `cellular2D.glsl`, `cellular3D.glsl` (Ashima / Gustavson, MIT, maintained)    | the upstream of our WGSL simplex / worley. Defines the field: skew constants, `mod289` permute hash, gradient derivation (2D: `fract(p / 41)` ramp; 3D: 7×7 points on an octahedron + `taylorInvSqrt`; 4D: `grad4`), kernel radius and scale |
 | [jwagner/simplex-noise.js](https://github.com/jwagner/simplex-noise.js) `simplex-noise.ts` (MIT, ~1.8k★, 2024) — itself Gustavson's speed-improved Java reference + Eastman's optimizations | the idiomatic, benchmarked JS shape of a simplex kernel: the performance patterns to copy                                                                                                                                                    |
 
 They disagree on the hash and the gradient set. simplex-noise.js uses a random
@@ -903,11 +1014,11 @@ wrapper, so no wrapper can register the dep for it.
 `withDeps(ds: WgslFnData*)` takes WgslFn values. A wrapper def passed by
 mistake fails to compile (verified with a probe against the real library):
 
-| Call                                   | Result                                                                                                 |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `withDeps(Simplex.wgsl.fbm2d)`         | compiles                                                                                               |
-| `withDeps(Simplex.fbm2d)`              | error: Found `(Vec2Expr, IntExpr, FloatExpr, FloatExpr) => FloatExpr` (eta-expanded), Required `WgslFnData` |
-| `withDeps(Simplex.fbm2d(uv))`          | error: Found `FloatExpr`, Required `WgslFnData`                                                        |
+| Call                           | Result                                                                                                      |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `withDeps(Simplex.wgsl.fbm2d)` | compiles                                                                                                    |
+| `withDeps(Simplex.fbm2d)`      | error: Found `(Vec2Expr, IntExpr, FloatExpr, FloatExpr) => FloatExpr` (eta-expanded), Required `WgslFnData` |
+| `withDeps(Simplex.fbm2d(uv))`  | error: Found `FloatExpr`, Required `WgslFnData`                                                             |
 
 The messages are clear enough to point at the fix. They get locked in by an
 munit test using `scala.compiletime.testing.typeCheckErrors`, so a later
@@ -993,6 +1104,5 @@ Scala and fails at WGSL compile time. That's covered by docs:
    these. Move this plan to `documents/done/`.
 
 ## Open questions
-
 
 None at the moment. All questions raised during planning are resolved above.

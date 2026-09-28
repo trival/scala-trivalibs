@@ -17,7 +17,7 @@ private[gpu] def floatToWgsl(v: Double): String =
   if s.indexOf('.') >= 0 || s.indexOf('E') >= 0 || s.indexOf('e') >= 0 then s
   else s + ".0"
 
-given Conversion[Double, FloatExpr] = v => FloatExpr(floatToWgsl(v))
+given Conversion[Double, FloatExpr] = v => v.toExpr
 given Conversion[Float, FloatExpr] = v => FloatExpr(floatToWgsl(v.toDouble))
 given Conversion[Int, FloatExpr] = v => FloatExpr(s"f32($v)")
 

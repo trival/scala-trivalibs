@@ -1,11 +1,13 @@
 package trivalibs.graphics.math
 
 import munit.FunSuite
+import trivalibs.graphics.lib.color.*
+import trivalibs.graphics.lib.coords.*
 import trivalibs.graphics.math.cpu.{*, given}
 import trivalibs.utils.numbers.NumExt.given
 
-// CPU color-space and coordinate conversions — the receiver-dispatch mirrors of
-// `shader.lib.color` / `shader.lib.coords`.
+// CPU color-space and coordinate conversions — the CPU branch of the shared
+// `graphics.lib` extensions, mirroring `shader.lib.color` / `shader.lib.coords`.
 class CpuColorCoordsTest extends FunSuite:
 
   private val eps = 1e-9
@@ -92,9 +94,12 @@ class CpuColorCoordsTest extends FunSuite:
       assertEqualsDouble(c.y, 0.0, 1e-9)
       assertEqualsDouble(c.z, 0.0, 1e-9)
 
-  test("Vec3Tuple gets the same color ops"):
-    val rgb = (0.0, 1.0, 1.0).hsv2rgb
-    assertEqualsDouble(rgb._1, 1.0, eps)
+  test("kernel Into forms write into a caller-owned vector"):
+    val out = new Vec3()
+    val rgb = Color.kernel.hsv2rgbInto(0.0, 1.0, 1.0, out)
+    assert(rgb eq out)
+    assertEqualsDouble(out.x, 1.0, eps)
+    assertEqualsDouble(out.y, 0.0, eps)
 
   test("polarToCart / cartToPolar round-trip"):
     val cart = Vec2(3.0, 4.0)

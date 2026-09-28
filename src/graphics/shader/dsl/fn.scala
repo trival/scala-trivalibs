@@ -133,38 +133,41 @@ object WgslFn:
   // Internal: compile-time param list + return type
   // -------------------------------------------------------------------------
 
+  // The parameter list is built as one straight chain of string concatenations
+  // over compile-time names and the `WGSLType` givens' constant `wgslName`s —
+  // no array, loop or join — so the Scala.js optimizer folds it into a single
+  // string literal per `WgslFn`, instead of emitting builder code at every
+  // definition site.
   private inline def buildParamList[P]: String =
     inline erasedValue[P] match
       case _: EmptyTuple    => ""
       case _: AnyNamedTuple =>
-        val names = paramNames[NamedTuple.Names[P & AnyNamedTuple]]
-        val types = paramWgslTypes[NamedTuple.DropNames[P & AnyNamedTuple]]
-        val parts = Arr[String]()
-        var i = 0
-        while i < names.length do
-          parts.push(s"${names(i)}: ${types(i)}")
-          i += 1
-        parts.join(", ")
-      case _: Tuple =>
-        val types = paramWgslTypes[P & Tuple]
-        val parts = Arr[String]()
-        var i = 0
-        while i < types.length do
-          parts.push(s"p$i: ${types(i)}")
-          i += 1
-        parts.join(", ")
+        namedParams[
+          NamedTuple.Names[P & AnyNamedTuple],
+          NamedTuple.DropNames[P & AnyNamedTuple],
+        ]("")
+      case _: Tuple => positionalParams[P & Tuple](0, "")
 
-  private inline def paramNames[N <: Tuple]: Arr[String] =
+  private inline def namedParams[N <: Tuple, T <: Tuple](
+      inline sep: String,
+  ): String =
     inline erasedValue[N] match
-      case _: EmptyTuple  => Arr()
-      case _: (n *: rest) =>
-        Arr(constValue[n].asInstanceOf[String]) ++ paramNames[rest]
+      case _: EmptyTuple => ""
+      case _: (n *: ns)  =>
+        inline erasedValue[T] match
+          case _: (t *: ts) =>
+            sep + constValue[n].asInstanceOf[String] + ": " +
+              summonInline[WGSLType[t]].wgslName + namedParams[ns, ts](", ")
 
-  private inline def paramWgslTypes[T <: Tuple]: Arr[String] =
+  private inline def positionalParams[T <: Tuple](
+      inline i: Int,
+      inline sep: String,
+  ): String =
     inline erasedValue[T] match
-      case _: EmptyTuple  => Arr()
-      case _: (h *: rest) =>
-        Arr(summonInline[WGSLType[h]].wgslName) ++ paramWgslTypes[rest]
+      case _: EmptyTuple => ""
+      case _: (t *: ts)  =>
+        sep + "p" + i + ": " + summonInline[WGSLType[t]].wgslName +
+          positionalParams[ts](i + 1, ", ")
 
   inline def wgslReturnType[R]: String =
     inline erasedValue[R] match
@@ -225,6 +228,78 @@ object WgslFn:
       WgslFnData(fn.name, fn.src, merged)
 
   // -------------------------------------------------------------------------
+  // Non-inline call builders — the `apply` extensions below stay inline only
+  // for the typed `ToExpr[R]` result and delegate the dep registration and
+  // string building here, so a call site costs one small call instead of the
+  // whole builder inlined.
+  // -------------------------------------------------------------------------
+
+  /** Registers `fn` with the active program and returns the WGSL call text.
+    * Internal plumbing of the `apply` extensions.
+    */
+  def call(fn: WgslFnData, a1: Any): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ")"
+
+  def call(fn: WgslFnData, a1: Any, a2: Any): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ", " + a2 + ")"
+
+  def call(fn: WgslFnData, a1: Any, a2: Any, a3: Any): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ", " + a2 + ", " + a3 + ")"
+
+  def call(fn: WgslFnData, a1: Any, a2: Any, a3: Any, a4: Any): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ", " + a2 + ", " + a3 + ", " + a4 + ")"
+
+  def call(fn: WgslFnData, a1: Any, a2: Any, a3: Any, a4: Any, a5: Any): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ", " + a2 + ", " + a3 + ", " + a4 + ", " + a5 + ")"
+
+  def call(
+      fn: WgslFnData,
+      a1: Any,
+      a2: Any,
+      a3: Any,
+      a4: Any,
+      a5: Any,
+      a6: Any,
+  ): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ", " + a2 + ", " + a3 + ", " + a4 + ", " + a5 + ", " +
+      a6 + ")"
+
+  def call(
+      fn: WgslFnData,
+      a1: Any,
+      a2: Any,
+      a3: Any,
+      a4: Any,
+      a5: Any,
+      a6: Any,
+      a7: Any,
+  ): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ", " + a2 + ", " + a3 + ", " + a4 + ", " + a5 + ", " +
+      a6 + ", " + a7 + ")"
+
+  def call(
+      fn: WgslFnData,
+      a1: Any,
+      a2: Any,
+      a3: Any,
+      a4: Any,
+      a5: Any,
+      a6: Any,
+      a7: Any,
+      a8: Any,
+  ): String =
+    FnRegistry.trackUse(fn)
+    fn.name + "(" + a1 + ", " + a2 + ", " + a3 + ", " + a4 + ", " + a5 + ", " +
+      a6 + ", " + a7 + ", " + a8 + ")"
+
+  // -------------------------------------------------------------------------
   // apply extensions — per-arity, enabling myFn(arg1, arg2) call syntax
   //
   // Defined inside the companion so they are in the opaque type's implicit
@@ -234,22 +309,19 @@ object WgslFn:
   // Arity 1 — unnamed
   extension [N1, R](fn: WgslFn[N1 *: EmptyTuple, R])
     inline def apply(a1: ToExpr[N1]): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1)")
+      callExpr[R](call(fn, a1))
 
   // Arity 1 — named tuple
   extension [K1 <: String, N1, R](
       fn: WgslFn[NamedTuple.NamedTuple[K1 *: EmptyTuple, N1 *: EmptyTuple], R]
   )
     inline def apply(a1: ToExpr[N1]): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1)")
+      callExpr[R](call(fn, a1))
 
   // Arity 2 — unnamed
   extension [N1, N2, R](fn: WgslFn[N1 *: N2 *: EmptyTuple, R])
     inline def apply(a1: ToExpr[N1], a2: ToExpr[N2]): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2)")
+      callExpr[R](call(fn, a1, a2))
 
   // Arity 2 — named tuple
   extension [K1 <: String, K2 <: String, N1, N2, R](
@@ -259,8 +331,7 @@ object WgslFn:
       ]
   )
     inline def apply(a1: ToExpr[N1], a2: ToExpr[N2]): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2)")
+      callExpr[R](call(fn, a1, a2))
 
   // Arity 3 — unnamed
   extension [N1, N2, N3, R](fn: WgslFn[N1 *: N2 *: N3 *: EmptyTuple, R])
@@ -269,8 +340,7 @@ object WgslFn:
         a2: ToExpr[N2],
         a3: ToExpr[N3],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3)")
+      callExpr[R](call(fn, a1, a2, a3))
 
   // Arity 3 — named tuple
   extension [K1 <: String, K2 <: String, K3 <: String, N1, N2, N3, R](
@@ -284,8 +354,7 @@ object WgslFn:
         a2: ToExpr[N2],
         a3: ToExpr[N3],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3)")
+      callExpr[R](call(fn, a1, a2, a3))
 
   // Arity 4 — unnamed
   extension [N1, N2, N3, N4, R](
@@ -297,8 +366,7 @@ object WgslFn:
         a3: ToExpr[N3],
         a4: ToExpr[N4],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4)")
+      callExpr[R](call(fn, a1, a2, a3, a4))
 
   // Arity 4 — named tuple
   extension [
@@ -323,8 +391,7 @@ object WgslFn:
         a3: ToExpr[N3],
         a4: ToExpr[N4],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4)")
+      callExpr[R](call(fn, a1, a2, a3, a4))
 
   // Arity 5 — unnamed
   extension [N1, N2, N3, N4, N5, R](
@@ -337,8 +404,7 @@ object WgslFn:
         a4: ToExpr[N4],
         a5: ToExpr[N5],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5)")
+      callExpr[R](call(fn, a1, a2, a3, a4, a5))
 
   // Arity 5 — named tuple
   extension [
@@ -366,8 +432,7 @@ object WgslFn:
         a4: ToExpr[N4],
         a5: ToExpr[N5],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5)")
+      callExpr[R](call(fn, a1, a2, a3, a4, a5))
 
   // Arity 6 — unnamed
   extension [N1, N2, N3, N4, N5, N6, R](
@@ -381,8 +446,7 @@ object WgslFn:
         a5: ToExpr[N5],
         a6: ToExpr[N6],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5, $a6)")
+      callExpr[R](call(fn, a1, a2, a3, a4, a5, a6))
 
   // Arity 6 — named tuple
   extension [
@@ -413,8 +477,109 @@ object WgslFn:
         a5: ToExpr[N5],
         a6: ToExpr[N6],
     ): ToExpr[R] =
-      FnRegistry.trackUse(fn)
-      callExpr[R](s"${nameOf(fn)}($a1, $a2, $a3, $a4, $a5, $a6)")
+      callExpr[R](call(fn, a1, a2, a3, a4, a5, a6))
+
+  // Arity 7 — unnamed
+  extension [N1, N2, N3, N4, N5, N6, N7, R](
+      fn: WgslFn[N1 *: N2 *: N3 *: N4 *: N5 *: N6 *: N7 *: EmptyTuple, R]
+  )
+    inline def apply(
+        a1: ToExpr[N1],
+        a2: ToExpr[N2],
+        a3: ToExpr[N3],
+        a4: ToExpr[N4],
+        a5: ToExpr[N5],
+        a6: ToExpr[N6],
+        a7: ToExpr[N7],
+    ): ToExpr[R] =
+      callExpr[R](call(fn, a1, a2, a3, a4, a5, a6, a7))
+
+  // Arity 7 — named tuple
+  extension [
+      K1 <: String,
+      K2 <: String,
+      K3 <: String,
+      K4 <: String,
+      K5 <: String,
+      K6 <: String,
+      K7 <: String,
+      N1,
+      N2,
+      N3,
+      N4,
+      N5,
+      N6,
+      N7,
+      R,
+  ](
+      fn: WgslFn[NamedTuple.NamedTuple[
+        K1 *: K2 *: K3 *: K4 *: K5 *: K6 *: K7 *: EmptyTuple,
+        N1 *: N2 *: N3 *: N4 *: N5 *: N6 *: N7 *: EmptyTuple,
+      ], R]
+  )
+    inline def apply(
+        a1: ToExpr[N1],
+        a2: ToExpr[N2],
+        a3: ToExpr[N3],
+        a4: ToExpr[N4],
+        a5: ToExpr[N5],
+        a6: ToExpr[N6],
+        a7: ToExpr[N7],
+    ): ToExpr[R] =
+      callExpr[R](call(fn, a1, a2, a3, a4, a5, a6, a7))
+
+  // Arity 8 — unnamed
+  extension [N1, N2, N3, N4, N5, N6, N7, N8, R](
+      fn: WgslFn[N1 *: N2 *: N3 *: N4 *: N5 *: N6 *: N7 *: N8 *: EmptyTuple, R]
+  )
+    inline def apply(
+        a1: ToExpr[N1],
+        a2: ToExpr[N2],
+        a3: ToExpr[N3],
+        a4: ToExpr[N4],
+        a5: ToExpr[N5],
+        a6: ToExpr[N6],
+        a7: ToExpr[N7],
+        a8: ToExpr[N8],
+    ): ToExpr[R] =
+      callExpr[R](call(fn, a1, a2, a3, a4, a5, a6, a7, a8))
+
+  // Arity 8 — named tuple
+  extension [
+      K1 <: String,
+      K2 <: String,
+      K3 <: String,
+      K4 <: String,
+      K5 <: String,
+      K6 <: String,
+      K7 <: String,
+      K8 <: String,
+      N1,
+      N2,
+      N3,
+      N4,
+      N5,
+      N6,
+      N7,
+      N8,
+      R,
+  ](
+      fn: WgslFn[NamedTuple.NamedTuple[
+        K1 *: K2 *: K3 *: K4 *: K5 *: K6 *: K7 *: K8 *: EmptyTuple,
+        N1 *: N2 *: N3 *: N4 *: N5 *: N6 *: N7 *: N8 *: EmptyTuple,
+      ], R]
+  )
+    inline def apply(
+        a1: ToExpr[N1],
+        a2: ToExpr[N2],
+        a3: ToExpr[N3],
+        a4: ToExpr[N4],
+        a5: ToExpr[N5],
+        a6: ToExpr[N6],
+        a7: ToExpr[N7],
+        a8: ToExpr[N8],
+    ): ToExpr[R] =
+      callExpr[R](call(fn, a1, a2, a3, a4, a5, a6, a7, a8))
 
 // ---------------------------------------------------------------------------
 // ReturnEmitter[R] — typed return statement builder for WgslFn.dsl

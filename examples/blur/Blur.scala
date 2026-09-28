@@ -74,7 +74,7 @@ def main(): Unit =
     // Logarithmic-chain shade (dir is pre-scaled by diameter).
     val blur9Shade = painter.layerShade[BlurUniforms, BlurPanels]: program =>
       program.frag: ctx =>
-        ctx.out.color := Blur.gaussianBlur9(
+        ctx.out.color := Blur.gaussian9(
           ctx.textures.source,
           ctx.bindings.blurSampler,
           ctx.in.uv,
@@ -85,7 +85,7 @@ def main(): Unit =
     val blur5Shade = painter.layerShade[FixedBlurUniforms, BlurPanels]:
       program =>
         program.frag: ctx =>
-          ctx.out.color := Blur.gaussianBlur5(
+          ctx.out.color := Blur.gaussian5(
             ctx.textures.source,
             ctx.bindings.blurSampler,
             ctx.in.uv,
@@ -95,7 +95,7 @@ def main(): Unit =
 
     val boxBlurShade = painter.layerShade[BlurUniforms, BlurPanels]: program =>
       program.frag: ctx =>
-        ctx.out.color := Blur.boxBlur(
+        ctx.out.color := Blur.box(
           ctx.textures.source,
           ctx.bindings.blurSampler,
           ctx.bindings.diameter,
@@ -106,7 +106,7 @@ def main(): Unit =
 
     val gaussShade = painter.layerShade[BlurUniforms, BlurPanels]: program =>
       program.frag: ctx =>
-        ctx.out.color := Blur.gaussianBlur(
+        ctx.out.color := Blur.gaussian(
           ctx.textures.source,
           ctx.bindings.blurSampler,
           ctx.bindings.diameter,
@@ -125,7 +125,7 @@ def main(): Unit =
     val sampler = painter.samplerLinear
 
     // -----------------------------------------------------------------------
-    // Panel 1: heavy logarithmic gaussianBlur9
+    // Panel 1: heavy logarithmic Blur.gaussian9
     // -----------------------------------------------------------------------
 
     val heavyLayers = Arr[AnyLayer]()
@@ -154,7 +154,7 @@ def main(): Unit =
       d = d / 2.0
 
     // -----------------------------------------------------------------------
-    // Panel 2: small gaussianBlur5 (single H + V, fixed 5px)
+    // Panel 2: small Blur.gaussian5 (single H + V, fixed 5px)
     // -----------------------------------------------------------------------
 
     val blur5Layers = Arr(

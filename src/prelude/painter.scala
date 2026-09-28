@@ -37,9 +37,28 @@ object painter:
   export trivalibs.graphics.math.`interpolation$package`.{*, given}
   export trivalibs.graphics.math.LerpBy
 
+  // ── trivalibs.graphics.lib ─────────────────────────────────────────────────
+  // The shared CPU/GPU extensions (`c.hsv2rgb`, `p.polarToCart`,
+  // `p.simplexFbm`, `p.extendedNoise`, `p.worleyNoise`, …) and the parameter
+  // unions they take. Only the extension-carrying `$package` objects are
+  // exported: the `Color` / `Simplex` / … objects exist on both sides (in
+  // `graphics.lib` and `graphics.shader.lib`) and stay explicit imports.
+  export trivalibs.graphics.lib.color.`color$package`.{*, given}
+  export trivalibs.graphics.lib.coords.`coords$package`.{*, given}
+  export trivalibs.graphics.lib.noise.`extensions$package`.{*, given}
+  export trivalibs.graphics.lib.`args$package`.{
+    FloatArg,
+    IntArg,
+    Vec2Arg,
+    Vec3Arg,
+    Vec4Arg,
+    VecArg,
+  }
+  // GPU-only hash extensions (`x.hash`, `u.hashU`, `u.hash1`); their
+  // receivers are shader types only.
+  export trivalibs.graphics.shader.lib.random.`hash$package`.{*, given}
+
   // ── trivalibs.graphics.math.cpu ────────────────────────────────────────────
-  export trivalibs.graphics.math.cpu.`color$package`.{*, given}
-  export trivalibs.graphics.math.cpu.`coords$package`.{*, given}
   export trivalibs.graphics.math.cpu.`package$package`.{*, given}
   export trivalibs.graphics.math.cpu.`swizzles$package`.{*, given}
   export trivalibs.graphics.math.cpu.`tuple_interop$package`.{*, given}

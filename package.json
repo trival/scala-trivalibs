@@ -10,10 +10,12 @@
 		"examples:dist": "bun run examples:build && bun build-dist.ts",
 		"deploy": "bun run examples:dist && wrangler deploy",
 		"test": "scala-cli test src test project.scala",
+		"bench:noise": "scala-cli --power package src bench/NoiseBench.scala project.scala --js -o bench/noise_bench.out.js -f && bun bench/noise.bench.ts",
 		"publish:local": "scala-cli --power publish local src project.scala --organization xyz.trival --name trivalibs --project-version 0.1.0-SNAPSHOT"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
+		"simplex-noise": "^4.0.3",
 		"wrangler": "^4"
 	},
 	"dependencies": {
