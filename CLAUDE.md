@@ -200,6 +200,23 @@ Optimisation aggressiveness depends on _where_ the code lives:
   `for`-comprehensions, string interpolation etc. are fine here — readability
   wins, and the cost is local to one example bundle.
 
+### CPU vs GPU cost model
+
+Shader-side and CPU-side helpers are judged by different costs:
+
+- **GPU (shader DSL, `WgslFn`, `shader/lib/`)**: Scala-level boilerplate and JS
+  bundle growth are acceptable — wrapper defs with defaults, build-time
+  branching — **as long as the emitted WGSL is free of it** (only the needed fn
+  calls, no dead code).
+- **CPU (`math/`, `graphics/lib/` — the CPU mirrors of shader helpers)**:
+  helpers get called in hot
+  paths and render loops. The linked JS for a call must be the most direct form
+  — ideally one call to a plain scalar kernel. No surviving Scala wrapper frame,
+  typeclass / given dispatch, per-call allocation or runtime option check. Get
+  convenience (defaults, named params, CPU/GPU-shared extension names) from
+  `inline` / `transparent inline` defs with compile-time branching, and verify
+  representative call sites in a `jsMode full` link.
+
 Note: `Arr(...)` literals are safe in library code too — `Arr.apply` has
 concrete-arity `inline` overloads (0..12) that compile to native `js.Array(...)`
 with no varargs pipeline. The library-vs-example split is about Scala-stdlib

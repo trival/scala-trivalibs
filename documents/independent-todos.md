@@ -33,6 +33,10 @@ the param row to the Panel table in §3.
 
 ### 🔄 CPU noise, mirroring `shader/lib/random/`
 
+**Now planned in [`cpu-gpu-lib-plan.md`](cpu-gpu-lib-plan.md)**, extended to the
+whole lib surface (namespaces, seeds, psrdnoise fbm, conventions). The text
+below is the original note.
+
 **Deferred, but the API shape is decided.** Color and coords now exist on both
 sides as **receiver extensions** with identical names — `c.hsv2rgb` on a CPU
 `Vec3` and on a `Vec3Expr`, `p.polarToCart` on a CPU `Vec2` and on a `Vec2Expr`.

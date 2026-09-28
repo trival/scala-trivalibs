@@ -224,6 +224,9 @@ object Simplex:
     *     cost).
     *   - `lacunarity`: frequency multiplier between octaves (typical: 2.0).
     *   - `gain`: amplitude multiplier between octaves (typical: 0.5).
+    *
+    * Returns the amplitude-weighted average of the octaves, in `[-1, 1]`
+    * regardless of `octaves` / `gain`.
     */
   val fbmSimplex2d: WgslFn[
     (pos: Vec2, octaves: Int, lacunarity: Float, gain: Float),
@@ -233,13 +236,15 @@ object Simplex:
       .raw("fbm_simplex_2d")("""
     var sum = 0.;
     var amplitude = 1.;
+    var total = 0.;
     var frequency = 1.;
     for (var i = 0; i < octaves; i += 1) {
         sum += simplex_noise_2d(pos * frequency) * amplitude;
+        total += amplitude;
         amplitude *= gain;
         frequency *= lacunarity;
     }
-    return sum;""")
+    return sum / total;""")
       .withDeps(simplexNoise2d)
 
   /** Fractal Brownian motion using 2D simplex noise, with a seed offset for
@@ -250,6 +255,9 @@ object Simplex:
     *     cost).
     *   - `lacunarity`: frequency multiplier between octaves (typical: 2.0).
     *   - `gain`: amplitude multiplier between octaves (typical: 0.5).
+    *
+    * Returns the amplitude-weighted average of the octaves, in `[-1, 1]`
+    * regardless of `octaves` / `gain`.
     *   - `seed`: shifts the hash to produce a different noise pattern.
     */
   val fbmSimplex2dSeeded: WgslFn[
@@ -260,13 +268,15 @@ object Simplex:
       .raw("fbm_simplex_2d_seeded")("""
     var sum = 0.;
     var amplitude = 1.;
+    var total = 0.;
     var frequency = 1.;
     for (var i = 0; i < octaves; i += 1) {
         sum += simplex_noise_2d_seeded(pos * frequency, seed) * amplitude;
+        total += amplitude;
         amplitude *= gain;
         frequency *= lacunarity;
     }
-    return sum;""")
+    return sum / total;""")
       .withDeps(simplexNoise2dSeeded)
 
   /** Fractal Brownian motion using 3D simplex noise.
@@ -276,6 +286,9 @@ object Simplex:
     *     cost).
     *   - `lacunarity`: frequency multiplier between octaves (typical: 2.0).
     *   - `gain`: amplitude multiplier between octaves (typical: 0.5).
+    *
+    * Returns the amplitude-weighted average of the octaves, in `[-1, 1]`
+    * regardless of `octaves` / `gain`.
     */
   val fbmSimplex3d: WgslFn[
     (pos: Vec3, octaves: Int, lacunarity: Float, gain: Float),
@@ -285,13 +298,15 @@ object Simplex:
       .raw("fbm_simplex_3d")("""
     var sum = 0.;
     var amplitude = 1.;
+    var total = 0.;
     var frequency = 1.;
     for (var i = 0; i < octaves; i += 1) {
         sum += simplex_noise_3d(pos * frequency) * amplitude;
+        total += amplitude;
         amplitude *= gain;
         frequency *= lacunarity;
     }
-    return sum;""")
+    return sum / total;""")
       .withDeps(simplexNoise3d)
 
   /** Fractal Brownian motion using 3D simplex noise, with a seed offset for
@@ -302,6 +317,9 @@ object Simplex:
     *     cost).
     *   - `lacunarity`: frequency multiplier between octaves (typical: 2.0).
     *   - `gain`: amplitude multiplier between octaves (typical: 0.5).
+    *
+    * Returns the amplitude-weighted average of the octaves, in `[-1, 1]`
+    * regardless of `octaves` / `gain`.
     *   - `seed`: per-axis offset added to the hash to produce a different noise
     *     pattern.
     */
@@ -313,13 +331,15 @@ object Simplex:
       .raw("fbm_simplex_3d_seeded")("""
     var sum = 0.;
     var amplitude = 1.;
+    var total = 0.;
     var frequency = 1.;
     for (var i = 0; i < octaves; i += 1) {
         sum += simplex_noise_3d_seeded(pos * frequency, seed) * amplitude;
+        total += amplitude;
         amplitude *= gain;
         frequency *= lacunarity;
     }
-    return sum;""")
+    return sum / total;""")
       .withDeps(simplexNoise3dSeeded)
 
   // ---------------------------------------------------------------------------
