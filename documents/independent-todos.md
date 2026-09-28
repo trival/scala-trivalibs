@@ -239,7 +239,7 @@ generators in `shader/lib/noise/worley.scala`, which use `push` for now.
 
 ### ✅ CPU noise and CPU / GPU mirrored lib helpers
 
-Done in [`cpu-gpu-lib-plan.md`](cpu-gpu-lib-plan.md): simplex (2D–4D, fbm,
+Done in [`done/cpu-gpu-lib-plan.md`](done/cpu-gpu-lib-plan.md): simplex (2D–4D, fbm,
 torus), extended (psrdnoise, 2D / 3D, tiling / rotation / gradient, fbm) and
 worley (2D / 3D) on CPU and GPU, one hashed optional `seed`, normalized fbms,
 `graphics/lib` (CPU + shared `transparent inline` extensions) mirroring

@@ -308,7 +308,7 @@ mode.
   conversions (`d.toExpr`, `i.i`). Optional behavior is a parameter
   defaulting to `null` (`seed`, `tilingPeriod`, `rot`), never a suffixed name.
   The full convention set (naming, parameter order, ranges, WGSL names) is in
-  `documents/cpu-gpu-lib-plan.md` (C1–C14). GPU-only helpers (`Hash`, `Blur`,
+  `documents/done/cpu-gpu-lib-plan.md` (C1–C14). GPU-only helpers (`Hash`, `Blur`,
   `LineCross`) have the `wgsl` layer and wrappers but no CPU side; `Hash` has
   GPU-only extensions (`x.hash`, `u.hashU`, `u.hash1`), and CPU randomness is
   `utils/random`.
