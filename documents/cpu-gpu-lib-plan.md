@@ -67,7 +67,7 @@ Updated after each phase.
   replaced by concatenation. All `wgsl`-layer WgslFns are now `lazy val`s, so
   Scala.js drops unused ones (eager objects built all members as soon as one
   was touched — e.g. `noise_seed_offsets` pulled all of `Hash`). Result: most
-  sketches are 1–9% *smaller* than before; gradients / open-space +27 KB
+  sketches are 1–9% _smaller_ than before; gradients / open-space +27 KB
   (+3.4%), grid-ceiling +11 KB (+1.5%): shader-build code for the extended
   option variants (8 inlined call branches per wrapper, 16 lazy variant
   definitions), none of it in the WGSL — within the GPU cost model (C14).
@@ -108,9 +108,7 @@ new value × total, decide per site:
 | Call site                                                         | Call now                                                                           | total  |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------ |
 | `sketches/experiments/strokes/study1/StrokeStudy1.scala` (`base`) | `.simplexFbm(octaves = 4, lacunarity = 2.2, gain = 0.8)` → `.fit1101` → `pow(0.9)` | 2.952  |
-| `sketches/strokes/base1/BaseStroke1.scala` (`color`)              | `.simplexFbm(octaves = 4, lacunarity = 3.5, gain = 0.22)` → `.fit1101`             | 1.279  |
-| `sketches/strokes/base1/BaseStroke1.scala` (`base`)               | `.simplexFbm(octaves = 4, lacunarity = 2.2, gain = 0.8)` → `.fit1101 / 4.0 + 0.08` | 2.952  |
-| `sketches/strokes/tile-strokes/TileStrokesSketch.scala` (`base`)  | same as above                                                                      | 2.952  |
+| `sketches/strokes/tile-strokes/TileStrokesSketch.scala` (`base`)  | `.simplexFbm(octaves = 4, lacunarity = 2.2, gain = 0.8)` → `.fit1101 / 4.0 + 0.08` | 2.952  |
 | `trivalibs/examples/noise_tests/NoiseTests.scala` (fbm panels)    | `.simplexFbm(octaves = 5)` → `.fit1101`                                            | 1.9375 |
 
 ## Goals

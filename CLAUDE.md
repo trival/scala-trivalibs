@@ -288,11 +288,11 @@ mode.
   (`trivalibs.graphics.lib.noise.Simplex` CPU,
   `trivalibs.graphics.shader.lib.noise.Simplex` GPU). Per domain:
 
-  | Layer | GPU (`graphics/shader/lib`) | CPU (`graphics/lib`) |
-  | --- | --- | --- |
-  | definition | `X.wgsl`: `WgslFn` values, one per code path, every arg explicit — the layer for `.withDeps` and raw WGSL | `X.kernel`: plain `def`s over scalar components |
-  | object API | ordinary wrapper defs with named, defaulted params; pick the `wgsl` fn at shader-build time | `inline def`s with `inline` params; pick the kernel at compile time, erase completely |
-  | extensions | one `transparent inline` def per name in `graphics/lib` for **both** sides, branching on the receiver type at compile time | (same def) |
+  | Layer      | GPU (`graphics/shader/lib`)                                                                                                | CPU (`graphics/lib`)                                                                                                                       |
+  | ---------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+  | definition | `X.wgsl`: `WgslFn` values, one per code path, every arg explicit — the layer for `.withDeps` and raw WGSL                  | `X.kernel`: plain `def`s over scalar components                                                                                            |
+  | object API | ordinary wrapper defs with named, defaulted params; pick the `wgsl` fn at shader-build time                                | `inline def`s; only the optional params (`seed`, `tilingPeriod`, `rot`) are `inline`, to pick the kernel at compile time; erase completely |
+  | extensions | one `transparent inline` def per name in `graphics/lib` for **both** sides, branching on the receiver type at compile time | (same def)                                                                                                                                 |
 
   ```scala
   val bg: Vec3     = Vec3(hue, 0.8, 0.5).hsv2rgb   // CPU: inline → scalar kernel
