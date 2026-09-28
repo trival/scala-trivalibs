@@ -662,6 +662,13 @@ stays on the `Hash` object.
 | `u.hash`  | `UIntExpr`, `UVec2–4Expr` | `hash1`, `hash2`, `hash3`, `hash4` | same dimension, `[0, 1)` |
 | `u.hashU` | `UIntExpr`, `UVec2–4Expr` | `hash1i` … `hash4i`                | same dimension, `u32`    |
 | `u.hash1` | `UVec2Expr`               | `hash21`                           | scalar `[0, 1)`          |
+| `x.hash1` | `Vec2Expr`                | `hash21` of the bits               | scalar `[0, 1)`          |
+
+Float receivers bit-cast to `u32` themselves (`v.hash` is `v.bitsToU32.hash`,
+`v.hash1` is `v.bitsToU32.hash1`), so hashing a float position or cell index
+needs no manual `.bitsToU32` — the preferred spelling. `x.hash1` on
+`Vec2Expr` was added after the downstream migration showed `hash21` of a
+bit-cast cell index as the most common hash call.
 
 - **Receivers are shader types only.** On a CPU value, `v.hash` doesn't
   resolve ("not a member of Vec3") and completion never offers it, the same

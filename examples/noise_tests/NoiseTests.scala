@@ -47,8 +47,8 @@ private val hashDisplay: WgslFn[(uv: Vec2, time: Float), Vec4] =
         when(qi.y === 0.u)(
           when(qi.x === 0.u)(color := vec3(qa.x.bitsToU32.hash))
             .elseIf(qi.x === 1.u)(color := vec3(qa.x.hash))
-            .elseIf(qi.x === 2.u)(color := vec3(qa.bitsToU32.hash1))
-            .elseDo(color := vec3(Hash.hash1(Hash.hash21i(qa.bitsToU32)))),
+            .elseIf(qi.x === 2.u)(color := vec3(qa.hash1))
+            .elseDo(color := vec3(Hash.hash21i(qa.bitsToU32).hash)),
         ).elseDo(
           when(qi.x === 0.u)(color := vec3(qa.bitsToU32.hash, 0.0))
             .elseIf(qi.x === 1.u)(color := vec3(qa.hash, 0.0))

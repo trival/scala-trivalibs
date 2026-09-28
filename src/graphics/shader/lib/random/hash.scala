@@ -14,15 +14,22 @@ import scala.annotation.targetName
 // ---------------------------------------------------------------------------
 // Hash extensions — GPU only. The receivers are shader types, so on a CPU value
 // `v.hash` does not resolve; CPU randomness is `trivalibs.utils.random`.
+//
+// Float receivers bit-cast to u32 themselves: `v.hash` is `v.bitsToU32.hash`
+// and `v.hash1` is `v.bitsToU32.hash1`, so hashing a float position or cell
+// index needs no manual `.bitsToU32`.
 // ---------------------------------------------------------------------------
 
 /** Hash a float's bits to `[0, 1)`. */
 extension (x: FloatExpr)
   @targetName("hashFloat") inline def hash: FloatExpr = Hash.hash1f(x)
 
-/** Hash a vector's bits to a vector in `[0, 1)`. */
+/** Hash a vector's bits to a vector in `[0, 1)` (`hash`) or to a single value
+  * in `[0, 1)` (`hash1`, [[Hash.hash21]] of the bits).
+  */
 extension (v: Vec2Expr)
   @targetName("hashVec2") inline def hash: Vec2Expr = Hash.hash2f(v)
+  @targetName("hash1Vec2") inline def hash1: FloatExpr = Hash.hash21(v.bitsToU32)
 
 /** Hash a vector's bits to a vector in `[0, 1)`. */
 extension (v: Vec3Expr)
@@ -43,7 +50,7 @@ extension (u: UIntExpr)
 extension (u: UVec2Expr)
   @targetName("hashUVec2") inline def hash: Vec2Expr = Hash.hash2(u)
   @targetName("hashUUVec2") inline def hashU: UVec2Expr = Hash.hash2i(u)
-  inline def hash1: FloatExpr = Hash.hash21(u)
+  @targetName("hash1UVec2") inline def hash1: FloatExpr = Hash.hash21(u)
 
 /** Hash to a vector in `[0, 1)` (`hash`) or a `u32` vector (`hashU`). */
 extension (u: UVec3Expr)
